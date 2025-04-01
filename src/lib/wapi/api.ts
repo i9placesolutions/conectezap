@@ -1,7 +1,7 @@
 // Configuração da API UAZAPI
 
 // Variáveis de ambiente
-export const API_URL = '/api';
+export const API_URL = 'https://i9place1.uazapi.com';
 export const ADMIN_TOKEN = import.meta.env.VITE_ADMIN_TOKEN || 'u1OUnI3tgoQwGII9Fw46XhFWeInWAAVNSO12x3sHwWuI5AkaH2';
 
 import axios, { AxiosInstance } from 'axios';
@@ -12,6 +12,13 @@ interface Instance {
   name: string;
   status: 'connected' | 'disconnected' | 'connecting';
   token: string;
+  phoneConnected: string;
+  profileName: string;
+  systemName: string;
+  adminFields: {
+    adminField01: string;
+    adminField02: string;
+  };
 }
 
 // Interface para grupos
@@ -78,12 +85,23 @@ export const getInstances = async (): Promise<Instance[]> => {
     console.log('Resposta API de instâncias:', response.data);
 
     // Formatar os dados para o formato esperado pelo aplicativo
-    return response.data.map((instance: any) => ({
-      id: instance.id,
-      name: instance.name || instance.profileName || instance.id,
-      status: instance.status === 'connected' ? 'connected' : 'disconnected',
-      token: instance.token || instance.apikey || ''
-    }));
+    // De acordo com a documentação Postman, o endpoint /instance/all retorna um array de instâncias
+    return Array.isArray(response.data) 
+      ? response.data.map((instance: any) => ({
+          id: instance.id || '',
+          name: instance.name || instance.profileName || instance.id || 'Sem nome',
+          status: instance.state === 'open' || instance.status === 'connected' ? 'connected' : 
+                  instance.state === 'connecting' || instance.status === 'connecting' ? 'connecting' : 'disconnected',
+          token: instance.token || instance.apikey || '',
+          phoneConnected: instance.phoneConnected || instance.phone || '',
+          profileName: instance.profileName || '',
+          systemName: instance.systemName || '',
+          adminFields: {
+            adminField01: instance.adminField01 || '',
+            adminField02: instance.adminField02 || ''
+          }
+        }))
+      : [];
   } catch (error) {
     console.error('Erro ao obter instâncias:', error);
     throw error;
@@ -145,6 +163,8 @@ export const getChats = async (instanceId: string, searchTerm?: string, instance
       params.searchTerm = searchTerm;
     }
     
+    console.log('Buscando chats da API com parâmetros:', params);
+    
     try {
       // Chamar a API de busca de chats
       const response = await client.post('/chat/find', params);
@@ -152,9 +172,11 @@ export const getChats = async (instanceId: string, searchTerm?: string, instance
       console.log('Resposta raw da API de chats:', response.data);
       
       if (response.data && Array.isArray(response.data.chats)) {
+        console.log(`Sucesso! Encontrados ${response.data.chats.length} chats reais da API.`);
+        
         // Mapear os chats para o formato esperado pela aplicação
         return response.data.chats.map((chat: any) => {
-          console.log('Chat individual:', chat);
+          console.log('Processando chat:', chat);
           
           // Verificar se é um grupo
           const isGroup = chat.isGroup || (chat.id && chat.id.includes('g.us'));
@@ -183,64 +205,74 @@ export const getChats = async (instanceId: string, searchTerm?: string, instance
       
       // Se não houver chats ou o formato for inesperado
       console.warn('Resposta da API inesperada:', response.data);
-      return [];
+      console.warn('⚠️ Usando dados de EXEMPLO devido a resposta inesperada da API');
+      return getMockChats();
       
     } catch (error) {
       console.warn('Erro ao buscar chats via API, usando dados de exemplo', error);
+      console.warn('⚠️ Usando dados de EXEMPLO devido a erro de conexão');
       
-      // Dados de exemplo para demonstração
-      return [
-        {
-          jid: '5511999999999@s.whatsapp.net',
-          name: 'Cliente 1',
-          number: '5511999999999@s.whatsapp.net',
-          lastMessage: { message: 'Olá, preciso de ajuda com meu pedido', timestamp: new Date().toISOString() },
-          unreadCount: 2,
-          isGroup: false,
-          profilePicture: 'https://ui-avatars.com/api/?name=Cliente+1&background=0D8ABC&color=fff'
-        },
-        {
-          jid: '5511888888888@s.whatsapp.net',
-          name: 'Cliente 2',
-          number: '5511888888888@s.whatsapp.net',
-          lastMessage: { message: 'Quando chegará meu produto?', timestamp: new Date(Date.now() - 3600000).toISOString() },
-          unreadCount: 0,
-          isGroup: false,
-          profilePicture: 'https://ui-avatars.com/api/?name=Cliente+2&background=F08080&color=fff'
-        },
-        {
-          jid: '5511777777777@s.whatsapp.net',
-          name: 'Cliente 3',
-          number: '5511777777777@s.whatsapp.net',
-          lastMessage: { message: 'Obrigado pelo atendimento!', timestamp: new Date(Date.now() - 7200000).toISOString() },
-          unreadCount: 0,
-          isGroup: false,
-          profilePicture: 'https://ui-avatars.com/api/?name=Cliente+3&background=90EE90&color=fff'
-        },
-        {
-          jid: '5511666666666@s.whatsapp.net',
-          name: 'Cliente 4',
-          number: '5511666666666@s.whatsapp.net',
-          lastMessage: { message: 'Gostaria de fazer um orçamento', timestamp: new Date(Date.now() - 12000000).toISOString() },
-          unreadCount: 1,
-          isGroup: false,
-          profilePicture: 'https://ui-avatars.com/api/?name=Cliente+4&background=FFD700&color=fff'
-        },
-        {
-          jid: '5511555555555@s.whatsapp.net',
-          name: 'Cliente 5',
-          number: '5511555555555@s.whatsapp.net',
-          lastMessage: { message: 'O serviço ficou excelente!', timestamp: new Date(Date.now() - 14400000).toISOString() },
-          unreadCount: 0,
-          isGroup: false,
-          profilePicture: 'https://ui-avatars.com/api/?name=Cliente+5&background=9370DB&color=fff'
-        }
-      ];
+      return getMockChats();
     }
   } catch (error) {
-    console.error('Erro ao obter chats:', error);
-    throw error;
+    console.error('Erro ao buscar chats:', error);
+    console.warn('⚠️ Usando dados de EXEMPLO devido a erro inesperado');
+    
+    return getMockChats();
   }
+};
+
+// Função para gerar dados de exemplo para chats
+const getMockChats = () => {
+  console.log('ATENÇÃO: Exibindo DADOS DE EXEMPLO e não dados reais da API');
+  
+  return [
+    {
+      jid: '5511999999999@s.whatsapp.net',
+      name: 'Cliente 1 (EXEMPLO)',
+      number: '5511999999999@s.whatsapp.net',
+      lastMessage: { message: 'Olá, preciso de ajuda com meu pedido', timestamp: new Date().toISOString() },
+      unreadCount: 2,
+      isGroup: false,
+      profilePicture: 'https://ui-avatars.com/api/?name=Cliente+1&background=0D8ABC&color=fff'
+    },
+    {
+      jid: '5511888888888@s.whatsapp.net',
+      name: 'Cliente 2 (EXEMPLO)',
+      number: '5511888888888@s.whatsapp.net',
+      lastMessage: { message: 'Quando chegará meu produto?', timestamp: new Date(Date.now() - 3600000).toISOString() },
+      unreadCount: 0,
+      isGroup: false,
+      profilePicture: 'https://ui-avatars.com/api/?name=Cliente+2&background=F08080&color=fff'
+    },
+    {
+      jid: '5511777777777@s.whatsapp.net',
+      name: 'Cliente 3 (EXEMPLO)',
+      number: '5511777777777@s.whatsapp.net',
+      lastMessage: { message: 'Obrigado pelo atendimento!', timestamp: new Date(Date.now() - 7200000).toISOString() },
+      unreadCount: 0,
+      isGroup: false,
+      profilePicture: 'https://ui-avatars.com/api/?name=Cliente+3&background=90EE90&color=fff'
+    },
+    {
+      jid: '5511666666666@s.whatsapp.net',
+      name: 'Cliente 4 (EXEMPLO)',
+      number: '5511666666666@s.whatsapp.net',
+      lastMessage: { message: 'Gostaria de fazer um orçamento', timestamp: new Date(Date.now() - 12000000).toISOString() },
+      unreadCount: 1,
+      isGroup: false,
+      profilePicture: 'https://ui-avatars.com/api/?name=Cliente+4&background=FFD700&color=fff'
+    },
+    {
+      jid: '5511555555555@s.whatsapp.net',
+      name: 'Cliente 5 (EXEMPLO)',
+      number: '5511555555555@s.whatsapp.net',
+      lastMessage: { message: 'O serviço ficou excelente!', timestamp: new Date(Date.now() - 18000000).toISOString() },
+      unreadCount: 0,
+      isGroup: false,
+      profilePicture: 'https://ui-avatars.com/api/?name=Cliente+5&background=BA55D3&color=fff'
+    }
+  ];
 };
 
 export const getMessages = async (instanceId: string, chatId: string, limit: number = 50, instanceToken?: string) => {
@@ -1431,8 +1463,8 @@ export const webhook = {
 };
 
 export const connectToSSE = (instanceId: string, onEvent: (event: any) => void, instanceToken?: string) => {
-  const apiURL = import.meta.env.VITE_API_URL || 'https://i9place1.uazapi.com';
-  const token = instanceToken || import.meta.env.VITE_ADMIN_TOKEN || '';
+  const apiURL = API_URL;
+  const token = instanceToken || ADMIN_TOKEN;
   
   const url = new URL(`${apiURL}/instance/sse`);
   url.searchParams.append('instanceId', instanceId);
@@ -1440,6 +1472,8 @@ export const connectToSSE = (instanceId: string, onEvent: (event: any) => void, 
   if (token) {
     url.searchParams.append('token', token);
   }
+  
+  console.log('Conectando ao SSE com URL:', url.toString());
   
   const eventSource = new EventSource(url.toString());
   
@@ -1467,6 +1501,144 @@ export const connectToSSE = (instanceId: string, onEvent: (event: any) => void, 
       eventSource.close();
     }
   };
+};
+
+// Função para buscar mensagens de chat
+export const searchMessages = async (
+  instanceId: string, 
+  query: string, 
+  chatId?: string,
+  instanceToken?: string
+) => {
+  try {
+    const client = instanceToken ? createInstanceClient(instanceToken) : uazapiClient;
+    
+    // Parâmetros para a pesquisa de mensagens conforme a API Uazapi v2.0
+    const params: any = {
+      instanceId,
+      query
+    };
+    
+    // Adicionar chatId se fornecido
+    if (chatId) {
+      params.chatId = chatId;
+    }
+    
+    // Chamada ao endpoint de busca de mensagens
+    const response = await client.post('/message/search', params);
+    
+    console.log('Resposta da busca de mensagens:', response.data);
+    
+    if (response.data && Array.isArray(response.data.messages)) {
+      return {
+        messages: response.data.messages,
+        count: response.data.messages.length
+      };
+    }
+    
+    return {
+      messages: [],
+      count: 0
+    };
+  } catch (error) {
+    console.error('Erro ao buscar mensagens:', error);
+    throw error;
+  }
+};
+
+// Função para obter todas as mensagens de um chat
+export const getAllMessagesFromChat = async (
+  instanceId: string,
+  chatId: string,
+  instanceToken?: string
+) => {
+  try {
+    const client = instanceToken ? createInstanceClient(instanceToken) : uazapiClient;
+    
+    // Parâmetros para obter todas as mensagens de um chat
+    const params = {
+      instanceId,
+      chatId
+    };
+    
+    // Chamada ao endpoint de busca de todas as mensagens
+    const response = await client.post('/chat/fetchAllMessages', params);
+    
+    console.log('Resposta de todas as mensagens do chat:', response.data);
+    
+    if (response.data && Array.isArray(response.data.messages)) {
+      return {
+        messages: response.data.messages,
+        count: response.data.messages.length
+      };
+    }
+    
+    return {
+      messages: [],
+      count: 0
+    };
+  } catch (error) {
+    console.error('Erro ao obter todas as mensagens do chat:', error);
+    throw error;
+  }
+};
+
+// Função para marcar mensagem como lida
+export const markMessageAsRead = async (
+  instanceId: string,
+  messageId: string,
+  instanceToken?: string
+) => {
+  try {
+    const client = instanceToken ? createInstanceClient(instanceToken) : uazapiClient;
+    
+    const response = await client.post('/message/markAsRead', {
+      instanceId,
+      messageId
+    });
+    
+    return response.data;
+  } catch (error) {
+    console.error('Erro ao marcar mensagem como lida:', error);
+    throw error;
+  }
+};
+
+// Função para buscar mensagens em todos os chats
+export const searchAllMessages = async (
+  instanceId: string,
+  query: string,
+  instanceToken?: string
+) => {
+  try {
+    const client = instanceToken ? createInstanceClient(instanceToken) : uazapiClient;
+    
+    // Parâmetros para a pesquisa de mensagens em todos os chats
+    const params = {
+      instanceId,
+      query
+    };
+    
+    // Chamada ao endpoint de busca de mensagens
+    const response = await client.post('/message/search', params);
+    
+    console.log('Resposta da busca global de mensagens:', response.data);
+    
+    if (response.data && Array.isArray(response.data.messages)) {
+      return {
+        messages: response.data.messages,
+        count: response.data.messages.length
+      };
+    }
+    
+    return {
+      messages: [],
+      count: 0
+    };
+  } catch (error) {
+    console.error('Erro ao buscar mensagens em todos os chats:', error);
+    throw error;
+  }
 };
 
 export default {

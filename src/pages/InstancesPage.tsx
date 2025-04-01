@@ -14,7 +14,13 @@ interface Instance {
   name: string;
   status: 'connected' | 'disconnected' | 'connecting';
   token: string;
-  // Adicione outras propriedades conforme necessário
+  phoneConnected: string;
+  profileName: string;
+  systemName: string;
+  adminFields: {
+    adminField01: string;
+    adminField02: string;
+  };
 }
 
 export function InstancesPage() {

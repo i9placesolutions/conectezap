@@ -1,4 +1,4 @@
-import { Smartphone, Copy, QrCode, Power, Trash2 } from 'lucide-react';
+import { Smartphone, Copy, QrCode, Power, Trash2, Phone } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { toast } from 'react-hot-toast';
 
@@ -9,6 +9,13 @@ interface InstanceCardProps {
     displayName?: string;
     status: 'connected' | 'disconnected' | 'connecting';
     token: string;
+    phoneConnected?: string;
+    profileName?: string;
+    systemName?: string;
+    adminFields?: {
+      adminField01: string;
+      adminField02: string;
+    };
   };
   onGenerateQR: () => void;
   onDisconnect?: () => void;
@@ -60,6 +67,18 @@ export function InstanceCard({
                  instance.status === 'connecting' ? 'Conectando' : 'Desconectado'}
               </span>
             </div>
+            {instance.phoneConnected && (
+              <div className="text-xs text-gray-500 mt-1 flex items-center gap-1">
+                <Phone className="h-3 w-3" />
+                <span>{instance.phoneConnected}</span>
+              </div>
+            )}
+            {instance.profileName && instance.profileName !== instance.name && (
+              <div className="text-xs text-gray-500 mt-1 flex items-center gap-1">
+                <Smartphone className="h-3 w-3" />
+                <span>{instance.profileName}</span>
+              </div>
+            )}
           </div>
         </div>
       </div>
