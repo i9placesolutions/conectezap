@@ -26,6 +26,7 @@ interface Instance {
   name: string;
   status: 'connected' | 'disconnected' | 'connecting';
   token: string;
+  profileImage?: string;
 }
 
 interface Chat {
@@ -1232,6 +1233,21 @@ export function ChatZapPage() {
             )}
           </div>
         </div>
+        {message.fromMe && (
+          <div className="h-8 w-8 rounded-full ml-2 overflow-hidden flex-shrink-0">
+            {selectedInstance?.profileImage ? (
+              <img 
+                src={selectedInstance.profileImage} 
+                alt="Você" 
+                className="h-full w-full object-cover"
+              />
+            ) : (
+              <div className="h-full w-full bg-green-100 flex items-center justify-center text-xs">
+                <span className="text-green-800 font-medium">V</span>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     );
   };
@@ -1556,27 +1572,10 @@ export function ChatZapPage() {
                         src={selectedChat.profileImage} 
                         alt={selectedChat.name} 
                         className="h-full w-full object-cover"
-                        onError={(e) => {
-                          // Se a imagem falhar ao carregar, substituir pelo avatar padrão
-                          const target = e.target as HTMLImageElement;
-                          target.onerror = null; // Previne loop infinito
-                          target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(selectedChat.name)}&background=random&color=fff&size=128`;
-                        }}
                       />
                     ) : (
-                      <div className="h-full w-full flex items-center justify-center">
-                        {selectedChat.isGroup ? (
-                          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-gray-500">
-                            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
-                            <circle cx="9" cy="7" r="4"></circle>
-                            <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
-                            <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
-                          </svg>
-                        ) : (
-                          <div className="text-gray-500 text-lg font-semibold">
-                            {selectedChat.name.charAt(0).toUpperCase()}
-                          </div>
-                        )}
+                      <div className="h-full w-full bg-gray-300 flex items-center justify-center text-xs">
+                        {(selectedChat.name || '?').charAt(0).toUpperCase()}
                       </div>
                     )}
                   </div>
