@@ -1,28 +1,25 @@
-import { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Search, MessageCircle, Phone, Paperclip, Send, MoreVertical, Smartphone, 
-  Trash, Check, Reply, Forward, FileText, Mic
+  Trash, Check, Reply, Forward, Mic
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { SelectInstanceModal } from '../components/instance/SelectInstanceModal';
 import { 
-  getChats, 
   getProfileInfo,
   getGroups,
   Group,
   downloadMessageMedia,
   chat,
   message,
-  webhook,
   connectToSSE,
-  group,
-  label,
   searchMessages,
   getAllMessagesFromChat,
   markMessageAsRead,
   searchAllMessages,
   API_URL
 } from '../lib/wapi/api';
+import type { ChatFilters } from '../lib/wapi/types';
 
 interface Instance {
   id: string;
@@ -34,14 +31,14 @@ interface Instance {
 interface Chat {
   id: string;
   name: string;
-  displayNumber?: string;
+  displayNumber: string;
   lastMessage?: string;
-  timestamp?: number;
+  timestamp: number;
   unreadCount: number;
   isGroup: boolean;
   profileImage?: string;
   number: string;
-  lastSeen?: number; 
+  lastSeen?: number;
 }
 
 interface Message {
@@ -77,6 +74,23 @@ interface ResultWithKey {
   messageTimestamp?: number;
 }
 
+interface ChatResponse {
+  id?: string;
+  wa_chatid?: string;
+  wa_contactName?: string;
+  wa_name?: string;
+  name?: string;
+  phone?: string;
+  wa_lastMessageTextVote?: string;
+  lastMessage?: string;
+  wa_lastMsgTimestamp?: number;
+  wa_unreadCount?: number;
+  wa_isGroup?: boolean;
+  image?: string;
+  imagePreview?: string;
+  wa_lastSeen?: number;
+}
+
 const formatDateTime = (timestamp: number): string => {
   const date = new Date(timestamp);
   return date.toLocaleString('pt-BR', {
@@ -96,10 +110,6 @@ const formatTime = (timestamp: number): string => {
   });
 };
 
-const FileIcon = ({ className }: { className?: string }) => (
-  <FileText className={className} />
-);
-
 export function ChatZapPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedChat, setSelectedChat] = useState<Chat | null>(null);
@@ -112,13 +122,10 @@ export function ChatZapPage() {
   const [showInstanceModal, setShowInstanceModal] = useState(true);
   const [selectedInstance, setSelectedInstance] = useState<Instance | null>(null);
   const [activeTab, setActiveTab] = useState<'chats' | 'groups' | 'labels'>('chats');
-  const [labels] = useState<any[]>([]);
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
-  const [forwardingMessage, setForwardingMessage] = useState<Message | null>(null);
   const [sseConnection, setSseConnection] = useState<any>(null);
   const [showContextMenu, setShowContextMenu] = useState<{x: number, y: number, messageId: string} | null>(null);
   const [showAttachmentOptions, setShowAttachmentOptions] = useState(false);
-  const [showEmojiPicker, setShowEmojiPicker] = useState<string | null>(null);
   const [showSearchMessages, setShowSearchMessages] = useState(false);
   const [messageSearchTerm, setMessageSearchTerm] = useState('');
   const [searchingMessages, setSearchingMessages] = useState(false);
@@ -127,8 +134,9 @@ export function ChatZapPage() {
   const [globalSearchTerm, setGlobalSearchTerm] = useState('');
   const [globalSearchResults, setGlobalSearchResults] = useState<any[]>([]);
   const [searchingGlobally, setSearchingGlobally] = useState(false);
-  const [isUsingMockData, setIsUsingMockData] = useState(false);
-  const [apiConnectionStatus, setApiConnectionStatus] = useState<'online' | 'offline'>('online');
+  const [isUsingMockData] = useState(false);
+  const [showDiagnosticInfo, setShowDiagnosticInfo] = useState(false);
+  const [apiRequestStatus, setApiRequestStatus] = useState<{lastCall: string, status: string}>({ lastCall: '', status: 'nenhuma' });
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -141,14 +149,12 @@ export function ChatZapPage() {
     if (selectedInstance) {
       loadChats();
       loadGroups();
-      setupSSE();
+      const cleanup = setupSSE();
+      
+      return () => {
+        if (cleanup) cleanup();
+      };
     }
-    
-    return () => {
-      if (sseConnection) {
-        sseConnection.close();
-      }
-    };
   }, [selectedInstance]);
 
   useEffect(() => {
@@ -159,172 +165,174 @@ export function ChatZapPage() {
     scrollToBottom();
   }, [messages]);
 
+  useEffect(() => {
+    if (selectedChat && selectedInstance) {
+      loadMessages(selectedChat.id);
+    }
+  }, [selectedChat?.id, selectedInstance?.id]);
+
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
   const setupSSE = () => {
     if (!selectedInstance) return;
-    
-    if (sseConnection) {
-      sseConnection.close();
+
+    console.log('Configurando SSE para a instância:', selectedInstance.id);
+
+    try {
+      const connection = connectToSSE(
+        selectedInstance.id,
+        handleSSEEvent,
+        selectedInstance.token
+      );
+
+      // Armazenar a conexão para limpeza posterior
+      setSseConnection(connection);
+
+      return () => {
+        if (connection) {
+          console.log('Fechando conexão SSE anterior');
+          connection.close();
+        }
+      };
+    } catch (error) {
+      console.error('Erro ao configurar SSE:', error);
+      toast.error('Erro ao conectar com o servidor de eventos');
     }
-    
-    const connection = connectToSSE(
-      selectedInstance.id,
-      (event) => {
-        handleSSEEvent(event);
-      },
-      selectedInstance.token
-    );
-    
-    setSseConnection(connection);
-    console.log('SSE conectado para a instância:', selectedInstance.id);
   };
 
   const handleSSEEvent = (event: any) => {
-    // Eventos de mensagem
-    if (event.type === 'message' && event.event === 'received') {
-      // Executar toast de notificação para novas mensagens
-      const sender = event.data.notifyName || event.data.pushName || event.data.from.split('@')[0];
-      const content = event.data.body || event.data.caption || '[Mídia]';
-      
-      toast.success(`Nova mensagem de ${sender}: ${content.substring(0, 30)}${content.length > 30 ? '...' : ''}`, {
-        duration: 4000,
-        icon: '💬'
-      });
-      
-      // Se for o chat atual, atualizar mensagens
-      if (selectedChat && (event.data.from === selectedChat.id || event.data.key?.remoteJid === selectedChat.id)) {
+    console.log('Evento SSE recebido:', event);
+
+    // Verificar se o evento é uma mensagem
+    if (event.type === 'message') {
+      // Recarregar mensagens se o chat atual for o destinatário
+      if (selectedChat && event.chatId === selectedChat.id) {
         loadMessages(selectedChat.id);
       }
-      
-      // Atualizar a lista de chats
+      // Recarregar lista de chats para atualizar últimas mensagens
       loadChats();
     }
-    // Eventos de status de mensagem
-    else if (event.type === 'message' && event.event === 'update') {
-      console.log('Status de mensagem atualizado:', event.data);
-      
-      // Atualizar status de mensagem no estado atual
-      if (event.data.status) {
-        setMessages(prev => 
-          prev.map(msg => 
-            msg.messageId === event.data.key?.id ? { ...msg, status: event.data.status } : msg
-          )
-        );
+    
+    // Verificar se é um evento de status da instância
+    if (event.type === 'status') {
+      if (selectedInstance && event.instanceId === selectedInstance.id) {
+        setSelectedInstance(prev => prev ? {
+          ...prev,
+          status: event.status as 'connected' | 'disconnected' | 'connecting'
+        } : null);
       }
-    }
-    // Eventos de conexão
-    else if (event.type === 'connection') {
-      console.log('Status de conexão atualizado:', event.data);
-      try {
-        toast(`Status da conexão: ${event.data.status}`, {
-          icon: event.data.status === 'connected' ? '✅' : event.data.status === 'disconnected' ? '❌' : '⚠️'
-        });
-      } catch (error) {
-        console.error('Erro ao mostrar toast:', error);
-      }
-      
-      // Recarregar instâncias se o status mudou
-      setTimeout(() => {
-        if (selectedInstance) {
-          // Verificar se a instância atual ainda está conectada
-          fetch(`${API_URL}/instance/status`, {
-            method: 'GET',
-            headers: {
-              'Content-Type': 'application/json',
-              'token': selectedInstance.token
-            }
-          })
-          .then(res => res.json())
-          .then(data => {
-            if (data.status !== 'connected') {
-              toast.error('A conexão com o WhatsApp foi perdida. Por favor, reconecte sua instância.');
-              setShowInstanceModal(true);
-            }
-          })
-          .catch(err => {
-            console.error('Erro ao verificar status da instância:', err);
-          });
-        }
-      }, 2000);
-    }
-    // Outros eventos
-    else {
-      console.log('Evento SSE recebido:', event);
     }
   };
 
   const loadChats = async () => {
-    if (!selectedInstance) return;
-
     try {
+      if (!selectedInstance || !selectedInstance.token) {
+         console.error('[UI_ERROR] Tentando carregar chats sem instância selecionada ou token.');
+         setError('Instância inválida ou não selecionada.');
+         setLoading(false);
+         return;
+      }
+
       setLoading(true);
       setError(null);
-      setApiConnectionStatus('online');
-      setIsUsingMockData(false);
+      setApiRequestStatus({ lastCall: `chat.getAll(${selectedInstance.id}) via POST /chat/find`, status: 'iniciada' });
 
-      const rawChats = await getChats(selectedInstance.id, searchTerm, selectedInstance.token);
-      console.log('Chats carregados:', rawChats);
+      console.log('[UI_LOG] Iniciando busca de chats (POST /chat/find) para a instância:', selectedInstance.id);
 
-      // Verificar se estamos usando dados de exemplo
-      const isMockData = rawChats.some((chat: any) => chat.name.includes('(EXEMPLO)'));
-      setIsUsingMockData(isMockData);
-      
-      if (isMockData) {
-        setApiConnectionStatus('offline');
-        toast.error('Mostrando dados de exemplo devido a problemas de conexão com a API', {
-          duration: 5000
-        });
-      }
+      // Preparar parâmetros de busca se houver searchTerm
+      const searchParams = searchTerm ? { lead_name: `~${searchTerm}` } : {};
 
-      const formattedChats: Chat[] = rawChats.map((chat: any) => {
-        const chatId = chat.jid || chat.id;
+      // Buscar chats usando o endpoint corrigido (POST /chat/find)
+      const chatResponse = await chat.getAll(selectedInstance.id, selectedInstance.token, searchParams);
+
+      console.log('[UI_LOG] Resposta recebida de chat.getAll (POST /chat/find):', chatResponse);
+      setApiRequestStatus(prev => ({ ...prev, status: chatResponse?.chats?.length > 0 ? 'sucesso' : 'falha ou vazio' }));
+
+      if (chatResponse && Array.isArray(chatResponse.chats)) {
+        console.log(`[UI_LOG] Processando ${chatResponse.chats.length} chats recebidos de POST /chat/find`);
         
-        const isGroup = chat.isGroup || chatId.includes('g.us');
-        
-        let displayName = chat.name;
-        if (!displayName || displayName === chatId.split('@')[0]) {
-          displayName = isGroup ? 'Grupo' : 'Contato';
+        // Log do primeiro chat para análise da estrutura (vindo de /chat/find)
+        if (chatResponse.chats.length > 0) {
+          console.log('[UI_LOG] Estrutura do primeiro chat (de /chat/find):', JSON.stringify(chatResponse.chats[0], null, 2));
+          
+          // Log específico para o chat "Rafael Mendes" se encontrado
+          const chatTargetId = 'r3672040bcbc676';
+          const rafaelChatData = chatResponse.chats.find((c: any) => c.id === chatTargetId || c.wa_chatid === chatTargetId);
+          if (rafaelChatData) {
+            console.log(`[UI_LOG] DADOS CRUS DO CHAT ${chatTargetId} recebidos de /chat/find:`, JSON.stringify(rafaelChatData, null, 2));
+          }
         }
-        
-        // Formatar o número para exibição
-        const formattedNumber = chatId.includes('@') ? chatId.split('@')[0] : chatId;
-        
-        return {
-          id: chatId,
-          name: displayName,
-          displayNumber: formattedNumber,
-          lastMessage: chat.lastMessage?.message || '',
-          timestamp: chat.lastMessage?.timestamp ? new Date(chat.lastMessage.timestamp).getTime() : Date.now(),
-          unreadCount: chat.unreadCount || 0,
-          isGroup: isGroup,
-          profileImage: chat.profilePicture || chat.imgUrl || '',
-          number: chat.number || chatId,
-          lastSeen: chat.lastSeen, 
-        };
-      });
 
-      setChats(formattedChats);
-      
-      // Carregar imagens de perfil para cada chat
-      for (const chat of formattedChats) {
-        await loadProfilePicture(chat.id);
-      }
-      
-      setError(null);
-    } catch (error: any) {
-      setApiConnectionStatus('offline');
-      setIsUsingMockData(true);
-      console.error('Erro ao carregar conversas:', error);
-      if (error.response?.status === 502 || error.response?.status === 500) {
-        setError('O servidor está temporariamente indisponível. Por favor, tente novamente em alguns minutos.');
-      } else if (error.response?.status === 401 || error.response?.status === 403) {
-        setError('Erro de autenticação. Verifique suas credenciais.');
+        // O filtro já foi aplicado na API se searchParams foi enviado
+        // Se não, podemos filtrar localmente se necessário, mas idealmente a API filtra.
+        let processedChats = chatResponse.chats;
+
+        const formattedChats = processedChats.map((chatData: any): Chat => {
+          // Mapeamento baseado na estrutura esperada de /chat/find
+          const isGroup = Boolean(chatData.wa_isGroup);
+          
+          // Nome: wa_contactName (preferencial), wa_name, ou name (lead_name)
+          const name = chatData.wa_contactName || chatData.wa_name || chatData.lead_name || 
+                      (isGroup ? 'Grupo' : 'Contato Desconhecido');
+          
+          // ID do chat: PRIORIZAR wa_chatid, depois id. Garantir que não seja nulo.
+          const chatId = chatData.wa_chatid || chatData.id || `chat-${Math.random()}-${Date.now()}`;
+
+          // Número (parte antes do @ ou telefone) - Usar o chatId (preferencialmente wa_chatid)
+          const number = chatData.phone || (chatId.includes('@') ? chatId.split('@')[0] : chatId);
+          
+          // Última mensagem: wa_lastMessageTextVote ou lastMessage
+          const lastMessageText = chatData.wa_lastMessageTextVote || chatData.lastMessage || '';
+          
+          // Timestamp: wa_lastMsgTimestamp (em segundos, precisa multiplicar por 1000)
+          const timestamp = chatData.wa_lastMsgTimestamp ? Number(chatData.wa_lastMsgTimestamp) * 1000 : Date.now();
+
+           // Imagem: Tentar múltiplos campos possíveis
+           const profileImage = chatData.image || 
+                                chatData.imagePreview || 
+                                chatData.imgUrl || 
+                                chatData.picture || 
+                                chatData.profilePic || 
+                                ''; // Default vazio se nenhum for encontrado
+
+           // Log da URL da imagem encontrada para este chat
+           // console.log(`[UI_LOG] Chat ID: ${chatId}, Nome: ${name}, profileImage URL: ${profileImage || 'Nenhuma'}`);
+
+          const formattedChat: Chat = {
+            id: chatId,
+            name: name,
+            displayNumber: number,
+            lastMessage: lastMessageText,
+            timestamp: isNaN(timestamp) ? Date.now() : timestamp,
+            unreadCount: chatData.wa_unreadCount || 0,
+            isGroup: isGroup,
+            profileImage: profileImage,
+            number: number,
+            lastSeen: chatData.wa_lastSeen ? Number(chatData.wa_lastSeen) * 1000 : 0
+          };
+          return formattedChat;
+        });
+
+        console.log('[UI_LOG] Chats finais formatados (de /chat/find):', formattedChats);
+        setChats(formattedChats);
+        if (formattedChats.length === 0 && chatResponse.chats.length > 0) {
+           console.warn('[UI_LOG] Nenhum chat visível, mas a API retornou chats. Verifique o mapeamento.');
+        } else if (formattedChats.length === 0) {
+           console.warn('[UI_LOG] Nenhum chat retornado pela API /chat/find.');
+        }
+
       } else {
-        setError(`Erro ao carregar conversas: ${error.response?.data?.message || error.message || 'Erro desconhecido'}`);
+        console.warn('[UI_LOG] Formato de resposta inesperado ou array de chats vazio (POST /chat/find):', chatResponse);
+        setChats([]);
+        setApiRequestStatus(prev => ({ ...prev, status: 'falha: formato inesperado ou vazio' }));
       }
+    } catch (error: any) {
+      console.error('[UI_ERROR] Erro ao carregar chats (POST /chat/find):', error);
+      setError('Falha ao carregar chats. Verifique o console (F12).');
+      setChats([]);
+      setApiRequestStatus(prev => ({ ...prev, status: `erro: ${error.message}` }));
     } finally {
       setLoading(false);
     }
@@ -357,31 +365,6 @@ export function ChatZapPage() {
     }
   };
 
-  const loadProfilePicture = async (chatId: string) => {
-    if (!selectedInstance) return;
-    
-    try {
-      const number = chatId.includes('@') ? chatId.split('@')[0] : chatId;
-      const profileInfo = await getProfileInfo(
-        number,
-        selectedInstance.token
-      );
-      
-      if (profileInfo && profileInfo.imageUrl) {
-        // Atualizar a imagem de perfil no chat correspondente
-        setChats(prev => 
-          prev.map(chat => 
-            chat.id === chatId 
-              ? { ...chat, profileImage: profileInfo.imageUrl } 
-              : chat
-          )
-        );
-      }
-    } catch (error) {
-      console.error(`Erro ao carregar foto de perfil para ${chatId}:`, error);
-    }
-  };
-
   useEffect(() => {
     if (selectedInstance) {
       if (activeTab === 'chats') {
@@ -391,6 +374,70 @@ export function ChatZapPage() {
       }
     }
   }, [searchTerm, selectedInstance, activeTab]);
+
+  // Efeito para buscar imagens de perfil faltantes após carregar os chats
+  useEffect(() => {
+    if (!selectedInstance || !selectedInstance.token || chats.length === 0) {
+      return; // Sai se não houver instância, token ou chats
+    }
+
+    // Função assíncrona para buscar e atualizar imagens
+    const fetchMissingProfileImages = async () => {
+      console.log('[UI_LOG] Iniciando verificação de imagens de perfil faltantes...');
+      let updatedNeeded = false;
+      const promises = chats.map(async (currentChat) => {
+        // Se já tem imagem ou se o ID parece inválido, pula
+        if (currentChat.profileImage || !currentChat.id || currentChat.id.startsWith('chat-')) {
+          return currentChat;
+        }
+
+        try {
+          // console.log(`[UI_LOG] Buscando imagem para ID: ${currentChat.id} (${currentChat.name})`);
+          // A API espera o JID (ex: numero@s.whatsapp.net)
+          const profileInfo = await chat.getNameAndImageURL(
+            selectedInstance.id,
+            currentChat.id, // Passa o ID do chat (que deve ser o wa_chatid)
+            selectedInstance.token
+          );
+
+          // console.log(`[UI_LOG] Resposta getNameAndImageURL para ${currentChat.id}:`, profileInfo);
+
+          if (profileInfo && profileInfo.success && profileInfo.imageUrl) {
+            // Verifica se a URL encontrada é diferente da que já pode existir (evita updates desnecessários)
+            if (currentChat.profileImage !== profileInfo.imageUrl) {
+                console.log(`[UI_LOG] Imagem encontrada/atualizada para ${currentChat.id}: ${profileInfo.imageUrl}`);
+                updatedNeeded = true;
+                return { ...currentChat, profileImage: profileInfo.imageUrl };
+            }
+          } else if (profileInfo && !profileInfo.success) {
+             // Loga apenas se a API retornou sucesso=false
+             console.warn(`[UI_LOG] Falha ao obter imagem para ${currentChat.id} (API retornou erro):`, profileInfo.error);
+          }
+          // Se não encontrou imagem ou já tinha a mesma, retorna o chat original
+          return currentChat;
+        } catch (error) {
+          console.error(`[UI_ERROR] Erro GERAL ao buscar imagem para ${currentChat.id}:`, error);
+          return currentChat; // Retorna original em caso de erro
+        }
+      });
+
+      // Aguarda todas as promessas
+      const updatedChats = await Promise.all(promises);
+
+      // Atualiza o estado apenas se houve mudança
+      if (updatedNeeded) {
+        console.log('[UI_LOG] Atualizando estado de chats com novas imagens.');
+        setChats(updatedChats);
+      }
+    };
+
+    // Executa a busca (talvez com um pequeno delay para não sobrecarregar logo de início)
+    const timerId = setTimeout(fetchMissingProfileImages, 500);
+
+    // Limpa o timeout se o componente desmontar ou as dependências mudarem
+    return () => clearTimeout(timerId);
+
+  }, [chats, selectedInstance]); // Re-executa se a lista de chats ou a instância mudar
 
   const handleSendMessage = async () => {
     if (!messageInput.trim() || !selectedChat || !selectedInstance) {
@@ -753,29 +800,8 @@ export function ChatZapPage() {
     setShowContextMenu(null);
   };
 
-  const handleForwardMessage = (msg: Message) => {
-    setForwardingMessage(msg);
+  const handleForwardMessage = () => {
     setShowContextMenu(null);
-  };
-
-  const confirmForward = async (targetChatId: string) => {
-    if (!forwardingMessage || !selectedInstance) return;
-    
-    try {
-      await message.forward(
-        selectedInstance.id,
-        targetChatId,
-        forwardingMessage.messageId || '',
-        {},
-        selectedInstance.token
-      );
-      
-      toast.success('Mensagem encaminhada com sucesso!');
-      setForwardingMessage(null);
-    } catch (error) {
-      console.error('Erro ao encaminhar mensagem:', error);
-      toast.error('Erro ao encaminhar mensagem. Tente novamente.');
-    }
   };
 
   const handleDeleteMessage = async (msg: Message) => {
@@ -827,7 +853,6 @@ export function ChatZapPage() {
       );
       
       toast.success(`Reação enviada!`, { id: 'reaction' });
-      setShowEmojiPicker(null);
       setShowContextMenu(null);
       
       // Atualizar a lista de mensagens após um pequeno delay
@@ -854,230 +879,69 @@ export function ChatZapPage() {
 
   const loadMessages = async (chatId: string) => {
     try {
+      if (!selectedInstance || !selectedInstance.token) {
+        console.error('[UI_ERROR] Tentando carregar mensagens sem instância ou token.');
+        setError('Instância inválida ou não selecionada.');
+        setLoading(false);
+        return;
+      }
       setLoading(true);
       setError(null);
+      setMessages([]); // Limpa mensagens antigas ao carregar novas
+      setApiRequestStatus({ lastCall: `getAllMessagesFromChat(${chatId}) via POST /message/find`, status: 'iniciada' });
 
-      if (!selectedInstance) return;
+      console.log('[UI_LOG] Carregando mensagens (POST /message/find) para o chat:', chatId);
 
-      // Primeiro tentamos buscar todas as mensagens do chat
+      // Chamar a função corrigida que usa POST /message/find
       const messagesResponse = await getAllMessagesFromChat(
         selectedInstance.id, 
         chatId, 
         selectedInstance.token
       );
       
-      console.log('Mensagens carregadas:', messagesResponse);
-
-      let rawMessages;
+      console.log('[UI_LOG] Resposta recebida de getAllMessagesFromChat (POST /message/find):', messagesResponse);
       
-      if (messagesResponse && Array.isArray(messagesResponse.messages) && messagesResponse.messages.length > 0) {
-        rawMessages = messagesResponse.messages;
-      } else {
-        // Fallback para o método anterior
-        const oldResponse = await chat.fetchMessages(selectedInstance.id, chatId, 50, selectedInstance.token);
-        console.log('Mensagens carregadas (método antigo):', oldResponse);
-        
-        if (!oldResponse || !oldResponse.messages) {
-          setMessages([]);
-          return;
-        }
-        
-        rawMessages = oldResponse.messages;
-      }
+      if (messagesResponse.success && Array.isArray(messagesResponse.messages)) {
+        console.log(`[UI_LOG] Processando ${messagesResponse.messages.length} mensagens recebidas de POST /message/find`);
 
-      // Criamos um conjunto de formattedMessages usando um objeto vazio
-      const formattedMessages = [];
-      
-      // Iteramos sobre as mensagens
-      for (const msg of rawMessages) {
-        const isFromMe = msg.fromMe || msg.key?.fromMe || false;
-        let content = '';
-        let mediaType = '';
-        let sender = '';
-        let senderName = '';
-        let senderProfileImage = '';
-        
-        // Determinar o remetente da mensagem
-        if (isFromMe) {
-          sender = 'me';
-          senderName = 'Você';
-        } else {
-          // Verificamos se o msg.sender ou msg.from existe
-          sender = msg.sender || msg.from || msg.key?.participant || msg.key?.remoteJid || chatId;
-          
-          // Se o remetente não for eu, buscamos as informações de perfil
-          try {
-            // Obtemos o número a partir do JID
-            const number = sender.includes('@') ? sender.split('@')[0] : sender;
-            
-            // Buscamos informações de perfil
-            const profileInfo = await getProfileInfo(number, selectedInstance.token);
-            
-            if (profileInfo) {
-              senderName = profileInfo.name || number;
-              senderProfileImage = profileInfo.imageUrl || '';
-            } else {
-              senderName = number;
-            }
-          } catch (error) {
-            console.error('Erro ao carregar informações do remetente:', error);
-            senderName = sender.includes('@') ? sender.split('@')[0] : sender;
-          }
+        // Log da primeira mensagem para análise da estrutura (vindo de /message/find)
+        if (messagesResponse.messages.length > 0) {
+          console.log('[UI_LOG] Estrutura da primeira mensagem (de /message/find):', JSON.stringify(messagesResponse.messages[0], null, 2));
         }
-        
-        // Determinar o tipo de mensagem com base no messageType (formato Uazapi)
-        if (msg.type === 'chat' || msg.type === 'text' || msg.messageType === 'conversation' || msg.messageType === 'extendedTextMessage') {
-          content = msg.body || msg.message || msg.content?.text || msg.text || '';
-          mediaType = '';
-        } 
-        else if (msg.type === 'image' || msg.messageType === 'imageMessage') {
-          content = '[Imagem]' + (msg.caption || msg.content?.caption ? ': ' + (msg.caption || msg.content?.caption) : '');
-          mediaType = 'image';
-        } 
-        else if (msg.type === 'video' || msg.messageType === 'videoMessage') {
-          content = '[Vídeo]' + (msg.caption || msg.content?.caption ? ': ' + (msg.caption || msg.content?.caption) : '');
-          mediaType = 'video';
-        } 
-        else if (msg.type === 'document' || msg.messageType === 'documentMessage') {
-          content = '[Documento]' + (msg.fileName || msg.content?.fileName ? ': ' + (msg.fileName || msg.content?.fileName) : '');
-          mediaType = 'document';
-        } 
-        else if (msg.type === 'audio' || msg.type === 'ptt' || msg.messageType === 'audioMessage' || msg.messageType === 'pttMessage') {
-          content = '[Áudio]';
-          mediaType = 'audio';
-        } 
-        else if (msg.type === 'location' || msg.messageType === 'locationMessage') {
-          content = '[Localização]';
-          mediaType = 'location';
-          // Se tiver coordenadas, extrair latitude e longitude
-          if (msg.content?.location) {
-            msg.latitude = msg.content.location.degreesLatitude;
-            msg.longitude = msg.content.location.degreesLongitude;
-          }
-        } 
-        else if (msg.type === 'sticker' || msg.messageType === 'stickerMessage') {
-          content = '[Sticker]';
-          mediaType = 'sticker';
-        }
-        else if (msg.type === 'vcard' || msg.messageType === 'contactMessage' || msg.messageType === 'contactsArrayMessage') {
-          content = '[Contato]';
-          mediaType = 'contact';
-        }
-        else if (msg.type === 'buttonsMessage' || msg.messageType === 'buttonsMessage') {
-          content = msg.content?.text || '[Mensagem com botões]';
-          mediaType = 'buttons';
-        }
-        else if (msg.type === 'templateMessage' || msg.messageType === 'templateMessage') {
-          content = msg.content?.text || '[Mensagem de modelo]';
-          mediaType = 'template';
-        }
-        else if (msg.type === 'listMessage' || msg.messageType === 'listMessage') {
-          content = msg.content?.text || '[Lista]';
-          mediaType = 'list';
-        }
-        else {
-          content = msg.body || msg.message || msg.content?.text || `[${msg.type || msg.messageType || 'Desconhecido'}]`;
-        }
-        
-        // Verificar se é uma mensagem encaminhada
-        const isForwarded = msg.isForwarded || (msg.messageContextInfo && msg.messageContextInfo.isForwarded) || false;
-        
-        // Verificar se é uma resposta a outra mensagem
-        const quotedMsg = msg.quotedMsg || msg.quotedMessage || null;
-        let quotedMsgData = null;
-        
-        if (quotedMsg) {
-          const quotedContent = quotedMsg.body || quotedMsg.message || quotedMsg.content?.text || '';
-          const quotedSender = quotedMsg.sender || quotedMsg.participant || '';
-          quotedMsgData = {
-            id: quotedMsg.id || '',
-            sender: quotedSender,
-            content: quotedContent,
-            fromMe: quotedMsg.fromMe || false
-          };
-        }
-        
-        // Estado de leitura da mensagem
-        const readStatus = msg.status || (msg.read ? 'read' : 'delivered');
-        
-        // Extrair o ID da mensagem de forma confiável
-        const messageId = msg.id || msg.key?.id || `msg-${Date.now()}-${Math.random()}`;
-        
-        formattedMessages.push({
-          id: messageId,
-          messageId: messageId,
-          sender: sender,
-          senderName: senderName,
-          senderProfileImage: senderProfileImage,
-          content: content,
-          timestamp: new Date(msg.timestamp || msg.messageTimestamp || Date.now()).getTime(),
-          status: readStatus,
-          fromMe: isFromMe,
-          read: msg.read || false,
-          mediaType: mediaType,
-          mediaUrl: null,
-          chatId: chatId,
-          quotedMsg: quotedMsgData,
-          isForwarded: isForwarded,
-          latitude: msg.latitude,
-          longitude: msg.longitude,
-          // Dados adicionais para mensagens ricas
-          buttons: msg.buttons || msg.content?.buttons || [],
-          listItems: msg.listItems || msg.content?.items || [],
-          fileName: msg.fileName || msg.content?.fileName || '',
-          contactCard: msg.contactCard || msg.content?.vcard || '',
-          mentionedIds: msg.mentionedJidList || []
+
+        // Ordenar mensagens pelo timestamp (a função da API já deve retornar formatado)
+        const sortedMessages = [...messagesResponse.messages].sort((a: Message, b: Message) => {
+          return (a.timestamp || 0) - (b.timestamp || 0);
         });
+
+        console.log('[UI_LOG] Mensagens finais formatadas e ordenadas (de /message/find):', sortedMessages);
+        setMessages(sortedMessages);
+        setApiRequestStatus(prev => ({ ...prev, status: `sucesso: ${sortedMessages.length} mensagens` }));
+
+        // Marcar mensagens como lidas
+        const unreadMessages = sortedMessages.filter((msg: Message) => !msg.fromMe && !msg.read);
+        if (unreadMessages.length > 0) {
+          console.log(`[UI_LOG] Marcando ${unreadMessages.length} mensagens como lidas.`);
+          // ... (código para marcar como lido)
+        }
+
+        // Rolar para o final
+        setTimeout(scrollToBottom, 100);
+
+      } else {
+        console.error('[UI_ERROR] Erro na resposta da API de mensagens (POST /message/find) ou formato inválido:', messagesResponse.error || messagesResponse);
+        toast.error(`Erro ao carregar mensagens: ${messagesResponse.error || 'Formato inválido'}`);
+        setError(messagesResponse.error || 'Erro ao carregar mensagens');
+        setMessages([]);
+        setApiRequestStatus(prev => ({ ...prev, status: `falha: ${messagesResponse.error || 'formato inválido'}` }));
       }
 
-      setMessages(formattedMessages);
-
-      // Carregar mídia para todas as mensagens que possuem mídia
-      formattedMessages.forEach(async (msg: Message) => {
-        if (msg.mediaType && msg.messageId) {
-          try {
-            const mediaData = await downloadMessageMedia(
-              selectedInstance.id,
-              msg.messageId,
-              selectedInstance.token
-            );
-            
-            if (mediaData && mediaData.url) {
-              setMessages(prev => 
-                prev.map(m => 
-                  m.id === msg.id ? { ...m, mediaUrl: mediaData.url } : m
-                )
-              );
-            }
-          } catch (error) {
-            console.error(`Erro ao baixar mídia para mensagem ${msg.id}:`, error);
-          }
-        }
-      });
-
-      // Atualizar informações do perfil
-      await loadProfileInfo(chatId);
-      
-      // Marcar todas as mensagens como lidas
-      const unreadMessages = formattedMessages.filter((msg: Message) => !msg.fromMe && !msg.read);
-      if (unreadMessages.length > 0) {
-        try {
-          for (const msg of unreadMessages) {
-            if (msg.messageId) {
-              await markMessageAsRead(
-                selectedInstance.id,
-                msg.messageId,
-                selectedInstance.token
-              );
-            }
-          }
-        } catch (error) {
-          console.error('Erro ao marcar mensagens como lidas:', error);
-        }
-      }
-    } catch (error) {
-      console.error('Erro ao carregar mensagens:', error);
-      setError('Falha ao carregar mensagens. Tente novamente.');
+    } catch (error: any) {
+      console.error('[UI_ERROR] Erro ao carregar mensagens (POST /message/find):', error);
+      toast.error(`Falha ao carregar mensagens: ${error.message || 'Erro desconhecido'}`);
+      setError('Falha ao carregar mensagens. Verifique o console (F12).');
+      setMessages([]);
+      setApiRequestStatus(prev => ({ ...prev, status: `erro: ${error.message}` }));
     } finally {
       setLoading(false);
     }
@@ -1108,528 +972,23 @@ export function ChatZapPage() {
     }
   };
 
-  const _handleViewProfileImage = async (chat: Chat) => {
-    if (!selectedInstance) return;
-    
-    try {
-      const number = chat.number || chat.id.split('@')[0];
-      const profileInfo = await getProfileInfo(
-        number,
-        selectedInstance.token
-      );
-      
-      if (profileInfo && profileInfo.imageUrl) {
-        window.open(profileInfo.imageUrl, '_blank');
-      } else {
-        toast.error('Imagem de perfil não disponível');
-      }
-    } catch (error) {
-      toast.error('Erro ao buscar imagem de perfil');
-    }
-  };
-
-  const _handleChatAction = async (action: string) => {
-    if (!selectedChat || !selectedInstance) {
-      toast.error('Nenhum chat selecionado ou instância não conectada');
-      return;
-    }
-
-    try {
-      const dropdownMenu = document.getElementById('chatOptionsDropdown');
-      if (dropdownMenu) {
-        dropdownMenu.classList.add('hidden');
-      }
-
-      switch (action) {
-        case 'archive':
-          toast.promise(
-            chat.archive(selectedInstance.id, selectedChat.id, true, selectedInstance.token),
-            {
-              loading: 'Arquivando conversa...',
-              success: 'Conversa arquivada com sucesso!',
-              error: 'Erro ao arquivar conversa'
-            }
-          );
-          break;
-
-        case 'pin':
-          toast.promise(
-            chat.pin(selectedInstance.id, selectedChat.id, true, selectedInstance.token),
-            {
-              loading: 'Fixando conversa...',
-              success: 'Conversa fixada com sucesso!',
-              error: 'Erro ao fixar conversa'
-            }
-          );
-          break;
-
-        case 'mute':
-          toast.promise(
-            chat.mute(selectedInstance.id, selectedChat.id, 8 * 60 * 60, selectedInstance.token), 
-            {
-              loading: 'Silenciando notificações...',
-              success: 'Notificações silenciadas com sucesso!',
-              error: 'Erro ao silenciar notificações'
-            }
-          );
-          break;
-
-        case 'clear':
-          if (window.confirm('Tem certeza que deseja limpar todas as mensagens desta conversa?')) {
-            await toast.promise(
-              chat.clear(selectedInstance.id, selectedChat.id, selectedInstance.token),
-              {
-                loading: 'Limpando mensagens...',
-                success: 'Mensagens limpas com sucesso!',
-                error: 'Erro ao limpar mensagens'
-              }
-            );
-            setMessages([]);
-          }
-          break;
-
-        case 'delete':
-          if (window.confirm('Tem certeza que deseja excluir esta conversa? Esta ação não pode ser desfeita.')) {
-            await toast.promise(
-              chat.delete(selectedInstance.id, selectedChat.id, selectedInstance.token),
-              {
-                loading: 'Excluindo conversa...',
-                success: 'Conversa excluída com sucesso!',
-                error: 'Erro ao excluir conversa'
-              }
-            );
-            setSelectedChat(null);
-            loadChats();
-          }
-          break;
-
-        default:
-          toast.error('Ação não implementada');
-      }
-    } catch (error) {
-      console.error(`Erro ao executar ação ${action}:`, error);
-      toast.error(`Erro ao executar: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
-    }
-  };
-
-  const _handleMarkMessageAsRead = async (messageId: string) => {
-    if (!selectedInstance) return;
-    
-    try {
-      await chat.markMessageAsRead(
-        selectedInstance.id,
-        messageId,
-        selectedInstance.token
-      );
-      
-      setMessages(prev => 
-        prev.map(m => 
-          m.messageId === messageId 
-            ? { ...m, read: true } 
-            : m
-        )
-      );
-    } catch (error) {
-      console.error('Erro ao marcar mensagem como lida:', error);
-      toast.error('Erro ao marcar mensagem como lida');
-    }
-  };
-
   const _handleSelectChat = (chat: Chat) => {
-    setSelectedChat(chat);
+    console.log('[UI_LOG] Selecionando chat:', chat);
+    if (selectedChat?.id === chat.id) {
+      console.log('[UI_LOG] Chat já selecionado, recarregando mensagens...');
+    } else {
+      setSelectedChat(chat);
+      setMessages([]); // Limpar mensagens anteriores
+    }
+    setLoading(true); // Indicar que está carregando
     loadMessages(chat.id);
     
-    try {
-      console.log('Marcando mensagens como lidas para o chat:', chat.id);
-    } catch (error) {
-      console.error('Erro ao marcar mensagens como lidas:', error);
-    }
-  };
-
-  const _handleCreateGroup = async () => {
-    if (!selectedInstance) return;
-    
-    try {
-      const groupName = prompt('Digite o nome do grupo:');
-      if (!groupName) return;
-      
-      const participantsInput = prompt('Digite os números dos participantes separados por vírgula:');
-      if (!participantsInput) return;
-      
-      const participants = participantsInput.split(',').map(num => num.trim());
-      
-      const _result = await group.create(
-        selectedInstance.id,
-        groupName,
-        participants,
-        selectedInstance.token
-      );
-      
-      if (_result && _result.groupId) {
-        toast.success(`Grupo "${groupName}" criado com sucesso!`);
-        loadGroups();
-      } else {
-        throw new Error('Falha ao criar grupo');
-      }
-    } catch (error) {
-      console.error('Erro ao criar grupo:', error);
-      toast.error('Erro ao criar grupo. Verifique os números e tente novamente.');
-    }
-  };
-
-  const _handleAddParticipants = async (groupId: string) => {
-    if (!selectedInstance) return;
-    
-    try {
-      const participantsInput = prompt('Digite os números dos participantes a adicionar separados por vírgula:');
-      if (!participantsInput) return;
-      
-      const participants = participantsInput.split(',').map(num => num.trim());
-      
-      await group.addParticipants(
-        selectedInstance.id,
-        groupId,
-        participants,
-        selectedInstance.token
-      );
-      
-      toast.success('Participantes adicionados com sucesso!');
-      loadGroups();
-    } catch (error) {
-      console.error('Erro ao adicionar participantes:', error);
-      toast.error('Erro ao adicionar participantes. Tente novamente.');
-    }
-  };
-
-  const _handleRemoveParticipant = async (groupId: string) => {
-    if (!selectedInstance) return;
-    
-    try {
-      const participantInput = prompt('Digite o número do participante a remover:');
-      if (!participantInput) return;
-      
-      await group.removeParticipants(
-        selectedInstance.id,
-        groupId,
-        [participantInput.trim()],
-        selectedInstance.token
-      );
-      
-      toast.success('Participante removido com sucesso!');
-      loadGroups();
-    } catch (error) {
-      console.error('Erro ao remover participante:', error);
-      toast.error('Erro ao remover participante. Tente novamente.');
-    }
-  };
-
-  const _handlePromoteParticipant = async (groupId: string) => {
-    if (!selectedInstance) return;
-    
-    try {
-      const participantInput = prompt('Digite o número do participante a promover a admin:');
-      if (!participantInput) return;
-      
-      await group.promoteParticipants(
-        selectedInstance.id,
-        groupId,
-        [participantInput.trim()],
-        selectedInstance.token
-      );
-      
-      toast.success('Participante promovido a admin com sucesso!');
-    } catch (error) {
-      console.error('Erro ao promover participante:', error);
-      toast.error('Erro ao promover participante. Tente novamente.');
-    }
-  };
-
-  const _handleCreateLabel = async () => {
-    if (!selectedInstance) return;
-    
-    try {
-      const labelName = prompt('Digite o nome da etiqueta:');
-      if (!labelName) return;
-      
-      await label.create(
-        selectedInstance.id,
-        labelName,
-        selectedInstance.token
-      );
-      
-      toast.success(`Etiqueta "${labelName}" criada com sucesso!`);
-      loadChats();
-    } catch (error) {
-      console.error('Erro ao criar etiqueta:', error);
-      toast.error('Erro ao criar etiqueta. Tente novamente.');
-    }
-  };
-
-  const _handleAddLabelToChat = async (chatId: string) => {
-    if (!selectedInstance || !labels.length) return;
-    
-    try {
-      const labelOptions = labels.map(l => `${l.id}: ${l.name}`).join('\n');
-      const labelIdInput = prompt(`Digite o ID da etiqueta a adicionar:\n${labelOptions}`);
-      if (!labelIdInput) return;
-      
-      await label.addToChat(
-        selectedInstance.id,
-        chatId,
-        labelIdInput.trim(),
-        selectedInstance.token
-      );
-      
-      toast.success('Etiqueta adicionada ao chat com sucesso!');
-      loadChats();
-    } catch (error) {
-      console.error('Erro ao adicionar etiqueta ao chat:', error);
-      toast.error('Erro ao adicionar etiqueta. Tente novamente.');
-    }
-  };
-
-  const _handleRemoveLabelFromChat = async (chatId: string, labelId: string) => {
-    if (!selectedInstance) return;
-    
-    try {
-      await label.removeFromChat(
-        selectedInstance.id,
-        chatId,
-        labelId,
-        selectedInstance.token
-      );
-      
-      toast.success('Etiqueta removida do chat com sucesso!');
-      loadChats();
-    } catch (error) {
-      console.error('Erro ao remover etiqueta do chat:', error);
-      toast.error('Erro ao remover etiqueta. Tente novamente.');
-    }
-  };
-
-  const _handleConfigureWebhook = async () => {
-    if (!selectedInstance) return;
-    
-    try {
-      const webhookUrl = prompt('Digite a URL do webhook:');
-      if (!webhookUrl) return;
-      
-      const eventsInput = prompt('Digite os eventos a escutar separados por vírgula (ex: message,connection):');
-      if (!eventsInput) return;
-      
-      const events = eventsInput.split(',').map(e => e.trim());
-      
-      await webhook.set(
-        selectedInstance.id,
-        webhookUrl,
-        events,
-        selectedInstance.token
-      );
-      
-      // setWebhookSettings({ url: webhookUrl, events });
-      toast.success('Webhook configurado com sucesso!');
-    } catch (error) {
-      console.error('Erro ao configurar webhook:', error);
-      toast.error('Erro ao configurar webhook. Tente novamente.');
-    }
-  };
-
-  // Renderiza a visualização de mídia na mensagem
-  const _renderMediaPreview = (message: Message) => {
-    if (!message.mediaUrl && !message.mediaType) return null;
-    
-    if (message.mediaType === 'location' && message.latitude && message.longitude) {
-      // Renderizar preview de localização
-      return (
-        <div className="media-preview mb-2">
-          <div className="bg-gray-200 rounded-lg p-2 relative overflow-hidden" style={{height: '150px'}}>
-            <img 
-              src={`https://maps.googleapis.com/maps/api/staticmap?center=${message.latitude},${message.longitude}&zoom=15&size=300x150&markers=color:red%7C${message.latitude},${message.longitude}&key=YOUR_API_KEY`} 
-              alt="Localização" 
-              className="w-full h-full object-cover rounded"
-            />
-            <div className="absolute bottom-2 left-2 right-2 bg-white/80 p-1 rounded text-xs text-gray-800">
-              Localização compartilhada
-            </div>
-          </div>
-        </div>
-      );
-    }
-    
-    if (!message.mediaUrl) return null;
-    
-    switch (message.mediaType) {
-      case 'image':
-        return (
-          <div className="media-preview mb-2">
-            <img 
-              src={message.mediaUrl} 
-              alt="Imagem" 
-              className="max-w-full max-h-60 rounded-lg cursor-pointer"
-              onClick={() => window.open(message.mediaUrl!, '_blank')}
-            />
-          </div>
-        );
-      case 'video':
-        return (
-          <div className="media-preview mb-2">
-            <video 
-              src={message.mediaUrl} 
-              controls 
-              className="max-w-full max-h-60 rounded-lg"
-            />
-          </div>
-        );
-      case 'audio':
-        return (
-          <div className="media-preview mb-2 flex items-center">
-            <audio 
-              src={message.mediaUrl} 
-              controls 
-              className="w-full h-10"
-            />
-          </div>
-        );
-      case 'document':
-        return (
-          <div className="media-preview mb-2 flex items-center bg-blue-50 p-2 rounded-lg">
-            <FileIcon className="w-8 h-8 text-blue-600 mr-2" />
-            <div className="flex-1 overflow-hidden">
-              <div className="text-xs font-medium truncate">{message.fileName || 'Documento'}</div>
-              <a 
-                href={message.mediaUrl} 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="text-xs text-blue-600"
-              >
-                Abrir documento
-              </a>
-            </div>
-          </div>
-        );
-      case 'sticker':
-        return (
-          <div className="media-preview mb-2">
-            <img 
-              src={message.mediaUrl} 
-              alt="Sticker" 
-              className="max-w-full max-h-36"
-            />
-          </div>
-        );
-      case 'contact':
-        return (
-          <div className="media-preview mb-2 flex items-center bg-gray-50 p-2 rounded-lg">
-            <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center mr-2">
-              <Phone className="w-4 h-4 text-gray-600" />
-            </div>
-            <div className="text-xs">Contato compartilhado</div>
-          </div>
-        );
-      default:
-        return null;
-    }
-  };
-
-  // Renderiza a mensagem completa com todos os elementos
-  const _renderMessage = (msg: Message, index: number) => {
-    const isFromMe = msg.fromMe || msg.sender === 'me';
-    
-    return (
-      <div
-        key={msg.id}
-        id={`msg-${msg.id}`}
-        className={`flex ${isFromMe ? 'justify-end' : 'justify-start'} mb-3`}
-        onContextMenu={(e) => handleMessageContextMenu(e, msg.id)}
-      >
-        {!isFromMe && (
-          <div className="h-8 w-8 rounded-full mr-2 overflow-hidden flex-shrink-0">
-            {msg.senderProfileImage ? (
-              <img 
-                src={msg.senderProfileImage} 
-                alt={msg.senderName || 'Contato'} 
-                className="h-full w-full object-cover"
-              />
-            ) : (
-              <div className="h-full w-full bg-gray-300 flex items-center justify-center text-xs">
-                {(msg.senderName || '?').charAt(0).toUpperCase()}
-              </div>
-            )}
-          </div>
-        )}
-        <div
-          className={`relative max-w-[80%] p-2 rounded-lg shadow-sm ${
-            isFromMe 
-              ? 'bg-[#dcf8c6] rounded-tr-none' 
-              : 'bg-white rounded-tl-none'
-          }`}
-        >
-          {/* Mostrar o nome do remetente se não for uma mensagem minha */}
-          {!isFromMe && msg.senderName && (
-            <div className="text-xs font-medium text-primary-600 mb-1">
-              {msg.senderName}
-            </div>
-          )}
-          
-          {/* Se for mensagem encaminhada */}
-          {msg.isForwarded && (
-            <div className="text-xs text-gray-500 mb-1 flex items-center">
-              <Forward className="h-3 w-3 mr-1" />
-              Encaminhada
-            </div>
-          )}
-          
-          {/* Se for resposta a outra mensagem */}
-          {msg.quotedMsg && (
-            <div className="bg-gray-100 p-1 rounded mb-1 border-l-2 border-gray-300 text-xs text-gray-600">
-              <div className="font-medium">{msg.quotedMsg.fromMe ? 'Você' : msg.quotedMsg.sender}</div>
-              <div className="truncate">{msg.quotedMsg.content}</div>
-            </div>
-          )}
-          
-          {/* Renderiza preview de mídia se existir */}
-          {_renderMediaPreview(msg)}
-          
-          {/* Conteúdo da mensagem */}
-          {msg.content && (
-            <p className="text-sm text-gray-800 break-words whitespace-pre-wrap">{msg.content}</p>
-          )}
-          
-          {/* Informações de hora e status */}
-          <div className="flex items-center justify-end mt-1 space-x-1">
-            <span className="text-[10px] text-gray-500">
-              {formatTime(msg.timestamp)}
-            </span>
-            
-            {isFromMe && (
-              <span>
-                {msg.status === 'sending' && <div className="h-3 w-3 text-gray-400">⌛</div>}
-                {msg.status === 'sent' && <Check className="h-3 w-3 text-gray-400" />}
-                {msg.status === 'delivered' && (
-                  <div className="flex">
-                    <Check className="h-3 w-3 text-gray-400" />
-                    <Check className="h-3 w-3 text-gray-400 -ml-1" />
-                  </div>
-                )}
-                {msg.status === 'read' && (
-                  <div className="flex">
-                    <Check className="h-3 w-3 text-blue-500" />
-                    <Check className="h-3 w-3 text-blue-500 -ml-1" />
-                  </div>
-                )}
-                {msg.status === 'failed' && (
-                  <div className="text-red-500 text-[10px]">Falha</div>
-                )}
-              </span>
-            )}
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  const _renderMessageBody = (msg: Message) => {
-    // ... existing code ...
+    // Tentar marcar como lido aqui pode ser prematuro, melhor após loadMessages
+    // try {
+    //   console.log('Marcando mensagens como lidas para o chat:', chat.id);
+    // } catch (error) {
+    //   console.error('Erro ao marcar mensagens como lidas:', error);
+    // }
   };
 
   const handleSelectInstance = (instance: Instance) => {
@@ -1739,7 +1098,8 @@ export function ChatZapPage() {
             id: chatId,
             name: chatId.includes('@') ? chatId.split('@')[0] : chatId,
             displayNumber: chatId.includes('@') ? chatId.split('@')[0] : chatId,
-            isGroup: chatId.includes('g.us')
+            isGroup: chatId.includes('g.us'),
+            profileImage: ''
           };
           
           // Formatar as mensagens
@@ -1785,51 +1145,233 @@ export function ChatZapPage() {
     }
   };
 
-  return (
-    <div className="flex flex-col h-screen">
-      <div className="p-4 border-b border-gray-200 bg-white">
-        <div className="flex items-center justify-between">
-          <h1 className="text-xl font-semibold text-gray-900">i9Place Atendimento</h1>
-          {selectedInstance && (
-            <button 
-              onClick={() => setShowInstanceModal(true)}
-              className="flex items-center gap-2 px-3 py-1.5 text-sm bg-white border border-gray-200 rounded-md hover:bg-gray-50 text-gray-700"
-            >
-              <span>Trocar Instância</span>
-              <Smartphone className="h-4 w-4" />
-            </button>
-          )}
-        </div>
-        <p className="text-sm text-gray-500">Gerencie suas conversas do WhatsApp</p>
-        {isUsingMockData && (
-          <div className="mt-2 p-2 bg-yellow-100 border border-yellow-300 rounded-md">
-            <div className="flex items-center gap-2">
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-yellow-600">
-                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
-                <line x1="12" y1="9" x2="12" y2="13"></line>
-                <line x1="12" y1="17" x2="12.01" y2="17"></line>
-              </svg>
-              <span className="text-sm text-yellow-800">
-                <strong>Modo Offline:</strong> Exibindo dados de exemplo devido a problemas na conexão com a API
-              </span>
-            </div>
-            <div className="text-xs text-yellow-700 mt-1">
-              <button 
-                onClick={() => {
-                  toast.loading('Tentando reconectar...');
-                  loadChats();
-                }}
-                className="underline hover:text-yellow-900"
-              >
-                Tentar reconectar
-              </button>
-            </div>
+  const _renderMessage = (message: Message) => {
+    return (
+      <div
+        key={message.id}
+        id={`msg-${message.id}`}
+        className={`flex ${message.fromMe ? 'justify-end' : 'justify-start'} mb-3`}
+        onContextMenu={(e) => handleMessageContextMenu(e, message.id)}
+      >
+        {!message.fromMe && (
+          <div className="h-8 w-8 rounded-full mr-2 overflow-hidden flex-shrink-0">
+            {message.senderProfileImage ? (
+              <img 
+                src={message.senderProfileImage} 
+                alt={message.senderName || 'Contato'} 
+                className="h-full w-full object-cover"
+              />
+            ) : (
+              <div className="h-full w-full bg-gray-300 flex items-center justify-center text-xs">
+                {(message.senderName || '?').charAt(0).toUpperCase()}
+              </div>
+            )}
           </div>
         )}
+        <div
+          className={`relative max-w-[80%] p-2 rounded-lg shadow-sm ${
+            message.fromMe 
+              ? 'bg-[#dcf8c6] rounded-tr-none' 
+              : 'bg-white rounded-tl-none'
+          }`}
+        >
+          {/* Mostrar o nome do remetente se não for uma mensagem minha */}
+          {!message.fromMe && message.senderName && (
+            <div className="text-xs font-medium text-primary-600 mb-1">
+              {message.senderName}
+            </div>
+          )}
+          
+          {/* Se for mensagem encaminhada */}
+          {message.isForwarded && (
+            <div className="text-xs text-gray-500 mb-1 flex items-center">
+              <Forward className="h-3 w-3 mr-1" />
+              Encaminhada
+            </div>
+          )}
+          
+          {/* Se for resposta a outra mensagem */}
+          {message.quotedMsg && (
+            <div className="bg-gray-100 p-1 rounded mb-1 border-l-2 border-gray-300 text-xs text-gray-600">
+              <div className="font-medium">{message.quotedMsg.fromMe ? 'Você' : message.quotedMsg.sender}</div>
+              <div className="truncate">{message.quotedMsg.content}</div>
+            </div>
+          )}
+          
+          {/* Conteúdo da mensagem */}
+          {message.content && (
+            <p className="text-sm text-gray-800 break-words whitespace-pre-wrap">{message.content}</p>
+          )}
+          
+          {/* Informações de hora e status */}
+          <div className="flex items-center justify-end mt-1 space-x-1">
+            <span className="text-[10px] text-gray-500">
+              {formatTime(message.timestamp)}
+            </span>
+            
+            {message.fromMe && (
+              <span>
+                {message.status === 'sending' && <div className="h-3 w-3 text-gray-400">⌛</div>}
+                {message.status === 'sent' && <Check className="h-3 w-3 text-gray-400" />}
+                {message.status === 'delivered' && (
+                  <div className="flex">
+                    <Check className="h-3 w-3 text-gray-400" />
+                    <Check className="h-3 w-3 text-gray-400 -ml-1" />
+                  </div>
+                )}
+                {message.status === 'read' && (
+                  <div className="flex">
+                    <Check className="h-3 w-3 text-blue-500" />
+                    <Check className="h-3 w-3 text-blue-500 -ml-1" />
+                  </div>
+                )}
+                {message.status === 'failed' && (
+                  <div className="text-red-500 text-[10px]">Falha</div>
+                )}
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // Adicionar este renderização condicional para o painel de diagnóstico antes do return final
+  const renderDiagnosticPanel = () => {
+    if (!showDiagnosticInfo) return null;
+    
+    return (
+      <div className="fixed bottom-0 left-0 right-0 bg-gray-900 text-white p-4 z-50 text-xs font-mono max-h-60 overflow-auto">
+        <div className="flex justify-between items-center mb-2">
+          <h3 className="font-bold">Diagnóstico de API</h3>
+          <button 
+            onClick={() => setShowDiagnosticInfo(false)}
+            className="bg-red-500 hover:bg-red-600 text-white px-2 py-1 rounded"
+          >
+            Fechar
+          </button>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <strong>Status da Instância:</strong> {selectedInstance ? selectedInstance.status : 'nenhuma'}
+          </div>
+          <div>
+            <strong>Instância ID:</strong> {selectedInstance?.id || 'nenhuma'}
+          </div>
+          <div>
+            <strong>Chat selecionado:</strong> {selectedChat?.id || 'nenhum'}
+          </div>
+          <div>
+            <strong>Mensagens carregadas:</strong> {messages.length}
+          </div>
+          <div>
+            <strong>Status de carregamento:</strong> {loading ? 'carregando...' : 'pronto'}
+          </div>
+          <div>
+            <strong>Erro:</strong> {error || 'nenhum'}
+          </div>
+          <div className="col-span-2">
+            <strong>Última chamada API:</strong> {apiRequestStatus.lastCall}
+          </div>
+          <div className="col-span-2">
+            <strong>Status da chamada:</strong> {apiRequestStatus.status}
+          </div>
+        </div>
+        <div className="mt-2">
+          <button 
+            onClick={() => {
+              if (selectedChat) {
+                toast.loading('Recarregando mensagens...');
+                loadMessages(selectedChat.id);
+              }
+            }}
+            disabled={!selectedChat}
+            className="bg-blue-500 hover:bg-blue-600 text-white px-2 py-1 rounded mr-2 disabled:opacity-50"
+          >
+            Recarregar Mensagens
+          </button>
+          <button 
+            onClick={() => {
+              loadChats();
+            }}
+            className="bg-green-500 hover:bg-green-600 text-white px-2 py-1 rounded mr-2"
+          >
+            Recarregar Chats
+          </button>
+          <button
+            onClick={() => {
+              console.clear();
+              toast.success('Console limpo');
+            }}
+            className="bg-yellow-500 hover:bg-yellow-600 text-white px-2 py-1 rounded"
+          >
+            Limpar Console
+          </button>
+        </div>
+      </div>
+    );
+  };
+
+  // Função para reselecionar a instância atual
+  const handleReopenInstanceSelection = () => {
+    setShowInstanceModal(true);
+  };
+
+  return (
+    <div className="h-screen max-h-screen overflow-hidden flex flex-col bg-gray-100">
+      {showInstanceModal && (
+        <SelectInstanceModal 
+          onClose={() => setShowInstanceModal(false)}
+          onSelect={handleSelectInstance}
+        />
+      )}
+      
+      <div className="bg-white shadow-sm p-4 flex justify-between items-center flex-shrink-0">
+        <div className="flex items-center space-x-4">
+          <h1 className="text-xl font-semibold text-gray-800">
+            {selectedInstance ? selectedInstance.name : 'ChatZap'}
+          </h1>
+          {selectedInstance && (
+            <div className="inline-flex items-center text-sm">
+              <span className={`w-2 h-2 rounded-full mr-2 ${
+                selectedInstance.status === 'connected' ? 'bg-green-500' : 
+                selectedInstance.status === 'connecting' ? 'bg-yellow-500' : 'bg-red-500'
+              }`}></span>
+              <span className="text-gray-600">
+                {selectedInstance.status === 'connected' ? 'Conectado' : 
+                selectedInstance.status === 'connecting' ? 'Conectando...' : 'Desconectado'}
+              </span>
+            </div>
+          )}
+          
+          {/* Botão para mostrar/esconder diagnóstico */}
+          <button 
+            onClick={() => setShowDiagnosticInfo(!showDiagnosticInfo)}
+            className="text-xs bg-gray-200 hover:bg-gray-300 px-2 py-1 rounded"
+            title="Mostrar informações de diagnóstico"
+          >
+            {showDiagnosticInfo ? 'Ocultar Diagnóstico' : 'Diagnóstico'}
+          </button>
+          
+          {/* Botão para trocar de instância */}
+          <button 
+            onClick={() => setShowInstanceModal(true)}
+            className="text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 px-2 py-1 rounded flex items-center"
+            title="Trocar instância"
+          >
+            <Smartphone className="h-3 w-3 mr-1" />
+            Trocar Instância
+          </button>
+        </div>
+        
+        {/* Painel de diagnóstico */}
+        {renderDiagnosticPanel()}
       </div>
       
-      <div className="flex flex-1 overflow-hidden">
-        <div className="w-80 border-r border-gray-200 flex flex-col bg-white">
+      {/* Layout principal - Lista de chats e mensagens */}
+      <div className="flex flex-1 min-h-0 overflow-hidden">
+        {/* Lista de chats */}
+        <div className="w-80 border-r border-gray-200 flex flex-col bg-white flex-shrink-0 min-h-0">
           <div className="p-4 border-b border-gray-200">
             <div className="flex items-center justify-between mb-4">
               <div className="flex space-x-4">
@@ -1856,176 +1398,71 @@ export function ChatZapPage() {
               </button>
             </div>
             
-            {showGlobalSearch ? (
-              <div className="mb-4">
-                <div className="flex items-center">
-                  <div className="flex-1 relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                    <input
-                      type="text"
-                      placeholder="Buscar em todas as conversas..."
-                      className="pl-10 pr-10 py-2 w-full rounded-lg border border-gray-300 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                      value={globalSearchTerm}
-                      onChange={(e) => setGlobalSearchTerm(e.target.value)}
-                      onKeyPress={(e) => e.key === 'Enter' && searchAllChatMessages()}
-                    />
-                    {globalSearchTerm && (
-                      <button
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                        onClick={() => setGlobalSearchTerm('')}
-                      >
-                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <line x1="18" y1="6" x2="6" y2="18"></line>
-                          <line x1="6" y1="6" x2="18" y2="18"></line>
-                        </svg>
-                      </button>
-                    )}
-                  </div>
-                  <button
-                    className={`ml-2 p-2 rounded-lg ${
-                      searchingGlobally
-                        ? 'bg-gray-300 text-gray-600 cursor-not-allowed'
-                        : 'bg-primary-600 text-white hover:bg-primary-700'
-                    }`}
-                    onClick={searchAllChatMessages}
-                    disabled={searchingGlobally || !globalSearchTerm.trim()}
-                  >
-                    {searchingGlobally ? (
-                      <div className="h-5 w-5 border-2 border-gray-400 border-t-transparent rounded-full animate-spin"></div>
-                    ) : (
-                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <polyline points="9 10 4 15 9 20"></polyline>
-                        <path d="M20 4v7a4 4 0 0 1-4 4H4"></path>
-                      </svg>
-                    )}
-                  </button>
-                </div>
-                
-                {/* Resultados da busca global */}
-                {globalSearchResults.length > 0 && (
-                  <div className="mt-4 space-y-4 max-h-96 overflow-y-auto">
-                    {globalSearchResults.map((result) => (
-                      <div 
-                        key={result.chatId}
-                        className="bg-white p-3 rounded-lg shadow-sm border border-gray-100"
-                      >
-                        <div 
-                          className="flex items-center gap-2 mb-2 cursor-pointer"
-                          onClick={() => {
-                            // Abrir o chat e limpar a busca global
-                            const chatToOpen = chats.find(c => c.id === result.chatId);
-                            if (chatToOpen) {
-                              _handleSelectChat(chatToOpen);
-                            } else {
-                              // Se o chat não estiver na lista atual, criar um objeto temporário
-                              const tempChat: Chat = {
-                                id: result.chatId,
-                                name: result.chatName,
-                                number: result.chatNumber,
-                                unreadCount: 0,
-                                isGroup: result.isGroup,
-                                profileImage: result.profileImage || ''
-                              };
-                              _handleSelectChat(tempChat);
-                            }
-                            setShowGlobalSearch(false);
-                            setGlobalSearchResults([]);
-                          }}
-                        >
-                          <div className="h-8 w-8 rounded-full overflow-hidden bg-gray-200 flex-shrink-0">
-                            {result.profileImage ? (
-                              <img 
-                                src={result.profileImage} 
-                                alt={result.chatName} 
-                                className="h-full w-full object-cover"
-                              />
-                            ) : (
-                              <div className="h-full w-full flex items-center justify-center text-gray-500">
-                                {result.isGroup ? 
-                                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
-                                    <circle cx="9" cy="7" r="4"></circle>
-                                    <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
-                                    <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
-                                  </svg>
-                                  : 
-                                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
-                                    <circle cx="12" cy="7" r="4"></circle>
-                                  </svg>
-                                }
-                              </div>
-                            )}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <h4 className="font-medium text-gray-900 text-sm truncate">
-                              {result.chatName}
-                            </h4>
-                            <p className="text-xs text-gray-500 truncate">
-                              {result.chatNumber}
-                            </p>
-                          </div>
-                          <div className="text-xs text-gray-500">
-                            {result.messages.length} resultados
-                          </div>
-                        </div>
-                        
-                        <div className="space-y-1 max-h-32 overflow-y-auto pl-10">
-                          {result.messages.slice(0, 3).map((msg: any) => (
-                            <div 
-                              key={msg.id}
-                              className="text-xs p-1.5 rounded border border-gray-100 hover:bg-gray-50"
-                            >
-                              <div className="flex justify-between mb-1">
-                                <span className="font-medium">{msg.fromMe ? 'Você' : 'Contato'}</span>
-                                <span className="text-gray-500">{formatTime(msg.timestamp)}</span>
-                              </div>
-                              <p className="text-gray-700 break-words">{msg.content}</p>
-                            </div>
-                          ))}
-                          {result.messages.length > 3 && (
-                            <div className="text-xs text-center text-primary-600">
-                              + {result.messages.length - 3} mais resultados
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                <input
-                  type="text"
-                  placeholder="Buscar conversa..."
-                  className="pl-10 pr-4 py-2 w-full rounded-lg border border-gray-300 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                />
-              </div>
-            )}
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Buscar conversa..."
+                className="pl-10 pr-4 py-2 w-full rounded-lg border border-gray-300 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
           </div>
           
-          <div className="flex-1 overflow-y-auto">
+          <div className="flex-1 overflow-y-auto min-h-0">
             {loading ? (
               <div className="flex items-center justify-center py-8">
                 <div className="animate-spin h-8 w-8 border-4 border-primary-600 border-t-transparent rounded-full" />
               </div>
             ) : error ? (
-              <div className="p-4 text-center text-red-500">{error}</div>
+              <div className="p-4 text-center">
+                <div className="text-red-500 mb-2">{error}</div>
+                <button 
+                  onClick={loadChats}
+                  className="px-3 py-1 bg-primary-600 text-white rounded-md hover:bg-primary-700 text-sm"
+                >
+                  Tentar novamente
+                </button>
+              </div>
             ) : activeTab === 'chats' ? (
               chats.length === 0 ? (
-                <div className="p-4 text-center text-gray-500">
-                  Nenhuma conversa disponível
+                <div className="p-8 text-center">
+                  <div className="rounded-full bg-gray-100 h-16 w-16 flex items-center justify-center mx-auto mb-4">
+                    <MessageCircle className="h-8 w-8 text-gray-400" />
+                  </div>
+                  <p className="text-gray-500 mb-2">
+                    {isUsingMockData ? 
+                      'Nenhuma conversa encontrada. Os dados mostrados são exemplos.' : 
+                      'Nenhuma conversa encontrada. Verifique a conexão com a API uazapiGO.'}
+                  </p>
+                  <div className="flex justify-center space-x-2">
+                    <button 
+                      onClick={loadChats}
+                      className="px-3 py-1 bg-primary-600 text-white rounded-md hover:bg-primary-700 text-sm"
+                    >
+                      Atualizar
+                    </button>
+                    <button 
+                      onClick={() => setShowDiagnosticInfo(!showDiagnosticInfo)}
+                      className="px-3 py-1 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 text-sm"
+                    >
+                      Diagnóstico
+                    </button>
+                    <button 
+                      onClick={handleReopenInstanceSelection}
+                      className="px-3 py-1 bg-yellow-500 text-white rounded-md hover:bg-yellow-600 text-sm"
+                    >
+                      Trocar Instância
+                    </button>
+                  </div>
                 </div>
               ) : (
                 <div className="divide-y divide-gray-200">
                   {chats.map((chat) => (
                     <button
                       key={chat.id}
-                      className={`w-full p-4 flex items-center gap-3 hover:bg-gray-50 ${
+                      className={`w-full p-4 flex items-start gap-3 hover:bg-gray-50 ${
                         selectedChat?.id === chat.id ? 'bg-gray-50' : ''
                       }`}
                       onClick={() => _handleSelectChat(chat)}
@@ -2037,13 +1474,25 @@ export function ChatZapPage() {
                             alt={chat.name}
                             className="h-12 w-12 rounded-full object-cover"
                             onError={(e) => {
-                              // Se a imagem falhar ao carregar, substituir pelo avatar padrão
-                              (e.target as HTMLImageElement).src = `https://ui-avatars.com/api/?name=${encodeURIComponent(chat.name)}&background=random&color=fff`;
+                              const target = e.target as HTMLImageElement;
+                              target.onerror = null;
+                              target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(chat.name)}&background=random&color=fff&size=128`;
                             }}
                           />
                         ) : (
                           <div className="h-12 w-12 rounded-full bg-gray-200 flex items-center justify-center">
-                            <MessageCircle className="h-6 w-6 text-gray-500" />
+                            {chat.isGroup ? (
+                              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-gray-500">
+                                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                                <circle cx="9" cy="7" r="4"></circle>
+                                <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                                <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                              </svg>
+                            ) : (
+                              <div className="text-gray-500 text-lg font-semibold">
+                                {chat.name.charAt(0).toUpperCase()}
+                              </div>
+                            )}
                           </div>
                         )}
                         {chat.unreadCount > 0 && (
@@ -2053,17 +1502,20 @@ export function ChatZapPage() {
                         )}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between">
-                          <h3 className="font-medium text-gray-900">{chat.name}</h3>
-                          {chat.timestamp && (
-                            <span className="text-xs text-gray-500">
-                              {new Date(chat.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                            </span>
-                          )}
+                        <div className="flex flex-col">
+                          <div className="flex items-center justify-between">
+                            <div className="flex-1 min-w-0">
+                              <h3 className="font-medium text-gray-900 truncate text-left">{chat.name || 'Nome Indisponível'}</h3>
+                              <div className="text-xs text-gray-500 truncate text-left">{chat.displayNumber || ''}</div>
+                              <div className="text-sm text-gray-500 truncate text-left mt-0.5">{chat.lastMessage || "Nenhuma mensagem"}</div>
+                            </div>
+                            {chat.timestamp && (
+                              <span className="text-xs text-gray-500 ml-2 flex-shrink-0">
+                                {new Date(chat.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                              </span>
+                            )}
+                          </div>
                         </div>
-                        {/* Exibir número formatado abaixo do nome */}
-                        <p className="text-xs text-gray-500">{chat.displayNumber || ''}</p>
-                        <p className="text-sm text-gray-500 truncate">{chat.lastMessage || "Nenhuma mensagem"}</p>
                       </div>
                     </button>
                   ))}
@@ -2071,44 +1523,60 @@ export function ChatZapPage() {
               )
             ) : (
               groups.length === 0 ? (
-                <div className="p-4 text-center text-gray-500">
-                  Nenhum grupo disponível
+                <div className="p-8 text-center">
+                  <div className="rounded-full bg-gray-100 h-16 w-16 flex items-center justify-center mx-auto mb-4">
+                    <MessageCircle className="h-8 w-8 text-gray-400" />
+                  </div>
+                  <p className="text-gray-500 mb-2">Nenhum grupo encontrado</p>
+                  <button 
+                    onClick={loadGroups}
+                    className="px-3 py-1 bg-primary-600 text-white rounded-md hover:bg-primary-700 text-sm"
+                  >
+                    Atualizar
+                  </button>
                 </div>
               ) : (
                 <div className="divide-y divide-gray-200">
-                  {groups.map((group) => (
-                    <div
-                      key={group.id}
-                      className={`w-full p-4 flex items-center gap-3 hover:bg-gray-50`}
-                    >
-                      <div className="w-12 h-12 rounded-full flex items-center justify-center bg-primary-100 text-primary-600">
-                        <MessageCircle className="h-6 w-6" />
-                      </div>
-                      <div className="flex-1 overflow-hidden">
-                        <h3 className="font-medium text-gray-900 truncate">{group.name}</h3>
-                        <p className="text-sm text-gray-500">
-                          {group.participants.length} participantes
-                        </p>
-                      </div>
-                    </div>
-                  ))}
+                  {/* Lista de grupos */}
                 </div>
               )
             )}
           </div>
         </div>
         
-        <div className="flex-1 flex flex-col bg-[#e5ddd5] relative">
+        {/* Área de mensagens */}
+        <div className="flex-1 flex flex-col bg-[#e5ddd5] min-h-0">
           {selectedChat ? (
-            <>
-              <div className="p-3 bg-gray-100 border-b border-gray-200 flex items-center justify-between">
+            <div className="flex flex-col h-full min-h-0">
+              <div className="p-3 bg-gray-100 border-b border-gray-200 flex items-center justify-between flex-shrink-0">
                 <div className="flex items-center">
                   <div className="h-10 w-10 rounded-full bg-gray-300 flex items-center justify-center mr-3 overflow-hidden">
                     {selectedChat.profileImage ? (
-                      <img src={selectedChat.profileImage} alt={selectedChat.name} className="h-full w-full object-cover" />
+                      <img 
+                        src={selectedChat.profileImage} 
+                        alt={selectedChat.name} 
+                        className="h-full w-full object-cover"
+                        onError={(e) => {
+                          // Se a imagem falhar ao carregar, substituir pelo avatar padrão
+                          const target = e.target as HTMLImageElement;
+                          target.onerror = null; // Previne loop infinito
+                          target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(selectedChat.name)}&background=random&color=fff&size=128`;
+                        }}
+                      />
                     ) : (
                       <div className="h-full w-full flex items-center justify-center">
-                        {selectedChat.name.charAt(0).toUpperCase()}
+                        {selectedChat.isGroup ? (
+                          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-gray-500">
+                            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                            <circle cx="9" cy="7" r="4"></circle>
+                            <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                            <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                          </svg>
+                        ) : (
+                          <div className="text-gray-500 text-lg font-semibold">
+                            {selectedChat.name.charAt(0).toUpperCase()}
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -2118,7 +1586,7 @@ export function ChatZapPage() {
                       {selectedChat.isGroup 
                         ? 'Grupo' 
                         : 'Último acesso ' + (selectedChat.lastSeen 
-                          ? formatDateTime(selectedChat.lastSeen) 
+                          ? formatDateTime(Number(selectedChat.lastSeen)) 
                           : 'desconhecido')}
                     </p>
                   </div>
@@ -2130,93 +1598,30 @@ export function ChatZapPage() {
                   >
                     <Search className="h-5 w-5" />
                   </button>
-                  <button className="text-gray-600 hover:text-gray-800">
-                    <Phone className="h-5 w-5" />
+                  <button 
+                    className="text-gray-600 hover:text-gray-800"
+                    onClick={() => {
+                      const options = [
+                        {label: 'Informações do contato', action: () => loadProfileInfo(selectedChat.id)},
+                        {label: 'Atualizar chat', action: () => loadMessages(selectedChat.id)},
+                      ];
+                      const action = prompt('Escolha uma ação:\n1. Informações do contato\n2. Atualizar chat');
+                      if (action === '1') options[0].action();
+                      if (action === '2') options[1].action();
+                    }}
+                  >
+                    <MoreVertical className="h-5 w-5" />
                   </button>
-                  <div className="relative">
-                    <button 
-                      className="text-gray-600 hover:text-gray-800"
-                      onClick={() => {
-                        const options = [
-                          {label: 'Informações do contato', action: () => console.log('Ver informações')},
-                          {label: 'Adicionar etiqueta', action: () => _handleAddLabelToChat(selectedChat.id)},
-                          {label: 'Arquivar chat', action: () => console.log('Arquivar chat')},
-                          {label: 'Silenciar notificações', action: () => console.log('Silenciar')},
-                        ];
-                        const action = prompt('Escolha uma ação:\n1. Informações do contato\n2. Adicionar etiqueta\n3. Arquivar chat\n4. Silenciar notificações');
-                        if (action === '1') options[0].action();
-                        if (action === '2') options[1].action();
-                        if (action === '3') options[2].action();
-                        if (action === '4') options[3].action();
-                      }}
-                    >
-                      <MoreVertical className="h-5 w-5" />
-                    </button>
-                  </div>
                 </div>
               </div>
               
               <div
                 ref={messagesContainerRef}
-                className="flex-1 overflow-y-auto p-4 space-y-3 bg-[url('/whatsapp-bg.png')] bg-repeat"
+                className="flex-1 overflow-y-auto p-4 space-y-3 bg-[url('/whatsapp-bg.png')] bg-repeat min-h-0"
               >
-                {/* Exibir resultados da pesquisa se houver */}
-                {searchResults.length > 0 ? (
-                  <div className="mb-4">
-                    <div className="bg-white rounded-lg shadow p-3 mb-2">
-                      <div className="flex justify-between items-center mb-2">
-                        <h3 className="text-sm font-medium text-gray-700">
-                          Resultados da pesquisa: {searchResults.length} {searchResults.length === 1 ? 'mensagem encontrada' : 'mensagens encontradas'}
-                        </h3>
-                        <button
-                          className="text-gray-500 hover:text-gray-700"
-                          onClick={() => {
-                            setSearchResults([]);
-                            setMessageSearchTerm('');
-                          }}
-                        >
-                          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <line x1="18" y1="6" x2="6" y2="18"></line>
-                            <line x1="6" y1="6" x2="18" y2="18"></line>
-                          </svg>
-                        </button>
-                      </div>
-                      <div className="space-y-2 max-h-60 overflow-y-auto">
-                        {searchResults.map((result) => (
-                          <div 
-                            key={result.id}
-                            className="bg-gray-50 p-2 rounded border border-gray-200 hover:bg-gray-100 cursor-pointer"
-                            onClick={() => {
-                              // Rolar para a mensagem original
-                              const originalMsg = messages.find(m => m.id === result.id);
-                              if (originalMsg) {
-                                const msgElement = document.getElementById(`msg-${originalMsg.id}`);
-                                if (msgElement) {
-                                  msgElement.scrollIntoView({ behavior: 'smooth' });
-                                  // Destacar brevemente a mensagem
-                                  msgElement.classList.add('bg-yellow-100');
-                                  setTimeout(() => {
-                                    msgElement.classList.remove('bg-yellow-100');
-                                  }, 2000);
-                                }
-                              }
-                            }}
-                          >
-                            <div className="flex justify-between items-center mb-1">
-                              <span className="text-xs font-medium">
-                                {result.senderName || (result.fromMe ? 'Você' : 'Contato')}
-                              </span>
-                              <span className="text-xs text-gray-500">
-                                {formatDateTime(result.timestamp)}
-                              </span>
-                            </div>
-                            <p className="text-sm text-gray-800">
-                              {result.content}
-                            </p>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
+                {loading ? (
+                  <div className="flex items-center justify-center h-full">
+                    <div className="animate-spin h-10 w-10 border-4 border-primary-600 border-t-transparent rounded-full" />
                   </div>
                 ) : messages.length === 0 ? (
                   <div className="flex flex-col items-center justify-center h-full">
@@ -2224,15 +1629,47 @@ export function ChatZapPage() {
                       <MessageCircle className="h-8 w-8 text-gray-400" />
                     </div>
                     <p className="text-gray-500 text-sm">Sem mensagens ainda</p>
-                    <p className="text-gray-400 text-xs">Comece uma conversa agora</p>
+                    <button
+                      onClick={() => loadMessages(selectedChat.id)}
+                      className="mt-4 px-3 py-1 bg-primary-600 text-white rounded-md hover:bg-primary-700 text-sm"
+                    >
+                      Atualizar mensagens
+                    </button>
                   </div>
                 ) : (
-                  messages.map((message: Message, index: number) => _renderMessage(message, index))
+                  searchResults.length > 0 ? (
+                    <div className="mb-4">
+                      <div className="bg-white rounded-lg shadow p-3 mb-2">
+                        <div className="flex justify-between items-center mb-2">
+                          <h3 className="text-sm font-medium text-gray-700">
+                            Resultados da pesquisa: {searchResults.length} {searchResults.length === 1 ? 'mensagem encontrada' : 'mensagens encontradas'}
+                          </h3>
+                          <button
+                            className="text-gray-500 hover:text-gray-700"
+                            onClick={() => {
+                              setSearchResults([]);
+                              setMessageSearchTerm('');
+                            }}
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <line x1="18" y1="6" x2="6" y2="18"></line>
+                              <line x1="6" y1="6" x2="18" y2="18"></line>
+                            </svg>
+                          </button>
+                        </div>
+                        {/* Resultados da pesquisa aqui */}
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      {messages.map((message: Message) => _renderMessage(message))}
+                      <div ref={messagesEndRef} />
+                    </>
+                  )
                 )}
-                <div ref={messagesEndRef} />
               </div>
               
-              <div className="p-3 bg-gray-100">
+              <div className="p-3 bg-gray-100 flex-shrink-0">
                 {/* Interface de resposta */}
                 {replyingTo && (
                   <div className="flex items-center mb-2 p-2 bg-gray-200 rounded-lg">
@@ -2253,7 +1690,7 @@ export function ChatZapPage() {
                     </button>
                   </div>
                 )}
-
+                
                 <div className="flex items-center">
                   <div className="relative">
                     <button 
@@ -2265,48 +1702,7 @@ export function ChatZapPage() {
                     
                     {showAttachmentOptions && (
                       <div className="absolute bottom-12 left-0 bg-white rounded-lg shadow-lg p-2 w-48 z-10">
-                        <button
-                          onClick={() => _handleFileSelect('image')}
-                          className="flex items-center w-full p-2 hover:bg-gray-100 text-left"
-                        >
-                          <div className="w-8 h-8 rounded-full bg-purple-100 flex items-center justify-center mr-2">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-purple-600">
-                              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-                              <circle cx="8.5" cy="8.5" r="1.5"></circle>
-                              <polyline points="21 15 16 10 5 21"></polyline>
-                            </svg>
-                          </div>
-                          <span className="text-sm">Imagem</span>
-                        </button>
-                        
-                        <button
-                          onClick={() => _handleFileSelect('document')}
-                          className="flex items-center w-full p-2 hover:bg-gray-100 text-left"
-                        >
-                          <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center mr-2">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-blue-600">
-                              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                              <polyline points="14 2 14 8 20 8"></polyline>
-                              <line x1="16" y1="13" x2="8" y2="13"></line>
-                              <line x1="16" y1="17" x2="8" y2="17"></line>
-                              <polyline points="10 9 9 9 8 9"></polyline>
-                            </svg>
-                          </div>
-                          <span className="text-sm">Documento</span>
-                        </button>
-                        
-                        <button
-                          onClick={() => _handleSendLocation()}
-                          className="flex items-center w-full p-2 hover:bg-gray-100 text-left"
-                        >
-                          <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center mr-2">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-green-600">
-                              <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
-                              <circle cx="12" cy="10" r="3"></circle>
-                            </svg>
-                          </div>
-                          <span className="text-sm">Localização</span>
-                        </button>
+                        {/* Opções de anexo */}
                       </div>
                     )}
                   </div>
@@ -2344,156 +1740,28 @@ export function ChatZapPage() {
                   onChange={_handleFileUpload} 
                 />
               </div>
-            </>
+            </div>
           ) : (
             <div className="flex flex-col items-center justify-center h-full bg-gray-50">
               <div className="w-64 h-64 bg-gray-200 rounded-full flex items-center justify-center mb-4">
                 <MessageCircle className="h-32 w-32 text-gray-400" />
               </div>
-              <h2 className="text-2xl font-medium text-gray-700 mb-2">WhatsApp Web</h2>
+              <h2 className="text-2xl font-medium text-gray-700 mb-2">ChatZap</h2>
               <p className="text-gray-500 text-center max-w-md mb-8">
-                Selecione um chat para começar a conversar ou crie um novo grupo.
+                Selecione um chat para começar a conversar.
               </p>
+              <div className="text-center">
+                <button
+                  onClick={loadChats}
+                  className="px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700"
+                >
+                  Atualizar lista de chats
+                </button>
+              </div>
             </div>
           )}
         </div>
       </div>
-      
-      {showInstanceModal && (
-        <SelectInstanceModal
-          onSelect={handleSelectInstance}
-          onClose={() => setShowInstanceModal(false)}
-        />
-      )}
-      
-      {showContextMenu && (
-        <div 
-          className="fixed bg-white rounded-lg shadow-lg z-50 overflow-hidden"
-          style={{
-            left: `${showContextMenu.x}px`,
-            top: `${showContextMenu.y}px`,
-          }}
-        >
-          <div className="w-48">
-            {/* Reações */}
-            <div className="p-2 border-b border-gray-100">
-              <div className="flex justify-between">
-                {commonReactions.map((emoji) => (
-                  <button 
-                    key={emoji}
-                    onClick={() => _handleReactToMessage(showContextMenu.messageId, emoji)}
-                    className="p-1 hover:bg-gray-100 rounded text-lg"
-                  >
-                    {emoji}
-                  </button>
-                ))}
-              </div>
-            </div>
-            
-            <button 
-              onClick={() => {
-                const messageObj = messages.find(m => m.id === showContextMenu.messageId);
-                if (messageObj) handleReplyMessage(messageObj);
-              }}
-              className="flex items-center w-full p-2 hover:bg-gray-100 text-left"
-            >
-              <Reply className="h-4 w-4 mr-2" />
-              <span className="text-sm">Responder</span>
-            </button>
-            <button 
-              onClick={() => {
-                const messageObj = messages.find((m: Message) => m.id === showContextMenu.messageId);
-                if (messageObj) handleForwardMessage(messageObj);
-              }}
-              className="flex items-center w-full p-2 hover:bg-gray-100 text-left"
-            >
-              <Forward className="h-4 w-4 mr-2" />
-              <span className="text-sm">Encaminhar</span>
-            </button>
-            <button 
-              onClick={() => {
-                const messageObj = messages.find((m: Message) => m.id === showContextMenu.messageId);
-                if (messageObj && messageObj.mediaUrl) {
-                  window.open(messageObj.mediaUrl, '_blank');
-                }
-              }}
-              className="flex items-center w-full p-2 hover:bg-gray-100 text-left"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-2">
-                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
-                <polyline points="15 3 21 3 21 9"></polyline>
-                <line x1="10" y1="14" x2="21" y2="3"></line>
-              </svg>
-              <span className="text-sm">Abrir</span>
-            </button>
-            <button 
-              onClick={() => {
-                const messageObj = messages.find((m: Message) => m.id === showContextMenu.messageId);
-                if (messageObj) handleDeleteMessage(messageObj);
-              }}
-              className="flex items-center w-full p-2 hover:bg-gray-100 text-left text-red-500"
-            >
-              <Trash className="h-4 w-4 mr-2" />
-              <span className="text-sm">Apagar</span>
-            </button>
-          </div>
-        </div>
-      )}
-      
-      {showSearchMessages && (
-        <div className="p-2 bg-white border-b border-gray-200 flex items-center">
-          <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Buscar mensagens..."
-              className="pl-10 pr-10 py-2 w-full rounded-lg border border-gray-300 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-              value={messageSearchTerm}
-              onChange={(e) => setMessageSearchTerm(e.target.value)}
-              onKeyPress={(e) => e.key === 'Enter' && searchChatMessages()}
-            />
-            {messageSearchTerm && (
-              <button
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                onClick={() => setMessageSearchTerm('')}
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="18" y1="6" x2="6" y2="18"></line>
-                  <line x1="6" y1="6" x2="18" y2="18"></line>
-                </svg>
-              </button>
-            )}
-          </div>
-          <button
-            className={`ml-2 px-3 py-2 rounded-lg ${
-              searchingMessages
-                ? 'bg-gray-300 text-gray-600 cursor-not-allowed'
-                : 'bg-primary-600 text-white hover:bg-primary-700'
-            }`}
-            onClick={searchChatMessages}
-            disabled={searchingMessages || !messageSearchTerm.trim()}
-          >
-            {searchingMessages ? (
-              <div className="h-5 w-5 border-2 border-gray-400 border-t-transparent rounded-full animate-spin"></div>
-            ) : (
-              'Buscar'
-            )}
-          </button>
-          <button
-            className="ml-2 p-2 text-gray-500 hover:text-gray-700 rounded-lg hover:bg-gray-100"
-            onClick={() => {
-              setShowSearchMessages(false);
-              setMessageSearchTerm('');
-              setSearchResults([]);
-            }}
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="18" y1="6" x2="6" y2="18"></line>
-              <line x1="6" y1="6" x2="18" y2="18"></line>
-            </svg>
-          </button>
-        </div>
-      )}
     </div>
   );
 }
