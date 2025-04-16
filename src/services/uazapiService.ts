@@ -28,15 +28,29 @@ export interface Group {
 export interface Campaign {
   id: string;
   name: string;
-  status: 'scheduled' | 'running' | 'completed' | 'paused' | 'failed' | 'cancelled';
+  info?: string;
+  status: 'scheduled' | 'running' | 'completed' | 'paused' | 'failed' | 'cancelled' | 'ativo';
   createdAt: string;
   scheduledAt?: string;
+  scheduledFor?: number;
   totalRecipients: number;
   successCount: number;
   errorCount: number;
   pendingCount: number;
   progress: number;
   messageType: 'text' | 'media' | 'audio';
+  // Campos adicionais da API UAZAPI
+  delayMax?: number;
+  delayMin?: number;
+  log_delivered?: number;
+  log_failed?: number;
+  log_played?: number;
+  log_read?: number;
+  log_sucess?: number;
+  log_total?: number;
+  owner?: string;
+  created?: string;
+  updated?: string;
 }
 
 // Criando instância axios com configurações comuns
@@ -55,10 +69,11 @@ interface CampaignProgress {
   totalRecipients: number;
   sent: number;
   errors: number;
-  status: 'running' | 'paused' | 'completed' | 'cancelled';
+  status: 'running' | 'paused' | 'completed' | 'cancelled' | 'scheduled';
   results: any[];
   startTime: Date;
   progress: number;
+  intervalId?: NodeJS.Timeout | null;
 }
 
 // Armazenamento local para campanhas ativas
@@ -215,7 +230,16 @@ export const uazapiService = {
     try {
       console.log('Enviando mensagem em massa:', data);
       
-      // Determinar qual endpoint usar com base no tipo de mensagem
+      // Verificar se é uma mensagem agendada
+      const isScheduled = data.scheduledFor && typeof data.scheduledFor === 'number';
+      
+      if (isScheduled) {
+        console.log(`Agendando mensagem para timestamp: ${data.scheduledFor}`); 
+        // Para mensagens agendadas, usamos o endpoint /message/queue/folder
+        return this.sendScheduledMessage(instanceToken, data);
+      }
+      
+      // Determinar qual endpoint usar com base no tipo de mensagem para envio imediato
       let endpoint = '/send/text';
       if (data.media) {
         endpoint = '/send/media';
@@ -344,8 +368,135 @@ export const uazapiService = {
     }
   },
   
+  // Método para enviar mensagem agendada através da API UAZAPI
+  async sendScheduledMessage(instanceToken: string, data: any): Promise<any> {
+    try {
+      console.log('Enviando mensagem agendada para a API UAZAPI');
+      
+      // Criar ID único para a campanha
+      const campaignId = `scheduled_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+      
+      // Registrar a campanha para acompanhamento
+      activeCampaigns[campaignId] = {
+        id: campaignId,
+        name: data.campaignName || 'Campanha agendada',
+        totalRecipients: data.numbers.length,
+        sent: 0,
+        errors: 0,
+        status: 'scheduled',
+        results: [],
+        startTime: new Date(),
+        progress: 0
+      };
+      
+      const results = [];
+      const numbers = data.numbers || [];
+      
+      // Determinar qual endpoint usar com base no tipo de mensagem
+      let endpoint = '/send/text';
+      if (data.media) {
+        endpoint = '/send/media';
+      }
+      
+      // Para cada número, enviar a mensagem com o parâmetro de agendamento
+      for (const number of numbers) {
+        // Criar objeto de dados para este destinatário
+        const messageData: any = {
+          number: number,
+          text: data.message,
+          delay: 0, // Sem delay adicional na hora do envio
+          // Adicionar o timestamp de agendamento
+          scheduledAt: data.scheduledFor
+        };
+        
+        // Se for mídia, adicionar os campos necessários
+        if (data.media) {
+          // Detectar o tipo de mídia baseado no mimetype
+          messageData.type = data.media.mimetype.startsWith('image') ? 'image' : 
+                           data.media.mimetype.startsWith('video') ? 'video' : 
+                           data.media.mimetype.startsWith('audio') ? 'audio' : 'document';
+          
+          // Para mídia, a API espera uma URL ou um arquivo base64 prefixado
+          if (data.media.data.startsWith('data:')) {
+            messageData.file = data.media.data;
+          } else {
+            messageData.file = `data:${data.media.mimetype};base64,${data.media.data}`;
+          }
+          
+          // Para documentos, adicionar nome do arquivo
+          if (messageData.type === 'document' && data.media.filename) {
+            messageData.docName = data.media.filename;
+          }
+          
+          // Incluir caption/texto se houver
+          if (data.message && data.message.trim()) {
+            messageData.caption = data.message;
+            delete messageData.text;
+          }
+        }
+        
+        try {
+          // Fazer a requisição para este número
+          console.log(`Agendando envio para ${number} usando endpoint ${endpoint}. Timestamp: ${data.scheduledFor}`);
+          
+          const response = await api.post(endpoint, messageData, {
+            headers: {
+              'token': instanceToken
+            }
+          });
+          
+          results.push(response.data);
+          activeCampaigns[campaignId].results.push({
+            number,
+            success: true,
+            data: response.data,
+            scheduled: true,
+            scheduledAt: new Date(data.scheduledFor * 1000).toISOString()
+          });
+          activeCampaigns[campaignId].sent++;
+        } catch (error) {
+          console.error(`Erro ao agendar envio para ${number}:`, error);
+          activeCampaigns[campaignId].errors++;
+          activeCampaigns[campaignId].results.push({
+            number,
+            success: false,
+            error: error instanceof Error ? error.message : 'Erro desconhecido'
+          });
+        }
+      }
+      
+      // Atualizar progresso
+      activeCampaigns[campaignId].progress = 100; // Agendamento concluído
+      
+      return {
+        success: true,
+        campaignId,
+        scheduled: true,
+        scheduledFor: new Date(data.scheduledFor * 1000).toISOString(),
+        results
+      };
+    } catch (error) {
+      console.error('Erro ao agendar mensagem:', error);
+      if (axios.isAxiosError(error)) {
+        console.error('Detalhes do erro:', {
+          status: error.response?.status,
+          statusText: error.response?.statusText,
+          data: error.response?.data
+        });
+      }
+      throw error;
+    }
+  },
+  
   // Método para listar campanhas
-  getCampaigns(): Campaign[] {
+  async getCampaigns(instanceToken?: string): Promise<Campaign[]> {
+    // Se um token for fornecido, buscar campanhas na API da UAZAPI
+    if (instanceToken) {
+      console.log(`Buscando campanhas com token: ${instanceToken}`);
+      return this.getCampaignsFromAPI(instanceToken);
+    }
+    
+    // Caso contrário, retornar campanhas do armazenamento local (para desenvolvimento/testes)
     return Object.values(activeCampaigns).map(campaign => ({
       id: campaign.id,
       name: campaign.name,
@@ -360,86 +511,172 @@ export const uazapiService = {
     }));
   },
   
+  // Método para buscar campanhas da API UAZAPI
+  async getCampaignsFromAPI(instanceToken: string): Promise<Campaign[]> {
+    try {
+      console.log(`Buscando logs de campanhas com token: ${instanceToken}`);
+      
+      // Implementação real com a API UAZAPI
+      const response = await api.get('/message/queue/folder', {
+        headers: {
+          'Accept': 'application/json',
+          'token': instanceToken
+        }
+      });
+      
+      console.log('Resposta da API:', response.data);
+      
+      // Transformar os dados da API para o formato da nossa interface
+      return response.data.map((campaign: any) => ({
+        id: campaign.id,
+        name: campaign.info || `Campanha ${campaign.id.substring(0, 8)}`,
+        info: campaign.info,
+        status: this.mapApiStatus(campaign.status),
+        createdAt: campaign.created,
+        scheduledAt: campaign.scheduled_for ? new Date(campaign.scheduled_for * 1000).toISOString() : undefined,
+        scheduledFor: campaign.scheduled_for,
+        totalRecipients: campaign.log_total || 0,
+        successCount: campaign.log_sucess || 0,
+        errorCount: campaign.log_failed || 0,
+        pendingCount: (campaign.log_total || 0) - (campaign.log_sucess || 0) - (campaign.log_failed || 0),
+        progress: this.calculateProgress(campaign),
+        messageType: 'text',
+        delayMax: campaign.delayMax,
+        delayMin: campaign.delayMin,
+        log_delivered: campaign.log_delivered,
+        log_failed: campaign.log_failed,
+        log_played: campaign.log_played,
+        log_read: campaign.log_read,
+        log_sucess: campaign.log_sucess,
+        log_total: campaign.log_total,
+        owner: campaign.owner,
+        created: campaign.created,
+        updated: campaign.updated
+      }));
+    } catch (error) {
+      console.error('Erro ao buscar campanhas da API:', error);
+      return [];
+    }
+  },
+  
+  // Helper para mapear status da API para o formato da interface
+  mapApiStatus(apiStatus: string): Campaign['status'] {
+    const statusMap: Record<string, Campaign['status']> = {
+      'ativo': 'running',
+      'paused': 'paused',
+      'completed': 'completed',
+      'cancelled': 'cancelled',
+      'failed': 'failed',
+      'scheduled': 'scheduled'
+    };
+    
+    return statusMap[apiStatus] || 'running';
+  },
+  
+  // Helper para calcular o progresso da campanha
+  calculateProgress(campaign: any): number {
+    const total = campaign.log_total || 0;
+    if (total === 0) return 0;
+    
+    const processed = (campaign.log_sucess || 0) + (campaign.log_failed || 0);
+    return Math.floor((processed / total) * 100);
+  },
+  
   // Método para obter detalhes de uma campanha
   getCampaignDetails(campaignId: string): any {
     const campaign = activeCampaigns[campaignId];
-    if (!campaign) {
-      throw new Error(`Campanha ${campaignId} não encontrada`);
-    }
+    if (!campaign) return null;
     
     return {
-      id: campaign.id,
-      name: campaign.name,
+      ...campaign,
       status: campaign.status,
-      createdAt: campaign.startTime.toISOString(),
-      totalRecipients: campaign.totalRecipients,
-      successCount: campaign.sent,
-      errorCount: campaign.errors,
-      pendingCount: campaign.totalRecipients - campaign.sent - campaign.errors,
       progress: Math.floor((campaign.sent + campaign.errors) / campaign.totalRecipients * 100),
-      results: campaign.results
+      successRate: campaign.sent > 0 ? Math.floor((campaign.sent / (campaign.sent + campaign.errors)) * 100) : 0,
+      timeElapsed: new Date().getTime() - campaign.startTime.getTime()
     };
   },
   
-  // Método para pausar uma campanha
-  pauseCampaign(campaignId: string): boolean {
+  // Simulação local para testes (não usar em produção)
+  pauseCampaignLocal(campaignId: string): void {
     const campaign = activeCampaigns[campaignId];
-    if (!campaign) {
-      throw new Error(`Campanha ${campaignId} não encontrada`);
-    }
-    
-    if (campaign.status === 'running') {
+    if (campaign && campaign.status === 'running') {
       campaign.status = 'paused';
-      return true;
+      if (campaign.intervalId) {
+        clearInterval(campaign.intervalId);
+        campaign.intervalId = null;
+      }
     }
-    
-    return false;
   },
   
-  // Método para retomar uma campanha
-  resumeCampaign(campaignId: string): Promise<any> {
+  // Simulação local para testes (não usar em produção)
+  resumeCampaignLocal(campaignId: string): void {
     const campaign = activeCampaigns[campaignId];
-    if (!campaign) {
-      throw new Error(`Campanha ${campaignId} não encontrada`);
+    if (campaign && campaign.status === 'paused') {
+      campaign.status = 'running';
+      // Simulação de processamento - não é necessário para a API real
     }
-    
-    if (campaign.status !== 'paused') {
-      throw new Error(`Campanha ${campaignId} não está pausada`);
-    }
-    
-    // Atualizar status
-    campaign.status = 'running';
-    
-    // Implementar lógica para continuar o envio a partir do ponto onde parou
-    // Isso exigiria identificar quais números já foram processados
-    // Por simplicidade, esta implementação não mantém essa informação
-    
-    return Promise.resolve({ success: true, message: 'Campanha retomada com sucesso' });
   },
   
-  // Método para cancelar uma campanha
-  cancelCampaign(campaignId: string): boolean {
-    const campaign = activeCampaigns[campaignId];
-    if (!campaign) {
-      throw new Error(`Campanha ${campaignId} não encontrada`);
+  // Simulação local para testes (não usar em produção)
+  deleteCampaignLocal(campaignId: string): void {
+    if (activeCampaigns[campaignId]) {
+      const campaign = activeCampaigns[campaignId];
+      if (campaign.intervalId) {
+        clearInterval(campaign.intervalId);
+      }
+      delete activeCampaigns[campaignId];
     }
-    
-    if (campaign.status === 'running' || campaign.status === 'paused') {
-      campaign.status = 'cancelled';
-      return true;
-    }
-    
-    return false;
   },
   
-  // Método para excluir uma campanha
-  deleteCampaign(campaignId: string): boolean {
-    const campaign = activeCampaigns[campaignId];
-    if (!campaign) {
-      throw new Error(`Campanha ${campaignId} não encontrada`);
+  // Métodos para gerenciar campanhas na API UAZAPI
+  async pauseCampaign(instanceToken: string, campaignId: string): Promise<boolean> {
+    try {
+      const response = await api.post('/message/queue/pause', { id: campaignId }, {
+        headers: {
+          'Accept': 'application/json',
+          'token': instanceToken
+        }
+      });
+      
+      console.log('Resposta da API ao pausar campanha:', response.data);
+      return response.data.success || false;
+    } catch (error) {
+      console.error('Erro ao pausar campanha:', error);
+      return false;
     }
-    
-    delete activeCampaigns[campaignId];
-    return true;
+  },
+  
+  async resumeCampaign(instanceToken: string, campaignId: string): Promise<boolean> {
+    try {
+      const response = await api.post('/message/queue/resume', { id: campaignId }, {
+        headers: {
+          'Accept': 'application/json',
+          'token': instanceToken
+        }
+      });
+      
+      console.log('Resposta da API ao retomar campanha:', response.data);
+      return response.data.success || false;
+    } catch (error) {
+      console.error('Erro ao retomar campanha:', error);
+      return false;
+    }
+  },
+  
+  async deleteCampaign(instanceToken: string, campaignId: string): Promise<boolean> {
+    try {
+      const response = await api.delete(`/message/queue/folder/${campaignId}`, {
+        headers: {
+          'Accept': 'application/json',
+          'token': instanceToken
+        }
+      });
+      
+      console.log('Resposta da API ao deletar campanha:', response.data);
+      return response.data.success || false;
+    } catch (error) {
+      console.error('Erro ao deletar campanha:', error);
+      return false;
+    }
   }
 };

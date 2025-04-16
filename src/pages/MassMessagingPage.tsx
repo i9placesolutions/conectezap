@@ -13,19 +13,23 @@ import {
   Info, 
   FileUp, 
   X, 
-  Loader2
+  Loader2,
+  BarChart2
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { InstanceModal } from '../components/InstanceModal';
 import { useInstance } from '../contexts/InstanceContext';
 import { toast } from 'react-hot-toast';
+import { useNavigate } from 'react-router-dom';
 import { ContactSelectionModal } from '../components/mass/ContactSelectionModal';
 import { GroupSelectionModal } from '../components/mass/GroupSelectionModal';
 
-// Importando diretamente os tipos do serviço UAZAPI para garantir compatibilidade
-import { Group, Contact } from '../services/uazapiService';
+// Importando o serviço UAZAPI e seus tipos para garantir compatibilidade
+import { Group, Contact, uazapiService } from '../services/uazapiService';
 
 export function MassMessagingPage() {
+  const navigate = useNavigate();
+  
   // Estado de controle do fluxo
   const [currentStep, setCurrentStep] = useState<'recipients' | 'message' | 'schedule' | 'confirm'>('recipients');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -118,25 +122,93 @@ export function MassMessagingPage() {
     try {
       setIsSubmitting(true);
       
-      // Lógica para enviar mensagem seria implementada aqui
-      // usando o serviço uazapi
+      // Verificar se a instância está selecionada
+      if (!selectedInstance || !selectedInstance.token) {
+        toast.error('Selecione uma instância válida');
+        return;
+      }
       
-      // Simular processamento
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      // Preparar dados para o envio
+      const numbers: string[] = [];
       
-      toast.success('Campanha enviada com sucesso!');
+      // Adicionar números de contatos individuais
+      selectedContacts.forEach(contact => {
+        // Garantir que o número está no formato correto (apenas números)
+        const cleanNumber = contact.number.replace(/\D/g, '');
+        if (cleanNumber) numbers.push(cleanNumber);
+      });
       
-      // Resetar o formulário
-      setCurrentStep('recipients');
-      setSelectedContacts([]);
-      setSelectedGroups([]);
-      setMessageText('');
-      setCampaignName('');
-      setMediaFile(null);
-      setMediaPreview(null);
-      setSendMode('now');
-      setScheduleDate('');
-      setScheduleTime('');
+      // Adicionar JIDs dos grupos selecionados
+      selectedGroups.forEach(group => {
+        // Verificar se tem o JID (ID do WhatsApp) do grupo
+        if (group.jid) {
+          // O ID do grupo já está no formato correto (@g.us)
+          numbers.push(group.jid);
+        } else if (group.id) {
+          // Usar o ID como alternativa
+          numbers.push(group.id);
+        }
+      });
+      
+      if (numbers.length === 0) {
+        toast.error('Nenhum número válido encontrado nos destinatários selecionados');
+        return;
+      }
+      
+      // Preparar dados da mídia se houver
+      let mediaData = null;
+      if (messageType === 'media' && mediaFile && mediaPreview) {
+        // Remover o prefixo data:image/xxx;base64, se houver
+        const mediaBase64 = mediaPreview.split(',')[1] || mediaPreview;
+        
+        mediaData = {
+          mimetype: mediaFile.type,
+          data: mediaBase64,
+          filename: mediaFile.name
+        };
+      }
+      
+      // Construir objeto de dados para envio
+      const massMessageData = {
+        campaignName: campaignName,
+        message: messageText,
+        numbers: numbers,
+        minDelay: minDelay * 1000, // Converter para milissegundos
+        maxDelay: maxDelay * 1000, // Converter para milissegundos
+        media: mediaData,
+        // Dados de agendamento, se aplicável
+        scheduledFor: sendMode === 'schedule' && scheduleDate && scheduleTime
+          ? new Date(`${scheduleDate}T${scheduleTime}`).getTime() / 1000 // Converter para timestamp em segundos
+          : undefined
+      };
+      
+      console.log('Enviando dados:', massMessageData);
+      
+      // Chamar o serviço UAZAPI para enviar a mensagem em massa
+      const result = await uazapiService.sendMassMessage(selectedInstance.token, massMessageData);
+      
+      console.log('Resultado do envio:', result);
+      
+      if (result && result.success) {
+        toast.success('Campanha enviada com sucesso!');
+        
+        // Resetar o formulário
+        setCurrentStep('recipients');
+        setSelectedContacts([]);
+        setSelectedGroups([]);
+        setMessageText('');
+        setCampaignName('');
+        setMediaFile(null);
+        setMediaPreview(null);
+        setSendMode('now');
+        setScheduleDate('');
+        setScheduleTime('');
+        
+        // Navegar para a página de relatórios para acompanhar a campanha
+        navigate('/messages/campaigns');
+      } else {
+        toast.error('Erro ao enviar campanha. Verifique os dados e tente novamente.');
+      }
     } catch (error) {
       console.error('Erro ao enviar campanha:', error);
       toast.error('Erro ao enviar campanha. Tente novamente.');
@@ -158,6 +230,11 @@ export function MassMessagingPage() {
 
 
 
+  // Função para navegar para a página de histórico
+  const goToHistory = () => {
+    navigate('/messages/campaigns');
+  };
+
   return (
     <div className="space-y-6">
       <InstanceModal />
@@ -178,6 +255,19 @@ export function MassMessagingPage() {
         instanceToken={selectedInstance?.token || ''}
         selectedGroups={selectedGroups}
       />
+      
+      {/* Botão para visualizar histórico */}
+      {selectedInstance && (
+        <div className="flex justify-end mb-4">
+          <button
+            onClick={goToHistory}
+            className="flex items-center gap-2 px-4 py-2 bg-primary-100 hover:bg-primary-200 text-primary-700 rounded-lg transition-colors"
+          >
+            <BarChart2 className="h-4 w-4" />
+            Ver Histórico de Campanhas
+          </button>
+        </div>
+      )}
       
       {/* Conteúdo principal */}
       {selectedInstance ? (
