@@ -29,7 +29,7 @@ export interface Campaign {
   id: string;
   name: string;
   info?: string;
-  status: 'scheduled' | 'running' | 'completed' | 'paused' | 'failed' | 'cancelled' | 'ativo';
+  status: 'scheduled' | 'running' | 'completed' | 'paused' | 'cancelled' | 'failed' | 'ativo';
   createdAt: string;
   scheduledAt?: string;
   scheduledFor?: number;
@@ -112,7 +112,7 @@ interface CampaignProgress {
   totalRecipients: number;
   sent: number;
   errors: number;
-  status: 'running' | 'paused' | 'completed' | 'cancelled' | 'scheduled';
+  status: 'running' | 'paused' | 'completed' | 'cancelled' | 'scheduled' | 'failed';
   results: any[];
   startTime: Date;
   progress: number;
@@ -659,15 +659,35 @@ export const uazapiService = {
         // Enviar todas as mensagens de uma vez
         const allResults = await sendAllMessages(messages);
         
-        // Atualizar estatísticas da campanha
-        activeCampaigns[campaignId].sent = messages.length;
-        activeCampaigns[campaignId].progress = 100;
-        activeCampaigns[campaignId].status = 'completed';
+        // Verificar se as mensagens foram agendadas ou enviadas imediatamente
+        const isScheduled = data.scheduledFor && data.scheduledFor > Date.now();
+        
+        // Atualizar estatísticas da campanha baseado no resultado
+        if (isScheduled) {
+          // Se foi agendado, marcar como scheduled
+          activeCampaigns[campaignId].status = 'scheduled';
+          activeCampaigns[campaignId].progress = 100; // Agendamento concluído
+          activeCampaigns[campaignId].sent = 0; // Ainda não foi enviado
+        } else {
+          // Se foi enviado imediatamente, verificar o resultado da API
+          const apiResponse = allResults[0];
+          const isSuccess = apiResponse && (apiResponse.success || apiResponse.status === 'success' || apiResponse.message);
+          
+          if (isSuccess) {
+            activeCampaigns[campaignId].status = 'completed';
+            activeCampaigns[campaignId].sent = messages.length;
+          } else {
+            activeCampaigns[campaignId].status = 'failed';
+            activeCampaigns[campaignId].sent = 0;
+          }
+          activeCampaigns[campaignId].progress = 100;
+        }
+        
         // Extrair números para resultados
         const numbersForResults = messages.map((msg: any) => msg.number);
         activeCampaigns[campaignId].results = numbersForResults.map((number: string) => ({
           number,
-          success: true,
+          success: !isScheduled && allResults[0] && (allResults[0].success || allResults[0].status === 'success'),
           data: allResults[0] // Usar o primeiro resultado como referência
         }));
         

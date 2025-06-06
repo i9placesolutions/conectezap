@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Filter, Download, RefreshCw, Calendar, BarChart3, MessageSquare, Users, ArrowUp, ArrowDown, Mail, X, Phone, Play, Pause, Trash2 } from 'lucide-react';
+import { Search, Download, RefreshCw, Calendar, BarChart3, MessageSquare, Users, ArrowUp, ArrowDown, Mail, X, Phone, Play, Pause, Trash2 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { generatePDF } from '../lib/pdf';
 import { format } from 'date-fns';
@@ -13,7 +13,7 @@ interface Report {
   id: string;
   campaign: string;
   info?: string;
-  status: 'completed' | 'running' | 'failed' | 'scheduled' | 'ativo';
+  status: 'completed' | 'running' | 'failed' | 'scheduled' | 'ativo' | 'paused' | 'cancelled';
   scheduledFor?: number;
   delayMax?: number;
   delayMin?: number;
@@ -27,9 +27,9 @@ interface Report {
   created?: string;
   updated?: string;
   // Campos de compatibilidade com dados antigos
-  total?: number;
-  delivered?: number;
-  read?: number;
+  total: number;
+  delivered: number;
+  read: number;
   failed?: number;
   date?: string;
   successCount?: number;
@@ -39,7 +39,7 @@ interface Report {
     value: number;
     isPositive: boolean;
   };
-  responseRate?: number;
+  responseRate: number;
 }
 
 interface StatCardProps {
@@ -202,10 +202,6 @@ export function ReportsPage() {
         setIsRefreshing(false);
       }, 1000);
     }
-  };
-
-  const handleExportPDF = () => {
-    generatePDF(reports, dateRange);
   };
 
   // Funções para gerenciar campanhas
@@ -587,21 +583,26 @@ export function ReportsPage() {
                         report.status === 'completed' || report.status === 'ativo' ? 'bg-green-100 text-green-800' :
                         report.status === 'running' ? 'bg-blue-100 text-blue-800' :
                         report.status === 'scheduled' ? 'bg-yellow-100 text-yellow-800' :
+                        report.status === 'paused' ? 'bg-orange-100 text-orange-800' :
+                        report.status === 'cancelled' ? 'bg-gray-100 text-gray-800' :
                         'bg-red-100 text-red-800'
                       )}>
                         {report.status === 'completed' ? 'Concluído' :
                          report.status === 'running' ? 'Em andamento' :
                          report.status === 'scheduled' ? 'Agendado' :
-                         report.status === 'ativo' ? 'Ativo' : 'Falhou'}
+                         report.status === 'paused' ? 'Pausado' :
+                         report.status === 'cancelled' ? 'Cancelado' :
+                         report.status === 'failed' ? 'Falhou' :
+                         report.status === 'ativo' ? 'Ativo' : 'Desconhecido'}
                       </span>
                     </td>
                     <td className="px-4 py-4 whitespace-nowrap">
                       <div className="text-sm text-gray-900">
                         {report.scheduledFor ? (
                           <div>
-                            <div>{format(new Date(report.scheduledFor), 'dd/MM/yyyy', { locale: ptBR, timeZone: 'America/Sao_Paulo' })}</div>
+                            <div>{format(new Date(report.scheduledFor), 'dd/MM/yyyy', { locale: ptBR })}</div>
                             <div className="text-xs text-gray-500">
-                              {format(new Date(report.scheduledFor), 'HH:mm:ss', { locale: ptBR, timeZone: 'America/Sao_Paulo' })}
+                              {format(new Date(report.scheduledFor), 'HH:mm:ss', { locale: ptBR })}
                             </div>
                           </div>
                         ) : (
@@ -683,16 +684,16 @@ export function ReportsPage() {
                       <div className="text-sm text-gray-900">
                         {report.created ? (
                           <div>
-                            <div>{format(new Date(report.created), 'dd/MM/yyyy', { locale: ptBR, timeZone: 'America/Sao_Paulo' })}</div>
+                            <div>{format(new Date(report.created), 'dd/MM/yyyy', { locale: ptBR })}</div>
                             <div className="text-xs text-gray-500">
-                              {format(new Date(report.created), 'HH:mm:ss', { locale: ptBR, timeZone: 'America/Sao_Paulo' })}
+                              {format(new Date(report.created), 'HH:mm:ss', { locale: ptBR })}
                             </div>
                           </div>
                         ) : report.createdAt ? (
                           <div>
-                            <div>{format(new Date(report.createdAt), 'dd/MM/yyyy', { locale: ptBR, timeZone: 'America/Sao_Paulo' })}</div>
+                            <div>{format(new Date(report.createdAt), 'dd/MM/yyyy', { locale: ptBR })}</div>
                             <div className="text-xs text-gray-500">
-                              {format(new Date(report.createdAt), 'HH:mm:ss', { locale: ptBR, timeZone: 'America/Sao_Paulo' })}
+                              {format(new Date(report.createdAt), 'HH:mm:ss', { locale: ptBR })}
                             </div>
                           </div>
                         ) : (
@@ -704,9 +705,9 @@ export function ReportsPage() {
                       <div className="text-sm text-gray-900">
                         {report.updated ? (
                           <div>
-                            <div>{format(new Date(report.updated), 'dd/MM/yyyy', { locale: ptBR, timeZone: 'America/Sao_Paulo' })}</div>
+                            <div>{format(new Date(report.updated), 'dd/MM/yyyy', { locale: ptBR })}</div>
                             <div className="text-xs text-gray-500">
-                              {format(new Date(report.updated), 'HH:mm:ss', { locale: ptBR, timeZone: 'America/Sao_Paulo' })}
+                              {format(new Date(report.updated), 'HH:mm:ss', { locale: ptBR })}
                             </div>
                           </div>
                         ) : (

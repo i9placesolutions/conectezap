@@ -8,10 +8,10 @@ interface Report {
   total: number;
   delivered: number;
   read: number;
-  failed: number;
-  date: string;
-  status: string;
-  responseRate?: number;
+  failed?: number;
+  date?: string;
+  status: 'completed' | 'running' | 'failed' | 'scheduled' | 'ativo' | 'paused' | 'cancelled';
+  responseRate: number;
 }
 
 export const generatePDF = (reports: Report[], dateRange: [string, string]) => {
@@ -79,14 +79,19 @@ export const generatePDF = (reports: Report[], dateRange: [string, string]) => {
     report.total.toLocaleString(),
     `${report.delivered.toLocaleString()} (${((report.delivered / report.total) * 100).toFixed(1)}%)`,
     `${report.read.toLocaleString()} (${((report.read / report.delivered) * 100).toFixed(1)}%)`,
-    `${report.responseRate?.toFixed(1) || 0}%`,
-    format(new Date(report.date), 'dd/MM/yyyy', { locale: ptBR }),
+    `${report.responseRate.toFixed(1)}%`,
+    report.date ? format(new Date(report.date), 'dd/MM/yyyy', { locale: ptBR }) : 'N/A',
     report.status === 'completed' ? 'Concluído' :
-    report.status === 'running' ? 'Em andamento' : 'Falhou'
+    report.status === 'running' ? 'Em andamento' :
+    report.status === 'scheduled' ? 'Agendado' :
+    report.status === 'paused' ? 'Pausado' :
+    report.status === 'cancelled' ? 'Cancelado' :
+    report.status === 'failed' ? 'Falhou' :
+    report.status === 'ativo' ? 'Ativo' : 'Desconhecido'
   ]);
 
   autoTable(doc, {
-    startY: doc.lastAutoTable.finalY + 15,
+    startY: (doc as any).lastAutoTable.finalY + 15,
     head: [['Campanha', 'Total', 'Entregues', 'Lidas', 'Resp.', 'Data', 'Status']],
     body: tableData,
     theme: 'striped',
@@ -111,7 +116,7 @@ export const generatePDF = (reports: Report[], dateRange: [string, string]) => {
   });
 
   // Add footer
-  const pageCount = doc.internal.getNumberOfPages();
+  const pageCount = doc.getNumberOfPages();
   doc.setFontSize(10);
   doc.setTextColor(107, 114, 128); // gray-500
   for (let i = 1; i <= pageCount; i++) {
