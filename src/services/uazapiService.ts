@@ -329,7 +329,7 @@ export const uazapiService = {
       };
       
       // Função para converter URL para base64
-      const convertUrlToBase64 = async (url: string, mimetype: string): Promise<string> => {
+      const convertUrlToBase64 = async (url: string): Promise<string> => {
         try {
           console.log('Convertendo URL para base64:', url);
           const response = await fetch(url);
@@ -360,7 +360,7 @@ export const uazapiService = {
         // Verificar se é uma URL (do Supabase) ou já é base64
         if (mediaData.startsWith('http://') || mediaData.startsWith('https://')) {
           // É uma URL, converter para base64
-          base64Data = await convertUrlToBase64(mediaData, mimetype);
+          base64Data = await convertUrlToBase64(mediaData);
         } else if (mediaData.startsWith('data:')) {
           // Já está no formato data URL
           base64Data = mediaData;
