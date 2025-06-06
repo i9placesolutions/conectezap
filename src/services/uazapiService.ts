@@ -405,14 +405,8 @@ export const uazapiService = {
         allHaveType: messages.every((msg: any) => msg.type)
       });
       
-      // URLs não precisam de validação de tamanho como base64
-      // O arquivo já está armazenado no Supabase
-      const limitedMessages = messages.map((msg: any) => {
-        // Clonar o objeto para não modificar o original
-        const newMsg = {...msg};
-        return newMsg;
-      });
-
+      // Enviar todas as mensagens diretamente para a API
+      // A API é responsável por processar a quantidade de mensagens
       interface CampaignProcessingData {
         delayMin: number;
         delayMax: number;
@@ -425,7 +419,7 @@ export const uazapiService = {
         delayMin: minDelay,
         delayMax: maxDelay,
         info: data.campaignName || 'Campanha ConecteZap',
-        messages: limitedMessages
+        messages: messages
         // scheduled_for será undefined por padrão, o que é ok para opcional
       };
       
@@ -611,9 +605,9 @@ export const uazapiService = {
       };
       
       try {
-        console.log(`Preparando envio de ${limitedMessages.length} mensagens`);
+        console.log(`Preparando envio de ${messages.length} mensagens`);
         
-        if (limitedMessages.length === 0) {
+        if (messages.length === 0) {
           throw new Error('Nenhuma mensagem válida para enviar.');
         }
         
@@ -638,7 +632,7 @@ export const uazapiService = {
           
           if (isSuccess) {
             activeCampaigns[campaignId].status = 'completed';
-            activeCampaigns[campaignId].sent = limitedMessages.length;
+            activeCampaigns[campaignId].sent = messages.length;
           } else {
             activeCampaigns[campaignId].status = 'failed';
             activeCampaigns[campaignId].sent = 0;
@@ -647,7 +641,7 @@ export const uazapiService = {
         }
         
         // Extrair números para resultados
-        const numbersForResults = limitedMessages.map((msg: any) => msg.number);
+        const numbersForResults = messages.map((msg: any) => msg.number);
         activeCampaigns[campaignId].results = numbersForResults.map((number: string) => ({
           number,
           success: !isScheduled && allResults && ((allResults as any).success || (allResults as any).status === 'success'),
@@ -663,17 +657,17 @@ export const uazapiService = {
           results: allResults,
           endpoint: '/sender/advanced',
           batches: 1,
-          totalSent: limitedMessages.length
+          totalSent: messages.length
         };
         
       } catch (error) {
         console.error('Erro ao enviar mensagem em massa:', error);
         
         // Atualizar estatísticas em caso de erro
-        activeCampaigns[campaignId].errors = limitedMessages.length;
+        activeCampaigns[campaignId].errors = messages.length;
         activeCampaigns[campaignId].status = 'cancelled'; // usado 'cancelled' em vez de 'failed'
         // Extrair números para resultados de erro
-        const phoneNumbers = limitedMessages.map((msg: any) => msg.number);
+        const phoneNumbers = messages.map((msg: any) => msg.number);
         activeCampaigns[campaignId].results = phoneNumbers.map((number: string) => ({
           number,
           success: false,
