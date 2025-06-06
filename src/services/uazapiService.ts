@@ -374,8 +374,8 @@ export const uazapiService = {
           number: number,
           type: messageType
         };
-          
-          // Adicionar texto se fornecido
+        
+        // Adicionar texto se fornecido
         if (data.message) {
           message.text = data.message;
         }
@@ -405,16 +405,9 @@ export const uazapiService = {
         allHaveType: messages.every((msg: any) => msg.type)
       });
       
-      // Dividir mensagens em lotes para evitar 'too many SQL variables'
-      const BATCH_SIZE = 100; // Limite seguro para evitar erro SQL
-      const batches = [];
-      
-      for (let i = 0; i < messages.length; i += BATCH_SIZE) {
-        batches.push(messages.slice(i, i + BATCH_SIZE));
-      }
-      
-      console.log(`Dividindo ${messages.length} mensagens em ${batches.length} lotes de até ${BATCH_SIZE} mensagens`);
-      
+      // URLs não precisam de validação de tamanho como base64
+      // O arquivo já está armazenado no Supabase
+
       interface CampaignProcessingData {
         delayMin: number;
         delayMax: number;
@@ -423,27 +416,29 @@ export const uazapiService = {
         scheduled_for?: number;
       }
       
-      // Função para enviar um lote de mensagens
-      const sendBatch = async (batchMessages: any[], batchIndex: number) => {
-        const requestData: CampaignProcessingData = {
-          delayMin: minDelay,
-          delayMax: maxDelay,
-          info: data.campaignName || `Campanha ConecteZap - Lote ${batchIndex + 1}`,
-          messages: batchMessages
-        };
-          
-          // Se for agendada, processar e adicionar o timestamp (em milissegundos)
-        if (data.scheduledFor) {
-          if (data.scheduledFor instanceof Date) {
-            requestData.scheduled_for = data.scheduledFor.getTime();
-          } else if (typeof data.scheduledFor === 'number') {
-            requestData.scheduled_for = data.scheduledFor;
-          } else {
-            console.warn('Tipo inesperado para data.scheduledFor:', data.scheduledFor);
-          }
+      const requestData: CampaignProcessingData = {
+        delayMin: minDelay,
+        delayMax: maxDelay,
+        info: data.campaignName || 'Campanha ConecteZap',
+        messages: messages
+        // scheduled_for será undefined por padrão, o que é ok para opcional
+      };
+      
+      // Se for agendada, processar e adicionar o timestamp (em milissegundos)
+      if (data.scheduledFor) {
+        if (data.scheduledFor instanceof Date) {
+          requestData.scheduled_for = data.scheduledFor.getTime();
+        } else if (typeof data.scheduledFor === 'number') {
+          requestData.scheduled_for = data.scheduledFor;
+        } else {
+          // Log ou tratamento para tipo inesperado de data.scheduledFor, se necessário
+          console.warn('Tipo inesperado para data.scheduledFor:', data.scheduledFor);
         }
-        
-        console.log(`Enviando lote ${batchIndex + 1}/${batches.length} com ${batchMessages.length} mensagens`);
+      }
+
+      // Função para enviar todas as mensagens de uma vez
+      const sendAdvancedMessage = async (requestData: CampaignProcessingData) => {
+        console.log('Enviando todas as', requestData.messages.length, 'mensagens de uma vez');
         
         // Validar estrutura antes do envio
         if (!requestData.messages || requestData.messages.length === 0) {
@@ -489,8 +484,8 @@ export const uazapiService = {
             const messageObj: any = {
               number: phone
             };
-              
-              // Define o tipo e conteúdo com base no tipo de mensagem
+            
+            // Define o tipo e conteúdo com base no tipo de mensagem
             if (firstMessage.file) {
               // Para mensagens com arquivo
               if (firstMessage.docName) {
@@ -611,47 +606,19 @@ export const uazapiService = {
       };
       
       try {
-        console.log(`Preparando envio de ${messages.length} mensagens em ${batches.length} lotes`);
+        console.log(`Preparando envio de ${messages.length} mensagens`);
         
         if (messages.length === 0) {
           throw new Error('Nenhuma mensagem válida para enviar.');
         }
         
-        // Enviar todos os lotes sequencialmente
-        const allResults = [];
-        let totalSent = 0;
+        // Preparar dados para o envio
         
-        for (let i = 0; i < batches.length; i++) {
-          try {
-            const batchResult = await sendBatch(batches[i], i);
-            allResults.push(batchResult);
-            totalSent += batches[i].length;
-            
-            // Atualizar progresso da campanha
-            const progress = Math.round((totalSent / messages.length) * 100);
-            activeCampaigns[campaignId].progress = progress;
-            activeCampaigns[campaignId].sent = totalSent;
-            
-            console.log(`Lote ${i + 1}/${batches.length} enviado com sucesso. Progresso: ${progress}%`);
-            
-            // Delay entre lotes para não sobrecarregar a API
-            if (i < batches.length - 1) {
-              console.log('Aguardando 2 segundos antes do próximo lote...');
-              await new Promise(resolve => setTimeout(resolve, 2000));
-            }
-          } catch (batchError) {
-            console.error(`Erro no lote ${i + 1}:`, batchError);
-            // Continuar com os próximos lotes mesmo se um falhar
-            allResults.push({ error: batchError, batchIndex: i });
-          }
-        }
+        // Enviar todas as mensagens de uma vez
+        const allResults = await sendAdvancedMessage(requestData);
         
         // Verificar se as mensagens foram agendadas ou enviadas imediatamente
         const isScheduled = data.scheduledFor && data.scheduledFor > Date.now();
-        
-        // Contar sucessos e falhas
-        const successfulBatches = allResults.filter(result => !result.error).length;
-        const failedBatches = allResults.filter(result => result.error).length;
         
         // Atualizar estatísticas da campanha baseado no resultado
         if (isScheduled) {
@@ -660,13 +627,16 @@ export const uazapiService = {
           activeCampaigns[campaignId].progress = 100; // Agendamento concluído
           activeCampaigns[campaignId].sent = 0; // Ainda não foi enviado
         } else {
-          // Se foi enviado imediatamente, verificar o resultado dos lotes
-          if (failedBatches === 0) {
+          // Se foi enviado imediatamente, verificar o resultado da API
+          const apiResponse = allResults;
+          const isSuccess = apiResponse && ((apiResponse as any).success || (apiResponse as any).status === 'success' || (apiResponse as any).message);
+          
+          if (isSuccess) {
             activeCampaigns[campaignId].status = 'completed';
-          } else if (successfulBatches === 0) {
-            activeCampaigns[campaignId].status = 'failed';
+            activeCampaigns[campaignId].sent = messages.length;
           } else {
-            activeCampaigns[campaignId].status = 'partial'; // Alguns lotes falharam
+            activeCampaigns[campaignId].status = 'failed';
+            activeCampaigns[campaignId].sent = 0;
           }
           activeCampaigns[campaignId].progress = 100;
         }
@@ -675,39 +645,28 @@ export const uazapiService = {
         const numbersForResults = messages.map((msg: any) => msg.number);
         activeCampaigns[campaignId].results = numbersForResults.map((number: string) => ({
           number,
-          success: !isScheduled && successfulBatches > 0,
-          data: allResults // Usar o resultado dos lotes
+          success: !isScheduled && allResults && ((allResults as any).success || (allResults as any).status === 'success'),
+          data: allResults // Usar o resultado da API
         }));
         
-        console.log(`Mensagens em massa processadas em ${batches.length} lotes:`, {
-          totalMessages: messages.length,
-          successfulBatches,
-          failedBatches,
-          totalSent
-        });
+        console.log(`Mensagem em massa enviada com sucesso via /sender/advanced:`, allResults);
         
         return {
-          success: failedBatches === 0,
-          message: failedBatches === 0 
-            ? `Todas as ${messages.length} mensagens enviadas com sucesso em ${batches.length} lotes!`
-            : `${successfulBatches}/${batches.length} lotes enviados com sucesso. ${totalSent}/${messages.length} mensagens enviadas.`,
+          success: true,
+          message: 'Mensagens enviadas com sucesso via endpoint /sender/advanced!',
           campaignId,
           results: allResults,
           endpoint: '/sender/advanced',
-          batches: batches.length,
-          totalSent,
-          successfulBatches,
-          failedBatches
+          batches: 1,
+          totalSent: messages.length
         };
-          
-        } catch (error) {
-        console.error('Erro ao enviar mensagens em massa:', error);
         
-        // Atualizar estatísticas em caso de erro geral
+      } catch (error) {
+        console.error('Erro ao enviar mensagem em massa:', error);
+        
+        // Atualizar estatísticas em caso de erro
         activeCampaigns[campaignId].errors = messages.length;
-        activeCampaigns[campaignId].status = 'failed';
-        activeCampaigns[campaignId].progress = 100;
-        
+        activeCampaigns[campaignId].status = 'cancelled'; // usado 'cancelled' em vez de 'failed'
         // Extrair números para resultados de erro
         const phoneNumbers = messages.map((msg: any) => msg.number);
         activeCampaigns[campaignId].results = phoneNumbers.map((number: string) => ({
@@ -765,8 +724,8 @@ export const uazapiService = {
           // Adicionar o timestamp de agendamento
           scheduledAt: data.scheduledFor
         };
-          
-          // Se for mídia, adicionar os campos necessários
+        
+        // Se for mídia, adicionar os campos necessários
         if (data.media) {
           // Detectar o tipo de mídia baseado no mimetype
           messageData.type = data.media.mimetype.startsWith('image') ? 'image' : 
@@ -936,7 +895,7 @@ export const uazapiService = {
           created: campaign.created,
           updated: campaign.updated
         };
-       });
+      });
     } catch (error) {
       console.error('Erro ao buscar campanhas da API:', error);
       return [];
