@@ -226,20 +226,8 @@ export const deleteMassCampaign = async (id: string): Promise<boolean> => {
   }
 };
 
-// Função para converter arquivo para base64 (para compatibilidade com API)
-export const fileToBase64 = (file: File): Promise<string> => {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.readAsDataURL(file);
-    reader.onload = () => {
-      const result = reader.result as string;
-      // Remove o prefixo "data:tipo/subtipo;base64,"
-      const base64 = result.split(',')[1];
-      resolve(base64);
-    };
-    reader.onerror = error => reject(error);
-  });
-};
+// Função removida: fileToBase64 - agora usamos URLs diretamente do Supabase
+// A mídia é enviada como URL em vez de base64 para melhor performance
 
 // ===== FUNÇÕES PARA LOGS DE ACESSO =====
 

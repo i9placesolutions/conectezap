@@ -161,7 +161,7 @@ export function DocumentationPage() {
       parameters: [
         { name: 'token', type: 'string', required: true, description: 'Token de autenticação da API' },
         { name: 'number', type: 'string', required: true, description: 'Número do destinatário no formato internacional (ex: 5511999999999)' },
-        { name: 'image', type: 'string', required: true, description: 'URL da imagem ou Base64' },
+        { name: 'image', type: 'string', required: true, description: 'URL da imagem' },
         { name: 'caption', type: 'string', required: false, description: 'Texto opcional para acompanhar a imagem' },
       ],
       requestExample: `fetch('https://api.uazapi.dev/api/v2/send/image', {
@@ -219,7 +219,7 @@ export function DocumentationPage() {
       parameters: [
         { name: 'token', type: 'string', required: true, description: 'Token de autenticação da API' },
         { name: 'number', type: 'string', required: true, description: 'Número do destinatário no formato internacional (ex: 5511999999999)' },
-        { name: 'audio', type: 'string', required: true, description: 'URL do áudio ou Base64' },
+        { name: 'audio', type: 'string', required: true, description: 'URL do áudio' },
         { name: 'ptt', type: 'boolean', required: false, description: 'Define se o áudio será enviado como mensagem de voz (true) ou como arquivo (false). Padrão: true' },
       ],
       requestExample: `fetch('https://api.uazapi.dev/api/v2/send/audio', {
