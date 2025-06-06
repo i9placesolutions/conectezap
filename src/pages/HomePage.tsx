@@ -1,22 +1,8 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { 
-  ArrowUp, 
-  ArrowDown, 
-  MessageCircle, 
-  Phone, 
-  Activity, 
-  CheckCircle, 
-  XCircle, 
-  BarChart3, 
-  TrendingUp, 
-  Clock, 
-  Target
-} from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { BarChart3, CheckCircle, XCircle, Clock, MessageCircle, Phone, Activity, ArrowUp, ArrowDown } from 'lucide-react';
 import { cn } from '../lib/utils';
-import { getInstances, getMessageStats } from '../lib/wapi/api';
 import { useAuth } from '../contexts/AuthContext';
-import { getUserCampaigns, MassCampaign } from '../lib/supabase';
+import { getInstances, getMessageStats } from '../lib/wapi/api';
 
 interface StatCardProps {
   title: string;
@@ -108,21 +94,14 @@ function BarChart({ data }: { data: ChartData[] }) {
 }
 
 export function HomePage() {
-  const [loading, setLoading] = useState(true);
   const { user } = useAuth();
-  const navigate = useNavigate();
+  const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({
     totalMessages: 0,
     deliveredMessages: 0,
     failedMessages: 0,
-    pendingMessages: 0,
-    activeInstances: 0,
-    totalInstances: 0,
-    messagesTrend: 12,
-    instancesTrend: 5
+    connectedInstances: 0
   });
-
-  const [recentActivity, setRecentActivity] = useState<any[]>([]);
 
   const messagesByHour: ChartData[] = [
     { label: '08:00', value: 245 },
@@ -138,87 +117,47 @@ export function HomePage() {
       try {
         setLoading(true);
         
-        // Buscar instâncias reais
-        const instances = await getInstances();
-        const activeInstances = instances.filter(instance => instance.status === 'connected').length;
-        
-        // Buscar estatísticas de mensagens reais
-        let messageStats = {
-          totalMessages: 0,
-          deliveredMessages: 0,
-          failedMessages: 0
-        };
-        
+        // Buscar estatísticas de instâncias e mensagens com tratamento de erro
         try {
-          messageStats = await getMessageStats();
-        } catch (messageError) {
-          console.warn('Erro ao buscar estatísticas de mensagens, usando dados padrão:', messageError);
-          // Usar dados padrão se não conseguir buscar
-          messageStats = {
-            totalMessages: instances.length * 50, // Estimativa baseada nas instâncias
-            deliveredMessages: instances.length * 45,
-            failedMessages: instances.length * 2
+          const instances = await getInstances();
+          const connectedInstances = instances.filter(instance => instance.status === 'connected').length;
+          
+          let messageStats = {
+            totalMessages: 0,
+            deliveredMessages: 0,
+            failedMessages: 0
           };
-        }
-        
-        const pendingMessages = Math.max(0, messageStats.totalMessages - messageStats.deliveredMessages - messageStats.failedMessages);
-        
-        setStats({
-          totalMessages: messageStats.totalMessages,
-          deliveredMessages: messageStats.deliveredMessages,
-          failedMessages: messageStats.failedMessages,
-          pendingMessages,
-          activeInstances,
-          totalInstances: instances.length,
-          messagesTrend: 12,
-          instancesTrend: activeInstances > 0 ? 5 : -2
-        });
-
-        // Buscar últimas 4 campanhas do usuário
-        if (user?.id) {
+          
           try {
-            const campaigns = await getUserCampaigns(user.id);
-            
-            // Debug: Log dos dados da API
-            console.log('Campanhas da API:', campaigns);
-            campaigns.forEach((campaign, index) => {
-              console.log(`Campanha ${index + 1}:`, {
-                name: campaign.campaign_name,
-                status: campaign.status,
-                created_at: campaign.created_at
-              });
-            });
-            
-            const recentCampaigns = campaigns.slice(0, 4).map((campaign: MassCampaign) => {
-               const timeAgo = getTimeAgo(new Date(campaign.created_at));
-               const status = getStatusFromCampaign(campaign.status);
-               
-               console.log(`Mapeando status: ${campaign.status} -> ${status}`);
-               
-               return {
-                 type: 'message',
-                 title: campaign.campaign_name,
-                 description: status,
-                 time: timeAgo,
-                 status: status
-               };
-             });
-            
-            setRecentActivity(recentCampaigns);
-          } catch (campaignError) {
-            console.warn('Erro ao buscar campanhas:', campaignError);
-            // Usar atividades padrão se não conseguir buscar campanhas
-            setRecentActivity([
-              {
-                type: 'message',
-                title: 'Sistema iniciado',
-                description: 'ConecteZap está funcionando normalmente',
-                time: 'Agora',
-                status: 'success'
-              }
-            ]);
+            messageStats = await getMessageStats();
+          } catch (messageError) {
+            console.warn('Erro ao buscar estatísticas de mensagens, usando dados padrão:', messageError);
+            // Usar dados padrão se houver erro de autenticação
+            messageStats = {
+              totalMessages: instances.length * 50,
+              deliveredMessages: instances.length * 45,
+              failedMessages: instances.length * 2
+            };
           }
+
+          setStats({
+            totalMessages: messageStats.totalMessages,
+            deliveredMessages: messageStats.deliveredMessages,
+            failedMessages: messageStats.failedMessages,
+            connectedInstances: connectedInstances
+          });
+        } catch (instanceError) {
+          console.warn('Erro ao buscar instâncias, usando dados padrão:', instanceError);
+          // Usar dados padrão se houver erro
+          setStats({
+            totalMessages: 100,
+            deliveredMessages: 85,
+            failedMessages: 5,
+            connectedInstances: 1
+          });
         }
+
+        // Remover busca de campanhas - seção removida do dashboard
       } catch (error) {
         console.error('Erro ao carregar estatísticas:', error);
         // Em caso de erro, usar dados padrão
@@ -226,13 +165,8 @@ export function HomePage() {
           totalMessages: 0,
           deliveredMessages: 0,
           failedMessages: 0,
-          pendingMessages: 0,
-          activeInstances: 0,
-          totalInstances: 0,
-          messagesTrend: 0,
-          instancesTrend: 0
+          connectedInstances: 0
         });
-        setRecentActivity([]);
       } finally {
         setLoading(false);
       }
@@ -241,31 +175,7 @@ export function HomePage() {
     loadStats();
   }, [user]);
 
-  // Função para calcular tempo decorrido
-  const getTimeAgo = (date: Date): string => {
-    const now = new Date();
-    const diffInMs = now.getTime() - date.getTime();
-    const diffInMinutes = Math.floor(diffInMs / (1000 * 60));
-    const diffInHours = Math.floor(diffInMs / (1000 * 60 * 60));
-    const diffInDays = Math.floor(diffInMs / (1000 * 60 * 60 * 24));
-    
-    if (diffInMinutes < 1) return 'Agora';
-    if (diffInMinutes < 60) return `${diffInMinutes} minuto${diffInMinutes > 1 ? 's' : ''} atrás`;
-    if (diffInHours < 24) return `${diffInHours} hora${diffInHours > 1 ? 's' : ''} atrás`;
-    return `${diffInDays} dia${diffInDays > 1 ? 's' : ''} atrás`;
-  };
 
-  // Função para mapear status da campanha
-  const getStatusFromCampaign = (status: string): string => {
-    switch (status) {
-      case 'completed': return 'Concluído';
-      case 'sending': return 'Em andamento';
-      case 'scheduled': return 'Agendado';
-      case 'pending': return 'Pendente';
-      case 'failed': return 'Falhou';
-      default: return status; // Retorna o status original se não encontrar mapeamento
-    }
-  };
 
   if (loading) {
     return (
@@ -283,14 +193,14 @@ export function HomePage() {
           title="Total de Mensagens"
           value={stats.totalMessages.toLocaleString()}
           icon={MessageCircle}
-          trend={{ value: stats.messagesTrend, isPositive: true }}
-          description={`${((stats.deliveredMessages / stats.totalMessages) * 100).toFixed(1)}% de taxa de entrega`}
+          trend={{ value: 12, isPositive: true }}
+          description={`${stats.totalMessages > 0 ? ((stats.deliveredMessages / stats.totalMessages) * 100).toFixed(1) : '0'}% de taxa de entrega`}
         />
         <StatCard
           title="Instâncias Conectadas"
-          value={`${stats.activeInstances}/${stats.totalInstances}`}
+          value={stats.connectedInstances.toString()}
           icon={Phone}
-          trend={{ value: stats.instancesTrend, isPositive: true }}
+          trend={{ value: 5, isPositive: true }}
           color="success"
         />
 
@@ -303,75 +213,19 @@ export function HomePage() {
         />
       </div>
 
-      {/* Charts and Activity Section */}
-      <div className="grid gap-6 lg:grid-cols-2">
-        {/* Message Volume Chart */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center justify-between mb-6">
-            <div>
-              <h2 className="text-lg font-semibold text-gray-900">Volume de Mensagens</h2>
-              <p className="text-sm text-gray-500">Mensagens enviadas por hora</p>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-gray-500">Hoje</span>
-              <BarChart3 className="h-5 w-5 text-gray-400" />
-            </div>
+      {/* Message Volume Chart */}
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900">Volume de Mensagens</h2>
+            <p className="text-sm text-gray-500">Mensagens enviadas por hora</p>
           </div>
-          <BarChart data={messagesByHour} />
-        </div>
-
-        {/* Recent Activity */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 cursor-pointer hover:shadow-md transition-shadow" onClick={() => navigate('/messages/reports')}>
-          <div className="flex items-center justify-between p-6 border-b border-gray-200">
-            <div>
-              <h2 className="text-lg font-semibold text-gray-900">Últimas Campanhas</h2>
-              <p className="text-sm text-gray-500">Clique para ver relatórios completos</p>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-gray-400">Ver todos</span>
-              <TrendingUp className="h-5 w-5 text-gray-400" />
-            </div>
-          </div>
-          <div className="divide-y divide-gray-200">
-            {recentActivity.length === 0 ? (
-              <div className="p-8 text-center">
-                <Target className="h-12 w-12 text-gray-300 mx-auto mb-3" />
-                <p className="text-gray-500 text-sm">Nenhuma campanha encontrada</p>
-                <p className="text-gray-400 text-xs mt-1">Crie sua primeira campanha para ver as estatísticas aqui</p>
-              </div>
-            ) : (
-              recentActivity.map((activity, index) => (
-                <div key={index} className="p-4 hover:bg-gray-50 transition-colors">
-                  <div className="flex items-start gap-3">
-                    <div className="flex-shrink-0 mt-0.5 rounded-full p-2 bg-gray-50">
-                      <Target className="h-5 w-5 text-gray-600" />
-                    </div>
-                    <div className="flex-1">
-                      <div className="flex items-center justify-between">
-                        <p className="font-medium text-gray-900">{activity.title}</p>
-                        <span className={cn(
-                          "px-2 py-1 text-xs font-medium rounded-full",
-                          activity.description === 'Concluído' ? 'bg-green-100 text-green-800' :
-                          activity.description === 'Em andamento' ? 'bg-blue-100 text-blue-800' :
-                          activity.description === 'Agendado' ? 'bg-yellow-100 text-yellow-800' :
-                          activity.description === 'Pendente' ? 'bg-orange-100 text-orange-800' :
-                          activity.description === 'Falhou' ? 'bg-red-100 text-red-800' :
-                          'bg-gray-100 text-gray-800'
-                        )}>
-                          {activity.description}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2 mt-2">
-                        <Clock className="h-3 w-3 text-gray-400" />
-                        <span className="text-xs text-gray-500">{activity.time}</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ))
-            )}
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-gray-500">Hoje</span>
+            <BarChart3 className="h-5 w-5 text-gray-400" />
           </div>
         </div>
+        <BarChart data={messagesByHour} />
       </div>
 
       {/* Summary Cards */}

@@ -350,28 +350,27 @@ export const uazapiService = {
       // Preparar array de mensagens para o endpoint /sender/advanced
       console.log('Iniciando preparação de mensagens para', numbers.length, 'números');
       
-      const messages = numbers.map((number: string, index: number) => {
-        // Log para debug em casos de muitos contatos
-        if (index < 5 || index % 100 === 0) {
-          console.log(`Preparando mensagem ${index + 1}/${numbers.length} para número:`, number);
+      // Nova estrutura: criar mensagens individuais para cada contato
+      // Determinar o tipo de mensagem com base na presença de mídia
+      let messageType = 'text';
+      if (mediaConfig) {
+        if (data.media?.mimetype.startsWith('image/')) {
+          messageType = 'image';
+        } else if (data.media?.mimetype.startsWith('video/')) {
+          messageType = 'video';
+        } else if (data.media?.mimetype.startsWith('audio/')) {
+          messageType = 'audio';
+        } else {
+          messageType = 'document';
         }
-        
-        // Determinar o tipo de mensagem com base na presença de mídia
-        let messageType = 'text';
-        if (mediaConfig) {
-          if (data.media?.mimetype.startsWith('image')) {
-            messageType = 'image';
-          } else if (data.media?.mimetype.startsWith('video')) {
-            messageType = 'video';
-          } else if (data.media?.mimetype.startsWith('audio')) {
-            messageType = 'audio';
-          } else {
-            messageType = 'document';
-          }
-        }
-        
+      }
+      
+      // Criar mensagens individuais para cada número
+      const messages: any[] = [];
+      
+      for (const number of numbers) {
         const message: any = {
-          number: number,
+          number: number, // Número individual
           type: messageType
         };
         
@@ -383,25 +382,27 @@ export const uazapiService = {
         // Se for mídia, adicionar configurações usando URL direta
         if (mediaConfig) {
           message.file = mediaConfig.file; // URL direta do Supabase
+          
           if (mediaConfig.docName && messageType === 'document') {
             message.docName = mediaConfig.docName;
           }
         }
         
-        return message;
-      });
+        messages.push(message);
+      }
       
       console.log('Mensagens preparadas para envio:', {
-        total: messages.length,
-        first3: messages.slice(0, 3).map((msg: any) => ({
-          number: msg.number,
-          type: msg.type,
-          hasText: !!msg.text,
-          hasFile: !!msg.file,
-          fileSize: msg.file ? msg.file.length : 0
-        })),
+        totalMessages: messages.length,
+        totalContacts: numbers.length,
+        messageStructure: {
+          type: messageType,
+          hasText: !!data.message,
+          hasFile: !!mediaConfig?.file,
+          firstNumber: messages[0]?.number ? messages[0].number.substring(0, 5) + '***' : 'N/A',
+          fileSize: mediaConfig?.file ? mediaConfig.file.length : 0
+        },
         hasValidMessages: messages.length > 0,
-        allHaveNumber: messages.every((msg: any) => msg.number),
+        allHaveNumbers: messages.every((msg: any) => msg.number && msg.number.length > 0),
         allHaveType: messages.every((msg: any) => msg.type)
       });
       
@@ -450,6 +451,12 @@ export const uazapiService = {
           if (!msg.number || !msg.type) {
             throw new Error(`Mensagem inválida: ${JSON.stringify(msg)}`);
           }
+          
+          // Validar formato do número (deve ter pelo menos 10 dígitos)
+          const cleanNumber = msg.number.replace(/\D/g, '');
+          if (cleanNumber.length < 10) {
+            throw new Error(`Número inválido: ${msg.number}`);
+          }
         }
         
         console.log('Enviando para /sender/advanced:', {
@@ -476,99 +483,66 @@ export const uazapiService = {
             ultimos5Numeros: phones.slice(-5)
           });
           
-          // Formato correto para o endpoint /sender/advanced - um objeto para cada número
-          const messages = [];
+          // Estratégia: Uma única campanha com todas as mensagens
+          // As mensagens já vêm individuais do sendMassMessage
+          const massMessages = requestData.messages;
           
-          // Criamos um objeto para cada número conforme o formato esperado
-          for (const phone of phones) {
-            const messageObj: any = {
-              number: phone
-            };
-            
-            // Define o tipo e conteúdo com base no tipo de mensagem
-            if (firstMessage.file) {
-              // Para mensagens com arquivo
-              if (firstMessage.docName) {
-                messageObj.type = "document";
-                messageObj.file = firstMessage.file;
-                messageObj.docName = firstMessage.docName;
-                if (firstMessage.text) {
-                  messageObj.text = firstMessage.text;
-                }
-              } else {
-                // Para imagens, vídeos, etc.
-                messageObj.type = "image"; // ou "video" dependendo do arquivo
-                messageObj.file = firstMessage.file;
-                if (firstMessage.text) {
-                  messageObj.text = firstMessage.text;
-                }
-              }
-            } else {
-              // Para mensagens de texto simples
-              messageObj.type = "text";
-              messageObj.text = firstMessage.text;
-            }
-            
-            messages.push(messageObj);
-          }
+          console.log(`Enviando ${massMessages.length} mensagens em uma única campanha`);
           
-          // Definindo o tipo para o payload incluindo scheduled_for opcional
-          // Define a interface para o payload avançado
+          // Definindo o tipo para o payload
           interface UazapiSenderAdvancedPayload {
             delayMin: number;
             delayMax: number;
             info: string;
-            messages: any[]; // Para melhor segurança de tipo, defina uma interface para os objetos de mensagem também
-            scheduled_for?: number; // A API espera um número (timestamp ou minutos de adiamento)
+            messages: any[];
+            scheduled_for?: number;
           }
           
-          // Payload final com o array de messages
-          // requestData.scheduled_for já foi processado e está no formato numérico correto (ou undefined)
-          const payload = {
+          // Construir o payload com todas as mensagens
+          const payload: UazapiSenderAdvancedPayload = {
             delayMin: requestData.delayMin || 1,
             delayMax: requestData.delayMax || 3,
-            info: requestData.info, // Já garantido como string pela interface CampaignProcessingData
-            messages: messages, 
-            scheduled_for: requestData.scheduled_for // Utiliza o valor já processado
-          } as UazapiSenderAdvancedPayload; // Cast explícito para UazapiSenderAdvancedPayload
+            info: requestData.info || 'Campanha ConecteZap',
+            messages: massMessages
+          };
           
-          console.log(`Enviando ${messages.length} mensagens via /sender/advanced`);
-          console.log('Estrutura do payload:', {
-            totalMessages: messages.length,
-            tipo: firstMessage.file ? (firstMessage.docName ? 'document' : 'image') : 'text',
-            primeiroDestinatario: messages[0]?.number,
-            ultimoDestinatario: messages[messages.length - 1]?.number,
-            delayMin: payload.delayMin,
-            delayMax: payload.delayMax
-          });
+          // Adicionar scheduled_for se estiver definido
+          if (requestData.scheduled_for) {
+            payload.scheduled_for = requestData.scheduled_for;
+          }
           
-          // Log do payload completo (sem mostrar números completos por segurança)
-          console.log('DEBUG - Payload sendo enviado:', {
+          console.log('Estrutura da campanha única:', {
+            totalMessages: massMessages.length,
+            totalContacts: phones.length,
+            tipo: massMessages[0]?.file ? (massMessages[0]?.docName ? 'document' : 'image') : 'text',
+            primeirosContatos: phones.slice(0, 3).map(p => p.substring(0, 5) + '***'),
+            primeirasMensagens: massMessages.slice(0, 3).map(msg => ({
+              number: msg.number.substring(0, 5) + '***',
+              type: msg.type,
+              hasText: !!msg.text,
+              hasFile: !!msg.file
+            })),
             delayMin: payload.delayMin,
             delayMax: payload.delayMax,
-            info: payload.info,
-            messagesCount: payload.messages.length,
-            firstMessageType: payload.messages[0]?.type,
-            firstMessageNumber: payload.messages[0]?.number,
-            lastMessageNumber: payload.messages[payload.messages.length - 1]?.number,
-            scheduled_for: payload.scheduled_for
+            scheduled_for: payload.scheduled_for || 'não agendado'
           });
           
           // Fazer a requisição para o endpoint /sender/advanced
           const response = await api.post('/sender/advanced', payload, {
             headers: {
-              'token': instanceToken,
-              'Content-Type': 'application/json'
+              'token': instanceToken
             },
-            timeout: 120000 // 2 minutos de timeout para grandes volumes
+            timeout: 300000 // 5 minutos de timeout para grandes volumes
           });
           
-          console.log('Resposta do servidor:', {
+          console.log('Campanha única enviada com sucesso:', {
             status: response.status,
+            folder_id: response.data?.folder_id,
+            count: response.data?.count,
             data: response.data
           });
           
-          return [response.data];
+          return response.data;
           
         } catch (error: any) {
           console.error('Erro detalhado no envio via /sender/advanced:', {
@@ -615,50 +589,46 @@ export const uazapiService = {
         // Preparar dados para o envio
         
         // Enviar todas as mensagens de uma vez
-        const allResults = await sendAdvancedMessage(requestData);
+        const result = await sendAdvancedMessage(requestData);
         
         // Verificar se as mensagens foram agendadas ou enviadas imediatamente
         const isScheduled = data.scheduledFor && data.scheduledFor > Date.now();
         
-        // Atualizar estatísticas da campanha baseado no resultado
+        // Atualizar estatísticas da campanha
         if (isScheduled) {
           // Se foi agendado, marcar como scheduled
           activeCampaigns[campaignId].status = 'scheduled';
           activeCampaigns[campaignId].progress = 100; // Agendamento concluído
           activeCampaigns[campaignId].sent = 0; // Ainda não foi enviado
         } else {
-          // Se foi enviado imediatamente, verificar o resultado da API
-          const apiResponse = allResults;
-          const isSuccess = apiResponse && ((apiResponse as any).success || (apiResponse as any).status === 'success' || (apiResponse as any).message);
-          
-          if (isSuccess) {
-            activeCampaigns[campaignId].status = 'completed';
-            activeCampaigns[campaignId].sent = messages.length;
-          } else {
-            activeCampaigns[campaignId].status = 'failed';
-            activeCampaigns[campaignId].sent = 0;
-          }
+          // Se foi enviado imediatamente, marcar como completed
+          activeCampaigns[campaignId].status = 'completed';
           activeCampaigns[campaignId].progress = 100;
+          activeCampaigns[campaignId].sent = messages.length;
         }
         
         // Extrair números para resultados
         const numbersForResults = messages.map((msg: any) => msg.number);
         activeCampaigns[campaignId].results = numbersForResults.map((number: string) => ({
           number,
-          success: !isScheduled && allResults && ((allResults as any).success || (allResults as any).status === 'success'),
-          data: allResults // Usar o resultado da API
+          success: !isScheduled && result && ((result as any).success || (result as any).status === 'success'),
+          data: result // Usar o resultado da API
         }));
         
-        console.log(`Mensagem em massa enviada com sucesso via /sender/advanced:`, allResults);
+        console.log(`Campanha única enviada com sucesso via /sender/advanced:`, {
+          folder_id: result.folder_id,
+          count: result.count,
+          status: result.status
+        });
         
         return {
           success: true,
-          message: 'Mensagens enviadas com sucesso via endpoint /sender/advanced!',
+          message: 'Campanha única enviada com sucesso via endpoint /sender/advanced!',
           campaignId,
-          results: allResults,
+          results: result,
           endpoint: '/sender/advanced',
-          batches: 1,
-          totalSent: messages.length
+          totalSent: messages.length,
+          folder_id: result.folder_id
         };
         
       } catch (error) {

@@ -34,4 +34,18 @@ export interface Message {
   sender: string;
   content: string;
   timestamp: string;
-} 
+}
+
+export interface MassMessageRequest {
+  delayMin: number;
+  delayMax: number;
+  info: string;
+  scheduled_for?: number;
+  contacts: string[]; // Array de contatos para enviar todos de uma vez
+  messages: {
+    type: string;
+    text?: string;
+    file?: string;
+    choices?: string[];
+  }[];
+}

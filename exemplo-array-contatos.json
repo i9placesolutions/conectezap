@@ -1,0 +1,41 @@
+{
+  "delayMin": 3,
+  "delayMax": 6,
+  "info": "Campanha ConecteZap - Exemplo",
+  "scheduled_for": 1,
+  "messages": [
+    {
+      "number": "5511999999999",
+      "type": "text",
+      "text": "Olá! Esta é uma mensagem de texto."
+    },
+    {
+      "number": "5511888888888",
+      "type": "text",
+      "text": "Olá! Esta é uma mensagem de texto."
+    },
+    {
+      "number": "5511777777777",
+      "type": "text",
+      "text": "Olá! Esta é uma mensagem de texto."
+    },
+    {
+      "number": "5511999999999",
+      "type": "image",
+      "text": "Aqui está uma imagem para você!",
+      "file": "https://example.com/image.jpg"
+    },
+    {
+      "number": "5511888888888",
+      "type": "image",
+      "text": "Aqui está uma imagem para você!",
+      "file": "https://example.com/image.jpg"
+    },
+    {
+      "number": "5511777777777",
+      "type": "image",
+      "text": "Aqui está uma imagem para você!",
+      "file": "https://example.com/image.jpg"
+    }
+  ]
+}

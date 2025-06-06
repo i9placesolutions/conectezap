@@ -62,6 +62,11 @@ export function MassMessagingPage() {
   const [scheduleDate, setScheduleDate] = useState('');
   const [scheduleTime, setScheduleTime] = useState('');
   
+  // Estado dos blocos
+  const [useBlocks, setUseBlocks] = useState(false);
+  const [blockSize, setBlockSize] = useState(50); // Quantidade de contatos por bloco
+  const [delayBetweenBlocks, setDelayBetweenBlocks] = useState(300); // Delay entre blocos em segundos (5 minutos)
+  
   // Estado dos destinatários
   const [selectedContacts, setSelectedContacts] = useState<Contact[]>([]);
   const [selectedGroups, setSelectedGroups] = useState<Group[]>([]);
@@ -278,44 +283,133 @@ export function MassMessagingPage() {
       console.log('Instância selecionada:', selectedInstance);
       console.log('Campanha salva:', savedCampaign);
       
-      // Chamar o serviço UAZAPI para enviar a mensagem em massa
-      const result = await uazapiService.sendMassMessage(selectedInstance.token, massMessageData);
+      // Mostrar mensagem de sucesso imediatamente e processar em segundo plano
+      toast.success('Campanha iniciada! O envio está sendo processado em segundo plano. Você pode acompanhar o progresso na página de relatórios.');
       
-      console.log('Resultado do envio:', result);
+      // Resetar o formulário imediatamente
+      setCurrentStep('recipients');
+      setSelectedContacts([]);
+      setSelectedGroups([]);
+      setMessageText('');
+      setCampaignName('');
+      setMediaFile(null);
+      setMediaPreview(null);
+      setSendMode('now');
+      setScheduleDate('');
+      setScheduleTime('');
+      setUseBlocks(false);
+      setCurrentCampaign(null);
       
-      if (result && result.success) {
-        // Atualizar status da campanha para completed
-        await updateMassCampaign(savedCampaign.id, {
-          status: 'completed',
-          sent_count: numbers.length
-        });
-        
-        toast.success('Campanha enviada com sucesso!');
-        
-        // Resetar o formulário
-        setCurrentStep('recipients');
-        setSelectedContacts([]);
-        setSelectedGroups([]);
-        setMessageText('');
-        setCampaignName('');
-        setMediaFile(null);
-        setMediaPreview(null);
-        setSendMode('now');
-        setScheduleDate('');
-        setScheduleTime('');
-        setCurrentCampaign(null);
-        
-        // Navegar para a página de relatórios para acompanhar a campanha
-        navigate('/messages/campaigns');
-      } else {
-        // Atualizar status da campanha para failed
-        await updateMassCampaign(savedCampaign.id, {
-          status: 'failed',
-          failed_count: numbers.length
-        });
-        
-        toast.error('Erro ao enviar campanha. Verifique os dados e tente novamente.');
-      }
+      // Navegar para a página de relatórios imediatamente
+      navigate('/messages/campaigns');
+      
+      // Processar envio em segundo plano
+      setTimeout(async () => {
+        try {
+          // Verificar se deve enviar em blocos
+          if (useBlocks && numbers.length > blockSize) {
+            // Dividir contatos em blocos
+            const blocks = [];
+            for (let i = 0; i < numbers.length; i += blockSize) {
+              blocks.push(numbers.slice(i, i + blockSize));
+            }
+            
+            console.log(`Enviando em ${blocks.length} blocos de até ${blockSize} contatos cada`);
+            
+            let totalSent = 0;
+            let totalFailed = 0;
+            const folderIds = [];
+            
+            // Enviar cada bloco
+            for (let blockIndex = 0; blockIndex < blocks.length; blockIndex++) {
+              const block = blocks[blockIndex];
+              const blockName = `${campaignName} - Bloco ${blockIndex + 1}/${blocks.length}`;
+              
+              try {
+                console.log(`Enviando bloco ${blockIndex + 1}/${blocks.length} com ${block.length} contatos`);
+                
+                const blockData = {
+                  ...massMessageData,
+                  campaignName: blockName,
+                  numbers: block
+                };
+                
+                const blockResult = await uazapiService.sendMassMessage(selectedInstance.token, blockData);
+                
+                if (blockResult && blockResult.success) {
+                  totalSent += block.length;
+                  if (blockResult.folder_id) {
+                    folderIds.push(blockResult.folder_id);
+                  }
+                  console.log(`Bloco ${blockIndex + 1} enviado com sucesso`);
+                } else {
+                  totalFailed += block.length;
+                  console.error(`Erro no bloco ${blockIndex + 1}:`, blockResult);
+                }
+                
+                // Aguardar delay entre blocos (exceto no último bloco)
+                if (blockIndex < blocks.length - 1) {
+                  console.log(`Aguardando ${delayBetweenBlocks} segundos antes do próximo bloco...`);
+                  await new Promise(resolve => setTimeout(resolve, delayBetweenBlocks * 1000));
+                }
+                
+              } catch (blockError) {
+                console.error(`Erro ao enviar bloco ${blockIndex + 1}:`, blockError);
+                totalFailed += block.length;
+              }
+            }
+            
+            // Atualizar status da campanha
+            const finalStatus = totalFailed === 0 ? 'completed' : totalSent > 0 ? 'completed' : 'failed';
+            if (savedCampaign?.id) {
+              await updateMassCampaign(savedCampaign.id, {
+                status: finalStatus,
+                sent_count: totalSent,
+                failed_count: totalFailed
+              });
+            }
+            
+            console.log(`Campanha em blocos finalizada: ${totalSent} enviados, ${totalFailed} falharam`);
+            
+          } else {
+            // Envio normal (sem blocos)
+            const result = await uazapiService.sendMassMessage(selectedInstance.token, massMessageData);
+            
+            console.log('Resultado do envio:', result);
+            
+            if (result && result.success) {
+              // Atualizar status da campanha para completed
+              if (savedCampaign?.id) {
+                  await updateMassCampaign(savedCampaign.id, {
+                  status: 'completed',
+                  sent_count: numbers.length
+                });
+              }
+              
+              console.log('Campanha enviada com sucesso em segundo plano');
+            } else {
+              // Atualizar status da campanha para failed
+              if (savedCampaign?.id) {
+                await updateMassCampaign(savedCampaign.id, {
+                  status: 'failed',
+                  failed_count: numbers.length
+                });
+              }
+              
+              console.error('Erro ao enviar campanha em segundo plano');
+            }
+          }
+        } catch (backgroundError) {
+          console.error('Erro no processamento em segundo plano:', backgroundError);
+          
+          // Atualizar status da campanha para failed
+          if (savedCampaign?.id) {
+            await updateMassCampaign(savedCampaign.id, {
+              status: 'failed'
+            });
+          }
+        }
+      }, 100); // Delay mínimo para garantir que a navegação aconteça primeiro
     } catch (error) {
       console.error('Erro ao enviar campanha:', error);
       
@@ -815,7 +909,100 @@ export function MassMessagingPage() {
                   </p>
                 </div>
                 
-                {/* Modo de envio */}
+                {/* Configuração de Blocos */}
+                <div className="mb-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-md font-medium text-gray-800">Envio em Blocos</h3>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={useBlocks}
+                        onChange={(e) => setUseBlocks(e.target.checked)}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600"></div>
+                    </label>
+                  </div>
+                  
+                  {useBlocks && (
+                    <div className="space-y-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                      {/* Tamanho do bloco */}
+                      <div>
+                        <div className="flex items-center justify-between mb-2">
+                          <label className="block text-sm font-medium text-gray-700">
+                            Contatos por bloco
+                          </label>
+                          <span className="text-sm font-medium text-primary-600">
+                            {blockSize} contatos
+                          </span>
+                        </div>
+                        <input
+                          type="range"
+                          min="10"
+                          max="500"
+                          step="10"
+                          value={blockSize}
+                          onChange={(e) => setBlockSize(Number(e.target.value))}
+                          className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-primary-600"
+                        />
+                        <div className="flex justify-between text-xs text-gray-500 mt-1">
+                          <span>Pequeno: 10</span>
+                          <span>Grande: 500</span>
+                        </div>
+                      </div>
+                      
+                      {/* Delay entre blocos */}
+                      <div>
+                        <div className="flex items-center justify-between mb-2">
+                          <label className="block text-sm font-medium text-gray-700">
+                            Intervalo entre blocos
+                          </label>
+                          <span className="text-sm font-medium text-primary-600">
+                            {Math.floor(delayBetweenBlocks / 60)}min {delayBetweenBlocks % 60}s
+                          </span>
+                        </div>
+                        <input
+                          type="range"
+                          min="60"
+                          max="3600"
+                          step="60"
+                          value={delayBetweenBlocks}
+                          onChange={(e) => setDelayBetweenBlocks(Number(e.target.value))}
+                          className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-primary-600"
+                        />
+                        <div className="flex justify-between text-xs text-gray-500 mt-1">
+                          <span>Rápido: 1min</span>
+                          <span>Lento: 60min</span>
+                        </div>
+                      </div>
+                      
+                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                        <div className="flex items-start">
+                          <Info className="h-4 w-4 text-blue-500 mt-0.5 mr-2 flex-shrink-0" />
+                          <div className="text-xs text-blue-700">
+                            <p className="font-medium mb-1">Como funciona o envio em blocos:</p>
+                            <ul className="space-y-1 text-xs">
+                              <li>• Seus contatos serão divididos em grupos menores</li>
+                              <li>• Cada bloco será enviado como uma campanha separada</li>
+                              <li>• Haverá um intervalo entre o envio de cada bloco</li>
+                              <li>• Isso ajuda a evitar limitações do WhatsApp</li>
+                            </ul>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      {getTotalRecipients() > 0 && (
+                        <div className="text-sm text-gray-600">
+                          <strong>Resumo:</strong> {getTotalRecipients()} contatos serão divididos em{' '}
+                          <strong>{Math.ceil(getTotalRecipients() / blockSize)} blocos</strong> de até{' '}
+                          <strong>{blockSize} contatos</strong> cada.
+                        </div>
+                      )}
+                     </div>
+                   )}
+                 </div>
+                 
+                 {/* Modo de envio */}
                 <div className="mb-6">
                   <label className="block text-sm font-medium text-gray-700 mb-3">
                     Modo de Envio
@@ -951,6 +1138,42 @@ export function MassMessagingPage() {
                             {new Date(`${scheduleDate}T${scheduleTime}`).toLocaleString('pt-BR')}
                           </span>
                         </div>
+                      )}
+                      
+                      {useBlocks && (
+                        <>
+                          <div className="flex justify-between">
+                            <span className="text-gray-600">Envio em Blocos:</span>
+                            <span className="font-medium text-blue-600">Ativado</span>
+                          </div>
+                          
+                          <div className="flex justify-between">
+                            <span className="text-gray-600">Contatos por Bloco:</span>
+                            <span className="font-medium">{blockSize}</span>
+                          </div>
+                          
+                          <div className="flex justify-between">
+                            <span className="text-gray-600">Número de Blocos:</span>
+                            <span className="font-medium">{Math.ceil(getTotalRecipients() / blockSize)}</span>
+                          </div>
+                          
+                          <div className="flex justify-between">
+                            <span className="text-gray-600">Intervalo entre Blocos:</span>
+                            <span className="font-medium">
+                              {Math.floor(delayBetweenBlocks / 60)}min {delayBetweenBlocks % 60}s
+                            </span>
+                          </div>
+                          
+                          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mt-4">
+                            <div className="flex items-start">
+                              <Info className="h-4 w-4 text-blue-500 mt-0.5 mr-2 flex-shrink-0" />
+                              <div className="text-sm text-blue-700">
+                                <p className="font-medium mb-1">Envio em Blocos Configurado</p>
+                                <p>Seus {getTotalRecipients()} contatos serão divididos em {Math.ceil(getTotalRecipients() / blockSize)} blocos. Cada bloco será enviado como uma campanha separada no WhatsApp, com intervalo de {Math.floor(delayBetweenBlocks / 60)} minutos entre eles.</p>
+                              </div>
+                            </div>
+                          </div>
+                        </>
                       )}
                     </div>
                   </div>
