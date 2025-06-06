@@ -405,45 +405,45 @@ export const uazapiService = {
         allHaveType: messages.every((msg: any) => msg.type)
       });
       
-      // Função para enviar todas as mensagens de uma vez
-      const sendAllMessages = async (allMessages: any[]) => {
-        console.log('Enviando todas as', allMessages.length, 'mensagens de uma vez');
-        
-        // URLs não precisam de validação de tamanho como base64
-        // O arquivo já está armazenado no Supabase
-        const limitedMessages = allMessages.map(msg => {
-          // Clonar o objeto para não modificar o original
-          const newMsg = {...msg};
-          return newMsg;
-        });
+      // URLs não precisam de validação de tamanho como base64
+      // O arquivo já está armazenado no Supabase
+      const limitedMessages = messages.map(msg => {
+        // Clonar o objeto para não modificar o original
+        const newMsg = {...msg};
+        return newMsg;
+      });
 
-        interface CampaignProcessingData {
-          delayMin: number;
-          delayMax: number;
-          info: string;
-          messages: any[]; // Idealmente, tipar os objetos de mensagem aqui também
-          scheduled_for?: number;
+      interface CampaignProcessingData {
+        delayMin: number;
+        delayMax: number;
+        info: string;
+        messages: any[]; // Idealmente, tipar os objetos de mensagem aqui também
+        scheduled_for?: number;
+      }
+      
+      const requestData: CampaignProcessingData = {
+        delayMin: minDelay,
+        delayMax: maxDelay,
+        info: data.campaignName || 'Campanha ConecteZap',
+        messages: limitedMessages
+        // scheduled_for será undefined por padrão, o que é ok para opcional
+      };
+      
+      // Se for agendada, processar e adicionar o timestamp (em milissegundos)
+      if (data.scheduledFor) {
+        if (data.scheduledFor instanceof Date) {
+          requestData.scheduled_for = data.scheduledFor.getTime();
+        } else if (typeof data.scheduledFor === 'number') {
+          requestData.scheduled_for = data.scheduledFor;
+        } else {
+          // Log ou tratamento para tipo inesperado de data.scheduledFor, se necessário
+          console.warn('Tipo inesperado para data.scheduledFor:', data.scheduledFor);
         }
-        
-        const requestData: CampaignProcessingData = {
-          delayMin: minDelay,
-          delayMax: maxDelay,
-          info: data.campaignName || 'Campanha ConecteZap',
-          messages: limitedMessages
-          // scheduled_for será undefined por padrão, o que é ok para opcional
-        };
-        
-        // Se for agendada, processar e adicionar o timestamp (em milissegundos)
-        if (data.scheduledFor) {
-          if (data.scheduledFor instanceof Date) {
-            requestData.scheduled_for = data.scheduledFor.getTime();
-          } else if (typeof data.scheduledFor === 'number') {
-            requestData.scheduled_for = data.scheduledFor;
-          } else {
-            // Log ou tratamento para tipo inesperado de data.scheduledFor, se necessário
-            console.warn('Tipo inesperado para data.scheduledFor:', data.scheduledFor);
-          }
-        }
+      }
+
+      // Função para enviar todas as mensagens de uma vez
+      const sendAdvancedMessage = async (requestData: CampaignProcessingData) => {
+        console.log('Enviando todas as', requestData.messages.length, 'mensagens de uma vez');
         
         // Validar estrutura antes do envio
         if (!requestData.messages || requestData.messages.length === 0) {
