@@ -333,7 +333,7 @@ export const uazapiService = {
       // Preparar dados de mídia uma única vez para evitar duplicação
       let mediaConfig: any = null;
       if (data.media) {
-        // Usar URL diretamente em vez de converter para base64
+        // Usar URL diretamente do Supabase
         mediaConfig = {
           file: data.media.data, // URL direta do Supabase
           docName: data.media.filename || undefined,
@@ -380,9 +380,9 @@ export const uazapiService = {
           message.text = data.message;
         }
         
-        // Se for mídia, adicionar configurações usando base64
+        // Se for mídia, adicionar configurações usando URL direta
         if (mediaConfig) {
-          message.file = mediaConfig.file; // Já está em formato base64 com data URL
+          message.file = mediaConfig.file; // URL direta do Supabase
           if (mediaConfig.docName && messageType === 'document') {
             message.docName = mediaConfig.docName;
           }
@@ -409,25 +409,11 @@ export const uazapiService = {
       const sendAllMessages = async (allMessages: any[]) => {
         console.log('Enviando todas as', allMessages.length, 'mensagens de uma vez');
         
-        // Validar e limitar tamanho das mensagens com base64
+        // URLs não precisam de validação de tamanho como base64
+        // O arquivo já está armazenado no Supabase
         const limitedMessages = allMessages.map(msg => {
           // Clonar o objeto para não modificar o original
           const newMsg = {...msg};
-          
-          // Verificar se há imagem/arquivo em base64 e limitar tamanho
-          if (newMsg.file && typeof newMsg.file === 'string') {
-            const base64Size = (newMsg.file.length * 3) / 4 / (1024 * 1024); // Tamanho em MB
-            if (base64Size > 8) { // Limitar a 8MB
-              console.warn(`Arquivo muito grande (${base64Size.toFixed(2)}MB) para o número ${newMsg.number}. Será limitado.`);
-              // Se for uma imagem, reduzir qualidade (truncando a string)
-              if (newMsg.file.includes('image/')) {
-                const maxLength = 1024 * 1024 * 4; // Aproximadamente 4MB em base64
-                if (newMsg.file.length > maxLength) {
-                  newMsg.file = newMsg.file.substring(0, maxLength);
-                  console.warn(`Imagem truncada para ${newMsg.number}`); 
-                }
-              }
-            }
           }
           return newMsg;
         });
@@ -752,12 +738,8 @@ export const uazapiService = {
                            data.media.mimetype.startsWith('video') ? 'video' : 
                            data.media.mimetype.startsWith('audio') ? 'audio' : 'document';
           
-          // Para mídia, a API espera uma URL ou um arquivo base64 prefixado
-          if (data.media.data.startsWith('data:')) {
-            messageData.file = data.media.data;
-          } else {
-            messageData.file = `data:${data.media.mimetype};base64,${data.media.data}`;
-          }
+          // Para mídia, usar URL diretamente do Supabase
+          messageData.file = data.media.data; // URL direta do Supabase
           
           // Para documentos, adicionar nome do arquivo
           if (messageData.type === 'document' && data.media.filename) {

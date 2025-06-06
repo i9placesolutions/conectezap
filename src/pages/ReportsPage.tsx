@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Download, RefreshCw, Calendar, BarChart3, MessageSquare, Users, ArrowUp, ArrowDown, Mail, X, Phone, Play, Pause, Trash2 } from 'lucide-react';
+import { Search, Download, RefreshCw, Calendar, BarChart3, MessageSquare, Users, ArrowUp, ArrowDown, Mail, X, Smartphone, Play, Pause, Trash2 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { generatePDF } from '../lib/pdf';
 import { format } from 'date-fns';
@@ -99,6 +99,10 @@ export function ReportsPage() {
   const [dateRange, setDateRange] = useState<[string, string]>(['', '']);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [selectedStatus, setSelectedStatus] = useState<'all' | 'completed' | 'running' | 'failed'>('all');
+  
+  // Estados para paginação
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
   
   // Estados do modal de instâncias
   const [showInstanceModal, setShowInstanceModal] = useState(false);
@@ -332,10 +336,33 @@ export function ReportsPage() {
   }, []);
 
   const filteredReports = reports.filter(report => {
-    const matchesSearch = report.campaign.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus = selectedStatus === 'all' || report.status === selectedStatus;
-    return matchesSearch && matchesStatus;
+    const matchesSearch = report.campaign.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         (report.info && report.info.toLowerCase().includes(searchTerm.toLowerCase()));
+    
+    const matchesStatus = selectedStatus === 'all' || 
+                         (selectedStatus === 'completed' && (report.status === 'completed' || report.status === 'ativo')) ||
+                         (selectedStatus === 'running' && report.status === 'running') ||
+                         (selectedStatus === 'failed' && report.status === 'failed');
+    
+    const matchesDateRange = !dateRange[0] || !dateRange[1] || 
+                            (report.date && report.date >= dateRange[0] && report.date <= dateRange[1]) ||
+                            (report.created && 
+                             new Date(report.created).toISOString().split('T')[0] >= dateRange[0] && 
+                             new Date(report.created).toISOString().split('T')[0] <= dateRange[1]);
+    
+    return matchesSearch && matchesStatus && matchesDateRange;
   });
+
+  // Lógica de paginação
+  const totalPages = Math.ceil(filteredReports.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedReports = filteredReports.slice(startIndex, endIndex);
+
+  // Resetar página quando filtros mudarem
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, selectedStatus, dateRange]);
 
   const totalMessages = reports.reduce((sum, report) => sum + report.total, 0);
   const totalDelivered = reports.reduce((sum, report) => sum + report.delivered, 0);
@@ -431,7 +458,7 @@ export function ReportsPage() {
             className="p-2 text-gray-600 hover:text-primary-600 rounded-lg hover:bg-primary-50"
             title="Selecionar Instância"
           >
-            <Phone className="h-5 w-5" />
+            <Smartphone className="h-5 w-5" />
           </button>
         </div>
       </div>
@@ -475,14 +502,14 @@ export function ReportsPage() {
         
         {!selectedInstance ? (
           <div className="p-12 text-center">
-            <Phone className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+            <Smartphone className="h-12 w-12 text-gray-400 mx-auto mb-4" />
             <h3 className="text-lg font-medium text-gray-900 mb-2">Nenhuma instância selecionada</h3>
             <p className="text-gray-500 mb-4">Selecione uma instância para visualizar os relatórios de campanhas</p>
             <button
               onClick={handleOpenInstanceModal}
               className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
             >
-              <Phone className="h-4 w-4" />
+              <Smartphone className="h-4 w-4" />
               Selecionar Instância
             </button>
           </div>
@@ -513,71 +540,63 @@ export function ReportsPage() {
             )}
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="overflow-hidden">
             <table className="w-full">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20">
                     ID
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-48">
                     Campanha/Info
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24">
                     Status
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Agendamento
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Delay (ms)
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-16">
                     Total
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20">
                     Sucesso
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20">
                     Entregues
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-16">
                     Lidas
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Reproduzidas
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20">
                     Falhadas
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Proprietário
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24">
                     Criado
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Atualizado
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24">
                     Ações
                   </th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {filteredReports.map((report) => (
+                {paginatedReports.map((report) => (
                   <tr key={report.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-4 whitespace-nowrap">
-                      <div className="text-xs font-mono text-gray-600">{report.id}</div>
+                    <td className="px-3 py-4 whitespace-nowrap">
+                      <div className="text-xs font-mono text-gray-600 truncate" title={report.id}>
+                        {report.id}
+                      </div>
                     </td>
-                    <td className="px-4 py-4">
-                      <div className="text-sm font-medium text-gray-900">{report.campaign}</div>
-                      {/* Mostrar info adicional se disponível */}
-                      {report.info && (
-                        <div className="text-xs text-gray-500 mt-1">{report.info}</div>
-                      )}
+                    <td className="px-3 py-4 w-48">
+                      <div className="max-w-[180px]">
+                        <div className="text-sm font-medium text-gray-900 truncate" title={report.campaign}>
+                          {report.campaign}
+                        </div>
+                        {report.info && (
+                          <div className="text-xs text-gray-500 mt-1 truncate" title={report.info}>
+                            {report.info}
+                          </div>
+                        )}
+                      </div>
                     </td>
-                    <td className="px-4 py-4 whitespace-nowrap">
+                    <td className="px-3 py-4 whitespace-nowrap">
                       <span className={cn(
                         "px-2 py-1 text-xs font-medium rounded-full",
                         report.status === 'completed' || report.status === 'ativo' ? 'bg-green-100 text-green-800' :
@@ -596,91 +615,50 @@ export function ReportsPage() {
                          report.status === 'ativo' ? 'Ativo' : 'Desconhecido'}
                       </span>
                     </td>
-                    <td className="px-4 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">
-                        {report.scheduledFor ? (
-                          <div>
-                            <div>{format(new Date(report.scheduledFor), 'dd/MM/yyyy', { locale: ptBR })}</div>
-                            <div className="text-xs text-gray-500">
-                              {format(new Date(report.scheduledFor), 'HH:mm:ss', { locale: ptBR })}
-                            </div>
-                          </div>
-                        ) : (
-                          <span className="text-xs text-gray-400">Imediato</span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-4 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">
-                        {report.delayMin && report.delayMax ? (
-                          <div>
-                            <div className="text-xs">Min: {report.delayMin}</div>
-                            <div className="text-xs">Max: {report.delayMax}</div>
-                          </div>
-                        ) : (
-                          <span className="text-xs text-gray-400">-</span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-4 py-4 whitespace-nowrap">
+                    <td className="px-3 py-4 whitespace-nowrap">
                       <div className="text-sm text-gray-900">{(report.log_total || report.total || 0).toLocaleString()}</div>
                     </td>
-                    <td className="px-4 py-4 whitespace-nowrap">
+                    <td className="px-3 py-4 whitespace-nowrap">
                       <div className="text-sm text-gray-900">
                         {(report.log_sucess || report.successCount || 0).toLocaleString()}
                         {(report.log_total || report.total) > 0 && (
-                          <span className="ml-1 text-xs text-gray-500">
+                          <div className="text-xs text-gray-500">
                             ({(((report.log_sucess || report.successCount || 0) / (report.log_total || report.total || 1)) * 100).toFixed(1)}%)
-                          </span>
+                          </div>
                         )}
                       </div>
                     </td>
-                    <td className="px-4 py-4 whitespace-nowrap">
+                    <td className="px-3 py-4 whitespace-nowrap">
                       <div className="text-sm text-gray-900">
                         {(report.log_delivered || report.delivered || 0).toLocaleString()}
                         {(report.log_total || report.total) > 0 && (
-                          <span className="ml-1 text-xs text-gray-500">
+                          <div className="text-xs text-gray-500">
                             ({(((report.log_delivered || report.delivered || 0) / (report.log_total || report.total || 1)) * 100).toFixed(1)}%)
-                          </span>
+                          </div>
                         )}
                       </div>
                     </td>
-                    <td className="px-4 py-4 whitespace-nowrap">
+                    <td className="px-3 py-4 whitespace-nowrap">
                       <div className="text-sm text-gray-900">
                         {(report.log_read || report.read || 0).toLocaleString()}
                         {(report.log_total || report.total) > 0 && (
-                          <span className="ml-1 text-xs text-gray-500">
+                          <div className="text-xs text-gray-500">
                             ({(((report.log_read || report.read || 0) / (report.log_total || report.total || 1)) * 100).toFixed(1)}%)
-                          </span>
+                          </div>
                         )}
                       </div>
                     </td>
-                    <td className="px-4 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">
-                        {(report.log_played || 0).toLocaleString()}
-                        {(report.log_total || report.total) > 0 && report.log_played && (
-                          <span className="ml-1 text-xs text-gray-500">
-                            ({((report.log_played / (report.log_total || report.total || 1)) * 100).toFixed(1)}%)
-                          </span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-4 py-4 whitespace-nowrap">
+                    <td className="px-3 py-4 whitespace-nowrap">
                       <div className="text-sm text-gray-900">
                         {(report.log_failed || report.failed || report.errorCount || 0).toLocaleString()}
                         {(report.log_total || report.total) > 0 && (
-                          <span className="ml-1 text-xs text-gray-500">
+                          <div className="text-xs text-gray-500">
                             ({(((report.log_failed || report.failed || report.errorCount || 0) / (report.log_total || report.total || 1)) * 100).toFixed(1)}%)
-                          </span>
+                          </div>
                         )}
                       </div>
                     </td>
-                    <td className="px-4 py-4 whitespace-nowrap">
-                      <div className="text-xs text-gray-600">
-                        {report.owner || selectedInstance?.name || '-'}
-                      </div>
-                    </td>
-                    <td className="px-4 py-4 whitespace-nowrap">
+                    <td className="px-3 py-4 whitespace-nowrap">
                       <div className="text-sm text-gray-900">
                         {report.created ? (
                           <div>
@@ -701,22 +679,8 @@ export function ReportsPage() {
                         )}
                       </div>
                     </td>
-                    <td className="px-4 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">
-                        {report.updated ? (
-                          <div>
-                            <div>{format(new Date(report.updated), 'dd/MM/yyyy', { locale: ptBR })}</div>
-                            <div className="text-xs text-gray-500">
-                              {format(new Date(report.updated), 'HH:mm:ss', { locale: ptBR })}
-                            </div>
-                          </div>
-                        ) : (
-                          <span className="text-xs text-gray-400">-</span>
-                        )}  
-                      </div>
-                    </td>
-                    <td className="px-4 py-4 whitespace-nowrap">
-                      <div className="flex items-center gap-2">
+                    <td className="px-3 py-4 whitespace-nowrap">
+                      <div className="flex items-center gap-1">
                         {(report.status === 'running' || report.status === 'ativo') && (
                           <>
                             <button
@@ -725,7 +689,6 @@ export function ReportsPage() {
                               title="Parar campanha"
                             >
                               <Pause className="h-3 w-3" />
-                              Parar
                             </button>
                             <button
                               onClick={() => handleDeleteCampaign(report.id)}
@@ -733,7 +696,6 @@ export function ReportsPage() {
                               title="Deletar campanha"
                             >
                               <Trash2 className="h-3 w-3" />
-                              Deletar
                             </button>
                           </>
                         )}
@@ -745,7 +707,6 @@ export function ReportsPage() {
                               title="Continuar campanha"
                             >
                               <Play className="h-3 w-3" />
-                              Continuar
                             </button>
                             <button
                               onClick={() => handleDeleteCampaign(report.id)}
@@ -753,7 +714,6 @@ export function ReportsPage() {
                               title="Deletar campanha"
                             >
                               <Trash2 className="h-3 w-3" />
-                              Deletar
                             </button>
                           </>
                         )}
@@ -764,7 +724,6 @@ export function ReportsPage() {
                             title="Deletar campanha"
                           >
                             <Trash2 className="h-3 w-3" />
-                            Deletar
                           </button>
                         )}
                         {report.status === 'scheduled' && (
@@ -774,7 +733,6 @@ export function ReportsPage() {
                             title="Deletar campanha"
                           >
                             <Trash2 className="h-3 w-3" />
-                            Deletar
                           </button>
                         )}
                       </div>
@@ -783,6 +741,50 @@ export function ReportsPage() {
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
+        
+        {/* Controles de Paginação */}
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between px-6 py-3 bg-white border-t border-gray-200">
+            <div className="flex items-center text-sm text-gray-700">
+              <span>
+                Mostrando {startIndex + 1} a {Math.min(endIndex, filteredReports.length)} de {filteredReports.length} resultados
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                disabled={currentPage === 1}
+                className="px-3 py-1 text-sm font-medium text-gray-500 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Anterior
+              </button>
+              
+              <div className="flex items-center gap-1">
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+                  <button
+                    key={page}
+                    onClick={() => setCurrentPage(page)}
+                    className={`px-3 py-1 text-sm font-medium rounded-md ${
+                      currentPage === page
+                        ? 'bg-blue-600 text-white'
+                        : 'text-gray-500 bg-white border border-gray-300 hover:bg-gray-50'
+                    }`}
+                  >
+                    {page}
+                  </button>
+                ))}
+              </div>
+              
+              <button
+                onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                disabled={currentPage === totalPages}
+                className="px-3 py-1 text-sm font-medium text-gray-500 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Próximo
+              </button>
+            </div>
           </div>
         )}
       </div>

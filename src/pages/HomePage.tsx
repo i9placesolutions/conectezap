@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { 
   ArrowUp, 
   ArrowDown, 
@@ -11,11 +12,14 @@ import {
   TrendingUp, 
   Clock, 
   AlertTriangle,
-  CreditCard
+  CreditCard,
+  Users,
+  Target
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { getInstances, getMessageStats } from '../lib/wapi/api';
 import { useAuth } from '../contexts/AuthContext';
+import { getUserCampaigns, MassCampaign } from '../lib/supabase';
 
 interface StatCardProps {
   title: string;
@@ -109,6 +113,7 @@ function BarChart({ data }: { data: ChartData[] }) {
 export function HomePage() {
   const [loading, setLoading] = useState(true);
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [stats, setStats] = useState({
     totalMessages: 0,
     deliveredMessages: 0,
@@ -120,29 +125,7 @@ export function HomePage() {
     instancesTrend: 5
   });
 
-  const [recentActivity] = useState([
-    {
-      type: 'message',
-      title: 'Campanha enviada',
-      description: 'Campanha "Promoção de Janeiro" concluída com sucesso',
-      time: '5 minutos atrás',
-      status: 'success'
-    },
-    {
-      type: 'instance',
-      title: 'Nova instância conectada',
-      description: 'Instância "Suporte" foi conectada com sucesso',
-      time: '10 minutos atrás',
-      status: 'success'
-    },
-    {
-      type: 'payment',
-      title: 'Nova assinatura',
-      description: 'Cliente "João Silva" assinou o plano Pro',
-      time: '30 minutos atrás',
-      status: 'success'
-    }
-  ]);
+  const [recentActivity, setRecentActivity] = useState<any[]>([]);
 
   const messagesByHour: ChartData[] = [
     { label: '08:00', value: 245 },
@@ -193,6 +176,52 @@ export function HomePage() {
           messagesTrend: 12,
           instancesTrend: activeInstances > 0 ? 5 : -2
         });
+
+        // Buscar últimas 4 campanhas do usuário
+        if (user?.id) {
+          try {
+            const campaigns = await getUserCampaigns(user.id);
+            
+            // Debug: Log dos dados da API
+            console.log('Campanhas da API:', campaigns);
+            campaigns.forEach((campaign, index) => {
+              console.log(`Campanha ${index + 1}:`, {
+                name: campaign.campaign_name,
+                status: campaign.status,
+                created_at: campaign.created_at
+              });
+            });
+            
+            const recentCampaigns = campaigns.slice(0, 4).map((campaign: MassCampaign) => {
+               const timeAgo = getTimeAgo(new Date(campaign.created_at));
+               const status = getStatusFromCampaign(campaign.status);
+               
+               console.log(`Mapeando status: ${campaign.status} -> ${status}`);
+               
+               return {
+                 type: 'message',
+                 title: campaign.campaign_name,
+                 description: status,
+                 time: timeAgo,
+                 status: status
+               };
+             });
+            
+            setRecentActivity(recentCampaigns);
+          } catch (campaignError) {
+            console.warn('Erro ao buscar campanhas:', campaignError);
+            // Usar atividades padrão se não conseguir buscar campanhas
+            setRecentActivity([
+              {
+                type: 'message',
+                title: 'Sistema iniciado',
+                description: 'ConecteZap está funcionando normalmente',
+                time: 'Agora',
+                status: 'success'
+              }
+            ]);
+          }
+        }
       } catch (error) {
         console.error('Erro ao carregar estatísticas:', error);
         // Em caso de erro, usar dados padrão
@@ -206,6 +235,7 @@ export function HomePage() {
           messagesTrend: 0,
           instancesTrend: 0
         });
+        setRecentActivity([]);
       } finally {
         setLoading(false);
       }
@@ -213,6 +243,32 @@ export function HomePage() {
 
     loadStats();
   }, [user]);
+
+  // Função para calcular tempo decorrido
+  const getTimeAgo = (date: Date): string => {
+    const now = new Date();
+    const diffInMs = now.getTime() - date.getTime();
+    const diffInMinutes = Math.floor(diffInMs / (1000 * 60));
+    const diffInHours = Math.floor(diffInMs / (1000 * 60 * 60));
+    const diffInDays = Math.floor(diffInMs / (1000 * 60 * 60 * 24));
+    
+    if (diffInMinutes < 1) return 'Agora';
+    if (diffInMinutes < 60) return `${diffInMinutes} minuto${diffInMinutes > 1 ? 's' : ''} atrás`;
+    if (diffInHours < 24) return `${diffInHours} hora${diffInHours > 1 ? 's' : ''} atrás`;
+    return `${diffInDays} dia${diffInDays > 1 ? 's' : ''} atrás`;
+  };
+
+  // Função para mapear status da campanha
+  const getStatusFromCampaign = (status: string): string => {
+    switch (status) {
+      case 'completed': return 'Concluído';
+      case 'sending': return 'Em andamento';
+      case 'scheduled': return 'Agendado';
+      case 'pending': return 'Pendente';
+      case 'failed': return 'Falhou';
+      default: return status; // Retorna o status original se não encontrar mapeamento
+    }
+  };
 
   if (loading) {
     return (
@@ -268,77 +324,55 @@ export function HomePage() {
         </div>
 
         {/* Recent Activity */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 cursor-pointer hover:shadow-md transition-shadow" onClick={() => navigate('/messages/reports')}>
           <div className="flex items-center justify-between p-6 border-b border-gray-200">
             <div>
-              <h2 className="text-lg font-semibold text-gray-900">Atividade Recente</h2>
-              <p className="text-sm text-gray-500">Últimas ações no sistema</p>
+              <h2 className="text-lg font-semibold text-gray-900">Últimas Campanhas</h2>
+              <p className="text-sm text-gray-500">Clique para ver relatórios completos</p>
             </div>
-            <TrendingUp className="h-5 w-5 text-gray-400" />
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-gray-400">Ver todos</span>
+              <TrendingUp className="h-5 w-5 text-gray-400" />
+            </div>
           </div>
           <div className="divide-y divide-gray-200">
-            {recentActivity.map((activity, index) => (
-              <div key={index} className="p-4 hover:bg-gray-50">
-                <div className="flex items-start gap-3">
-                  <div className={cn(
-                    "flex-shrink-0 mt-0.5 rounded-full p-2",
-                    activity.status === 'success' 
-                      ? "bg-green-50" 
-                      : activity.status === 'warning'
-                        ? "bg-amber-50"
-                        : "bg-red-50"
-                  )}>
-                    {activity.type === 'message' && (
-                      <MessageCircle className={cn(
-                        "h-5 w-5",
-                        activity.status === 'success' 
-                          ? "text-green-600" 
-                          : activity.status === 'warning'
-                            ? "text-amber-600"
-                            : "text-red-600"
-                      )} />
-                    )}
-                    {activity.type === 'instance' && (
-                      <Phone className={cn(
-                        "h-5 w-5",
-                        activity.status === 'success' 
-                          ? "text-green-600" 
-                          : activity.status === 'warning'
-                            ? "text-amber-600"
-                            : "text-red-600"
-                      )} />
-                    )}
-                    {activity.type === 'payment' && (
-                      <CreditCard className={cn(
-                        "h-5 w-5",
-                        activity.status === 'success' 
-                          ? "text-green-600" 
-                          : activity.status === 'warning'
-                            ? "text-amber-600"
-                            : "text-red-600"
-                      )} />
-                    )}
-                  </div>
-                  <div>
-                    <p className="font-medium text-gray-900">{activity.title}</p>
-                    <p className="text-sm text-gray-500">{activity.description}</p>
-                    <div className="flex items-center gap-2 mt-1">
-                      <Clock className="h-4 w-4 text-gray-400" />
-                      <span className="text-xs text-gray-500">{activity.time}</span>
-                      {activity.status === 'success' && (
-                        <CheckCircle className="h-4 w-4 text-green-500" />
-                      )}
-                      {activity.status === 'warning' && (
-                        <AlertTriangle className="h-4 w-4 text-amber-500" />
-                      )}
-                      {activity.status === 'error' && (
-                        <XCircle className="h-4 w-4 text-red-500" />
-                      )}
+            {recentActivity.length === 0 ? (
+              <div className="p-8 text-center">
+                <Target className="h-12 w-12 text-gray-300 mx-auto mb-3" />
+                <p className="text-gray-500 text-sm">Nenhuma campanha encontrada</p>
+                <p className="text-gray-400 text-xs mt-1">Crie sua primeira campanha para ver as estatísticas aqui</p>
+              </div>
+            ) : (
+              recentActivity.map((activity, index) => (
+                <div key={index} className="p-4 hover:bg-gray-50 transition-colors">
+                  <div className="flex items-start gap-3">
+                    <div className="flex-shrink-0 mt-0.5 rounded-full p-2 bg-gray-50">
+                      <Target className="h-5 w-5 text-gray-600" />
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between">
+                        <p className="font-medium text-gray-900">{activity.title}</p>
+                        <span className={cn(
+                          "px-2 py-1 text-xs font-medium rounded-full",
+                          activity.description === 'Concluído' ? 'bg-green-100 text-green-800' :
+                          activity.description === 'Em andamento' ? 'bg-blue-100 text-blue-800' :
+                          activity.description === 'Agendado' ? 'bg-yellow-100 text-yellow-800' :
+                          activity.description === 'Pendente' ? 'bg-orange-100 text-orange-800' :
+                          activity.description === 'Falhou' ? 'bg-red-100 text-red-800' :
+                          'bg-gray-100 text-gray-800'
+                        )}>
+                          {activity.description}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2 mt-2">
+                        <Clock className="h-3 w-3 text-gray-400" />
+                        <span className="text-xs text-gray-500">{activity.time}</span>
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         </div>
       </div>

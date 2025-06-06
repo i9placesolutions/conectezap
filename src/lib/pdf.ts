@@ -15,7 +15,7 @@ interface Report {
 }
 
 export const generatePDF = (reports: Report[], dateRange: [string, string]) => {
-  const doc = new jsPDF();
+  const doc = new jsPDF('landscape');
   const pageWidth = doc.internal.pageSize.width;
 
   // Add logo and header
@@ -67,8 +67,8 @@ export const generatePDF = (reports: Report[], dateRange: [string, string]) => {
       cellPadding: 5
     },
     columnStyles: {
-      0: { cellWidth: 80 },
-      1: { cellWidth: 40, halign: 'right' }
+      0: { cellWidth: 120 },
+      1: { cellWidth: 60, halign: 'right' }
     },
     margin: { left: 15 }
   });
@@ -79,6 +79,7 @@ export const generatePDF = (reports: Report[], dateRange: [string, string]) => {
     report.total.toLocaleString(),
     `${report.delivered.toLocaleString()} (${((report.delivered / report.total) * 100).toFixed(1)}%)`,
     `${report.read.toLocaleString()} (${((report.read / report.delivered) * 100).toFixed(1)}%)`,
+    `${(report.failed || 0).toLocaleString()} (${(((report.failed || 0) / report.total) * 100).toFixed(1)}%)`,
     `${report.responseRate.toFixed(1)}%`,
     report.date ? format(new Date(report.date), 'dd/MM/yyyy', { locale: ptBR }) : 'N/A',
     report.status === 'completed' ? 'Concluído' :
@@ -92,7 +93,7 @@ export const generatePDF = (reports: Report[], dateRange: [string, string]) => {
 
   autoTable(doc, {
     startY: (doc as any).lastAutoTable.finalY + 15,
-    head: [['Campanha', 'Total', 'Entregues', 'Lidas', 'Resp.', 'Data', 'Status']],
+    head: [['Campanha', 'Total', 'Entregues', 'Lidas', 'Falhadas', 'Resp.', 'Data', 'Status']],
     body: tableData,
     theme: 'striped',
     headStyles: {
@@ -105,13 +106,14 @@ export const generatePDF = (reports: Report[], dateRange: [string, string]) => {
       cellPadding: 5
     },
     columnStyles: {
-      0: { cellWidth: 50 },
-      1: { cellWidth: 20, halign: 'right' },
-      2: { cellWidth: 30, halign: 'right' },
-      3: { cellWidth: 30, halign: 'right' },
-      4: { cellWidth: 20, halign: 'right' },
-      5: { cellWidth: 25, halign: 'center' },
-      6: { cellWidth: 25, halign: 'center' }
+      0: { cellWidth: 70 },
+      1: { cellWidth: 30, halign: 'right' },
+      2: { cellWidth: 45, halign: 'right' },
+      3: { cellWidth: 45, halign: 'right' },
+      4: { cellWidth: 45, halign: 'right' },
+      5: { cellWidth: 25, halign: 'right' },
+      6: { cellWidth: 30, halign: 'center' },
+      7: { cellWidth: 30, halign: 'center' }
     }
   });
 

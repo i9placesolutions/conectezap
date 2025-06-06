@@ -347,7 +347,7 @@ export function MassMessagingPage() {
 
   // Função para navegar para a página de histórico
   const goToHistory = () => {
-    navigate('/messages/campaigns');
+    navigate('/messages/reports');
   };
 
   return (
