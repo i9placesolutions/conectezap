@@ -328,74 +328,20 @@ export const uazapiService = {
         progress: 0
       };
       
-      // Função para converter URL para base64
-      const convertUrlToBase64 = async (url: string): Promise<string> => {
-        try {
-          console.log('Convertendo URL para base64:', url);
-          const response = await fetch(url);
-          if (!response.ok) {
-            throw new Error(`Erro ao baixar mídia: ${response.status}`);
-          }
-          const blob = await response.blob();
-          return new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = () => {
-              const result = reader.result as string;
-              console.log('Conversão para base64 concluída');
-              resolve(result);
-            };
-            reader.onerror = reject;
-            reader.readAsDataURL(blob);
-          });
-        } catch (error) {
-          console.error('Erro ao converter URL para base64:', error);
-          throw error;
-        }
-      };
-
-      // Função para processar mídia em base64
-      const processMediaToBase64 = async (mediaData: string, mimetype: string): Promise<string> => {
-        let base64Data: string;
-        
-        // Verificar se é uma URL (do Supabase) ou já é base64
-        if (mediaData.startsWith('http://') || mediaData.startsWith('https://')) {
-          // É uma URL, converter para base64
-          base64Data = await convertUrlToBase64(mediaData);
-        } else if (mediaData.startsWith('data:')) {
-          // Já está no formato data URL
-          base64Data = mediaData;
-        } else {
-          // É base64 puro, adicionar o prefixo data URL
-          base64Data = `data:${mimetype};base64,${mediaData}`;
-        }
-        
-        // Calcular tamanho aproximado em bytes (base64 é ~33% maior que o arquivo original)
-        const sizeInBytes = (base64Data.length * 3) / 4;
-        const sizeInMB = sizeInBytes / (1024 * 1024);
-        
-        console.log(`Tamanho da mídia: ${sizeInMB.toFixed(2)}MB`);
-        
-        // Se a imagem for maior que 16MB, avisar
-        if (sizeInMB > 16) {
-          console.warn(`Mídia muito grande (${sizeInMB.toFixed(2)}MB). Máximo recomendado: 16MB.`);
-        }
-        
-        return base64Data;
-      };
+      // Agora enviamos URLs diretamente, sem conversão para base64
       
       // Preparar dados de mídia uma única vez para evitar duplicação
       let mediaConfig: any = null;
       if (data.media) {
-        const processedData = await processMediaToBase64(data.media.data, data.media.mimetype);
-        
+        // Usar URL diretamente em vez de converter para base64
         mediaConfig = {
-          file: processedData,
+          file: data.media.data, // URL direta do Supabase
           docName: data.media.filename || undefined,
           mimetype: data.media.mimetype
         };
-        console.log('mediaConfig após processamento:', {
+        console.log('mediaConfig configurado:', {
           hasFile: !!mediaConfig.file,
-          fileSize: mediaConfig.file ? mediaConfig.file.length : 0,
+          fileUrl: mediaConfig.file,
           mimetype: mediaConfig.mimetype,
           docName: mediaConfig.docName
         });
