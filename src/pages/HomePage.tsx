@@ -11,9 +11,6 @@ import {
   BarChart3, 
   TrendingUp, 
   Clock, 
-  AlertTriangle,
-  CreditCard,
-  Users,
   Target
 } from 'lucide-react';
 import { cn } from '../lib/utils';
