@@ -9,12 +9,10 @@ import {
   MessageCircle,
   Bell,
   CreditCard,
-  Settings,
-  UserCircle,
-  FileText
+  UserCircle
 } from 'lucide-react';
 import { cn } from '../lib/utils';
-import { dbService } from '../lib/supabase';
+import { supabase } from '../lib/supabase';
 
 interface MenuItem {
   icon: React.ElementType;
@@ -32,6 +30,7 @@ interface ProfileData {
   full_name: string;
   whatsapp?: string;
   company_name?: string;
+  avatar_url?: string;
   is_active: boolean;
 }
 
@@ -52,7 +51,7 @@ export function DashboardLayout() {
 
       try {
         // Usar o serviço de dados simulado em vez do Supabase
-        const { data, error } = await dbService.from('profiles')
+        const { data, error } = await supabase.from('profiles').select('*')
           .eq('id', user.id)
           .single();
 
@@ -72,7 +71,7 @@ export function DashboardLayout() {
         setPageTitle('Dashboard');
         break;
       case '/clients':
-        setPageTitle('Clientes');
+        setPageTitle('Usuários');
         break;
       case '/messages':
         setPageTitle('WhatsApp');
@@ -107,9 +106,7 @@ export function DashboardLayout() {
       case '/checkout':
         setPageTitle('Checkout');
         break;
-      case '/documentation':
-        setPageTitle('Documentação da API');
-        break;
+
       default:
         setPageTitle('');
     }
@@ -142,17 +139,9 @@ export function DashboardLayout() {
         { label: 'Relatórios', path: '/messages/reports' }
       ]
     },
-    { icon: Users, label: 'Clientes', path: '/clients' },
+    { icon: Users, label: 'Usuários', path: '/clients' },
     { icon: CreditCard, label: 'Faturamento', path: '/billing' },
-    { icon: FileText, label: 'Documentação', path: '/documentation' },
-    { 
-      icon: Settings, 
-      label: 'Configurações', 
-      path: '/settings',
-      submenu: [
-        { label: 'Planos', path: '/settings/plans' }
-      ]
-    },
+
     { icon: UserCircle, label: 'Perfil', path: '/settings/profile' }
   ];
 
@@ -168,7 +157,14 @@ export function DashboardLayout() {
     if (item.path === '/') {
       return location.pathname === '/';
     }
-    return location.pathname.startsWith(item.path);
+    
+    // Para menus com submenu, verificar se algum item do submenu está ativo
+    if (item.submenu) {
+      return item.submenu.some(subItem => location.pathname === subItem.path);
+    }
+    
+    // Para itens sem submenu, verificar correspondência exata
+    return location.pathname === item.path;
   };
 
   return (
@@ -211,12 +207,12 @@ export function DashboardLayout() {
                 <NavLink
                   to={item.submenu ? '#' : item.path}
                   onClick={() => handleMenuClick(item)}
-                  className={({ isActive }) =>
+                  className={() =>
                     cn(
                       'flex items-center rounded-lg py-3 text-gray-600 transition-colors',
                       isCollapsed ? 'justify-center px-0' : 'px-3',
                       'hover:bg-primary-50 hover:text-primary-600',
-                      (isMenuActive(item) || location.pathname.startsWith(item.path)) && 'bg-primary-50 text-primary-600'
+                      isMenuActive(item) && 'bg-primary-50 text-primary-600'
                     )
                   }
                 >
@@ -273,7 +269,21 @@ export function DashboardLayout() {
               isCollapsed && "flex-col"
             )}>
               <div className="relative flex-shrink-0">
-                <div className="h-10 w-10 rounded-full bg-primary-100 flex items-center justify-center">
+                {profileData?.avatar_url ? (
+                  <img
+                    src={profileData.avatar_url}
+                    alt={profileData.full_name || 'Avatar'}
+                    className="h-10 w-10 rounded-full object-cover"
+                    onError={(e) => {
+                      const target = e.target as HTMLImageElement;
+                      target.style.display = 'none';
+                      target.nextElementSibling?.classList.remove('hidden');
+                    }}
+                  />
+                ) : null}
+                <div className={`h-10 w-10 rounded-full bg-primary-100 flex items-center justify-center ${
+                  profileData?.avatar_url ? 'hidden' : ''
+                }`}>
                   <span className="text-sm font-medium text-primary-700">
                     {profileData?.full_name?.[0]?.toUpperCase() || 'U'}
                   </span>

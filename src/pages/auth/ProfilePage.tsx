@@ -6,7 +6,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { Input } from '../../components/ui/Input';
 import { WhatsAppInput } from '../../components/ui/WhatsAppInput';
 import { Button } from '../../components/ui/Button';
-import { dbService } from '../../lib/supabase';
+import { supabase } from '../../lib/supabase';
 import { Calendar, Camera } from 'lucide-react';
 import { cn } from '../../lib/utils';
 
@@ -34,8 +34,9 @@ export function ProfilePage() {
       if (!user) return;
 
       try {
-        const { data, error } = await dbService
+        const { data, error } = await supabase
           .from('profiles')
+          .select('*')
           .eq('id', user.id)
           .single();
 
@@ -66,7 +67,7 @@ export function ProfilePage() {
       // Simulado - não estamos realmente fazendo upload
       setTimeout(() => {
         // Atualizando o perfil simulado com uma URL simulada
-        setProfileData(prev => ({
+        setProfileData((prev: any) => ({
           ...prev,
           avatar_url: URL.createObjectURL(file)
         }));
@@ -95,7 +96,7 @@ export function ProfilePage() {
         throw new Error('Número de WhatsApp inválido');
       }
       
-      const { error } = await dbService
+      const { error } = await supabase
         .from('profiles')
         .update({
           company_name: data.companyName,

@@ -1,5 +1,6 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
-import { authService, dbService, User, handleApiError } from '../lib/supabase';
+import { createContext, useContext, useEffect, useState } from 'react';
+import { User } from '@supabase/supabase-js';
+import { supabase, handleApiError, logUserAccess, logUserLogout } from '../lib/supabase';
 import { toast } from 'react-hot-toast';
 import { useNotification } from './NotificationContext';
 import { formatDateTime } from '../lib/utils';
@@ -11,6 +12,9 @@ interface AuthContextType {
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (data: SignUpData) => Promise<void>;
   signOut: () => Promise<void>;
+  sendPasswordResetCode: (email: string) => Promise<void>;
+  verifyPasswordResetCode: (email: string, code: string) => Promise<boolean>;
+  resetPassword: (email: string, code: string, newPassword: string) => Promise<void>;
 }
 
 interface SignUpData {
@@ -33,22 +37,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const initAuth = async () => {
       try {
-        // Definimos um usuário temporário para desenvolvimento
-        const tempUser = {
-          id: '1',
-          email: 'dev@example.com',
-          user_metadata: { full_name: 'Usuário de Desenvolvimento' },
-          app_metadata: { role: 'admin' },
-          created_at: new Date().toISOString()
-        };
-        
-        // Configurar usuário
-        setUser(tempUser);
-        
-        // Armazena a sessão no localStorage
-        localStorage.setItem('userSession', JSON.stringify({ user: tempUser }));
+        const { data: { session } } = await supabase.auth.getSession();
+        if (mounted && session?.user) {
+          setUser(session.user);
+        }
       } catch (error) {
-        console.error('Auth initialization error:', error);
+        console.error('Error initializing auth:', error);
       } finally {
         if (mounted) {
           setLoading(false);
@@ -58,16 +52,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     initAuth();
 
-    const { data: { subscription } } = authService.onAuthStateChange(async (_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       if (!mounted) return;
 
       if (session?.user) {
         setUser(session.user);
-        // Atualiza a sessão no localStorage
-        localStorage.setItem('userSession', JSON.stringify(session));
       } else {
         setUser(null);
-        localStorage.removeItem('userSession');
       }
       setLoading(false);
     });
@@ -81,7 +72,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signIn = async (email: string, password: string) => {
     try {
       // First check if user exists
-      const { data: profile, error: profileError } = await dbService.from('profiles')
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('*')
         .eq('email', email)
         .maybeSingle();
 
@@ -92,7 +85,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       // Attempt to sign in
-      const { error: signInError, data } = await authService.signInWithPassword({
+      const { error: signInError, data } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
@@ -103,11 +96,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Atualiza o estado do usuário
       setUser(data.user);
 
+      // Registra o acesso do usuário
+      try {
+        await logUserAccess(
+          data.user.id,
+          undefined, // IP será capturado pelo servidor
+          navigator.userAgent,
+          'email'
+        );
+      } catch (error) {
+        console.error('Erro ao registrar acesso:', error);
+      }
+
       // Redireciona para a homepage após login bem-sucedido
       navigate('/');
 
       // Get profile data for notification
-      const { data: userProfile } = await dbService.from('profiles')
+      const { data: userProfile } = await supabase
+        .from('profiles')
+        .select('*')
         .eq('id', data.user.id)
         .single();
 
@@ -133,10 +140,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       toast.success('Login realizado com sucesso!');
     } catch (error) {
       console.error('Error during login:', error);
-      const handledError = handleApiError(error);
-      const message = handledError instanceof Error ? handledError.message : 'Erro ao fazer login';
+      const message = handleApiError(error);
       toast.error(message);
-      throw handledError;
+      throw error;
     }
   };
 
@@ -144,7 +150,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const cleanWhatsApp = whatsapp?.replace(/\D/g, '') || null;
       
-      const { data: { user: newUser }, error: signUpError } = await authService.signUp({
+      const { data: { user: newUser }, error: signUpError } = await supabase.auth.signUp({
         email,
         password,
         options: {
@@ -179,19 +185,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       }
 
-      toast.success('Conta criada com sucesso! Por favor, faça login.');
+      toast.success('Conta criada com sucesso! Verifique seu email para confirmar a conta e depois faça login.', {
+        duration: 8000
+      });
     } catch (error) {
       console.error('Error during signup:', error);
-      const handledError = handleApiError(error);
-      const message = handledError instanceof Error ? handledError.message : 'Erro ao criar conta';
+      const message = handleApiError(error);
       toast.error(message);
-      throw handledError;
+      throw error;
     }
   };
 
   const signOut = async () => {
     try {
-      const { error } = await authService.signOut();
+      // Registra o logout antes de sair
+      if (user) {
+        try {
+          await logUserLogout(user.id);
+        } catch (error) {
+          console.error('Erro ao registrar logout:', error);
+        }
+      }
+
+      const { error } = await supabase.auth.signOut();
       if (error) throw error;
       setUser(null);
       navigate('/login');
@@ -204,12 +220,76 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const sendPasswordResetCode = async (email: string) => {
+    try {
+      const { error } = await supabase.rpc('generate_password_reset_code', {
+        user_email: email
+      });
+
+      if (error) throw error;
+      
+      toast.success('Código de recuperação enviado para seu email!');
+    } catch (error) {
+      console.error('Error sending password reset code:', error);
+      const message = handleApiError(error);
+      toast.error(message);
+      throw error;
+    }
+  };
+
+  const verifyPasswordResetCode = async (email: string, code: string): Promise<boolean> => {
+    try {
+      const { data, error } = await supabase.rpc('verify_password_reset_code', {
+        user_email: email,
+        reset_code: code
+      });
+
+      if (error) throw error;
+      
+      return data === true;
+    } catch (error) {
+      console.error('Error verifying password reset code:', error);
+      return false;
+    }
+  };
+
+  const resetPassword = async (email: string, code: string, newPassword: string) => {
+    try {
+      // Call the Edge Function to reset password
+      const { data, error } = await supabase.functions.invoke('reset-password', {
+        body: {
+          email,
+          code,
+          newPassword
+        }
+      });
+
+      if (error) {
+        throw new Error(error.message || 'Erro ao redefinir senha');
+      }
+
+      if (data?.error) {
+        throw new Error(data.error);
+      }
+
+      toast.success('Senha redefinida com sucesso!');
+    } catch (error) {
+      console.error('Error resetting password:', error);
+      const message = handleApiError(error);
+      toast.error(message);
+      throw error;
+    }
+  };
+
   const contextValue = {
     user,
     loading,
     signIn,
     signUp,
-    signOut
+    signOut,
+    sendPasswordResetCode,
+    verifyPasswordResetCode,
+    resetPassword
   };
 
   return (

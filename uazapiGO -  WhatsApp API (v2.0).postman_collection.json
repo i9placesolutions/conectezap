@@ -1,0 +1,3486 @@
+{
+	"info": {
+		"_postman_id": "f4ea08fb-6801-42f0-a0fa-d00d4886a4bd",
+		"name": "uazapiGO -  WhatsApp API (v2.0)",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "32971210",
+		"_collection_link": "https://www.postman.com/augustofcs/uazapi-v2/collection/dhsg7sc/uazapigo-whatsapp-api-v2-0?action=share&source=collection_link&creator=32971210"
+	},
+	"item": [
+		{
+			"name": "Instance Controller",
+			"item": [
+				{
+					"name": "⚠️ Criar Instancia",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "key",
+									"value": "admintoken",
+									"type": "string"
+								},
+								{
+									"key": "value",
+									"value": "{{adminToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"name\": \"outro\",\r\n    \"systemName\": \"apilocal\", // nome que aparecerá no whatsapp\r\n    \"adminField01\": \"teste1-adminField01\",\r\n    \"adminField02\": \"teste2-adminField02\"\r\n}\r\n\r\n// \"adminField01\" e \"adminField02\" não tem função nenhuma, apenas serve para sua organização e controle, esses 2 campos o cliente não tem acesso\r\n\r\n// \"name\" também não tem função específica, apenas para controle do cliente, o cliente pode editar o nome depois",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/instance/init",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"instance",
+								"init"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "⚠️ Criar Instancia Copy",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "key",
+									"value": "admintoken",
+									"type": "string"
+								},
+								{
+									"key": "value",
+									"value": "{{adminToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"name\": \"outro\",\r\n    \"systemName\": \"apilocal\", // nome que aparecerá no whatsapp\r\n    \"adminField01\": \"teste1-adminField01\",\r\n    \"adminField02\": \"teste2-adminField02\"\r\n}\r\n\r\n// \"adminField01\" e \"adminField02\" não tem função nenhuma, apenas serve para sua organização e controle, esses 2 campos o cliente não tem acesso\r\n\r\n// \"name\" também não tem função específica, apenas para controle do cliente, o cliente pode editar o nome depois",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/instance/init",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"instance",
+								"init"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "⚠️ Todas as Instancia",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "key",
+									"value": "admintoken",
+									"type": "string"
+								},
+								{
+									"key": "value",
+									"value": "{{adminToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/instance/all",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"instance",
+								"all"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "⚠️ updateAdminFields",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "key",
+									"value": "admintoken",
+									"type": "string"
+								},
+								{
+									"key": "value",
+									"value": "{{adminToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"id\": \"r183e2ef9597845\",\r\n    \"adminField01\": \"adminField01\", \r\n    \"adminField02\": \"adminField02\" \r\n}\r\n\r\n// \"adminField01\" e \"adminField02\" não tem função nenhuma, apenas serve para sua organização e controle, esses campos o cliente não tem acesso",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/instance/updateAdminFields",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"instance",
+								"updateAdminFields"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Conectar (gera qrcode ou pair code)",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{token}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "token",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"phone\": \"{{connectedNumber}}\"\r\n}\r\n\r\n    // se não passar phone = retorna qr code\r\n    // se passar phone = retorna pair code",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/instance/connect",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"instance",
+								"connect"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Desconectar",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{token}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "token",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/instance/disconnect",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"instance",
+								"disconnect"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Status da Instância (ver atualizações de qrcode aqui)",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{token}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "token",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/instance/status",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"instance",
+								"status"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "updateInstanceName",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{token}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "token",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"name\": \"novo nome\"\r\n}\r\n\r\n// \"name\" não tem função específica, apenas para controle do cliente",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/instance/updateInstanceName",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"instance",
+								"updateInstanceName"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Deletar instancia",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{token}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "token",
+									"type": "string"
+								}
+							]
+						},
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/instance",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"instance"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Webhooks e SSE",
+			"item": [
+				{
+					"name": "⚠️ Definir Webhook GLOBAL",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "key",
+									"value": "admintoken",
+									"type": "string"
+								},
+								{
+									"key": "value",
+									"value": "{{adminToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"enabled\": false,\r\n    \"url\": \"https://rbaskets.in/novainstancia/new2\",\r\n    \"events\": [\r\n        \"connection\",\r\n        \"history\",\r\n        \"messages\",\r\n        \"messages_update\",\r\n        \"call\",\r\n        \"contacts\",\r\n        \"presence\",\r\n        \"groups\",\r\n        \"labels\",\r\n        \"chats\",\r\n        \"chat_labels\",\r\n        \"blocks\",\r\n        \"leads\"\r\n    ],\r\n    \"excludeMessages\": [\r\n        \"wasSentByApi\",\r\n        \"wasNotSentByApi\",\r\n        \"fromMeYes\",\r\n        \"fromMeNo\",\r\n        \"isGroupYes\",\r\n        \"IsGroupNo\"\r\n    ],\r\n    \"addUrlEvents\": true,\r\n    \"addUrlTypesMessages\": true\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/globalwebhook",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"globalwebhook"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "⚠️ Ver Webhook GLOBAL",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "key",
+									"value": "admintoken",
+									"type": "string"
+								},
+								{
+									"key": "value",
+									"value": "{{adminToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/globalwebhook",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"globalwebhook"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Definir Webhook",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{token}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "token",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"enabled\": false,\r\n    \"url\": \"https://rbaskets.in/novainstancia/new2\",\r\n    \"events\": [\r\n        \"connection\",\r\n        \"history\",\r\n        \"messages\",\r\n        \"messages_update\",\r\n        \"call\",\r\n        \"contacts\",\r\n        \"presence\",\r\n        \"groups\",\r\n        \"labels\",\r\n        \"chats\",\r\n        \"chat_labels\",\r\n        \"blocks\",\r\n        \"leads\"\r\n    ],\r\n    \"excludeMessages\": [\r\n        \"wasSentByApi\",\r\n        \"wasNotSentByApi\",\r\n        \"fromMeYes\",\r\n        \"fromMeNo\",\r\n        \"isGroupYes\",\r\n        \"IsGroupNo\"\r\n    ],\r\n    \"addUrlEvents\": true,\r\n    \"addUrlTypesMessages\": true,\r\n    \"action\": \"add\"\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/webhook",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"webhook"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Ver Webhook",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{token}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "token",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/webhook",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"webhook"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Server Side Events - message example",
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/sse?token={{token}}&events=messages&events=messages_update",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"sse"
+							],
+							"query": [
+								{
+									"key": "token",
+									"value": "{{token}}"
+								},
+								{
+									"key": "events",
+									"value": "messages"
+								},
+								{
+									"key": "excludeMessages",
+									"value": "isGroupYes",
+									"disabled": true
+								},
+								{
+									"key": "events",
+									"value": "messages_update"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Server Side Events - chat example",
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/sse?token={{token}}&events=chats&events=presence&events=chat_labels&events=blocks&events=leads",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"sse"
+							],
+							"query": [
+								{
+									"key": "token",
+									"value": "{{token}}"
+								},
+								{
+									"key": "events",
+									"value": "chats"
+								},
+								{
+									"key": "excludeMessages",
+									"value": "isGroupYes",
+									"disabled": true
+								},
+								{
+									"key": "events",
+									"value": "presence"
+								},
+								{
+									"key": "events",
+									"value": "chat_labels"
+								},
+								{
+									"key": "events",
+									"value": "blocks"
+								},
+								{
+									"key": "events",
+									"value": "leads"
+								}
+							]
+						}
+					},
+					"response": []
+				}
+			],
+			"description": "Eventos possíveis:  \n\"qrcode\",  \n\"history\",  \n\"connection\",  \n\"messages\",  \n\"messages_update\",  \n\"call\",  \n\"contacts\",  \n\"presence\",  \n\"chats\",  \n\"chat_labels\",  \n\"blocks\",  \n\"leads\",  \n\"groups\",  \n\"labels\",  \n\nCritérios que podem ser usados para excluir os eventos:  \n\"wasSentByApi\",  \n\"wasNotSentByApi\",  \n\"fromMeYes\",  \n\"fromMeNo\",  \n\"isGroupYes\",  \n\"IsGroupNo\","
+		},
+		{
+			"name": "Enviar Mensagem",
+			"item": [
+				{
+					"name": "Enviar texto",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{token}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "token",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "convert",
+								"value": "true",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"number\": \"{{chatID}}\",\r\n    \"text\": \"wa_Name = {{wa_Name}}\\n\\n\\nTeste de placeholders com link: https://uazapi.dev\",\r\n    \"linkPreview\": false,\r\n    \"replyid\": \"\",\r\n    \"mentions\": \"\", // \"all\" = todos, ou separando vou virgula, assim: \"1234, 321\" \r\n    \"readchat\": true, // marcar chat como lido\r\n    \"delay\": 0\r\n}\r\n",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/send/text",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"send",
+								"text"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Enviar media",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{token}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "token",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"number\": \"{{chatID}}\",\r\n    \"text\": \"texto da mensagem\",\r\n    \"type\": \"image\", // document, video, image, audio, ptt, sticker\r\n    \"file\": \"https://cdn.hasselblad.com/hasselblad-com/6cb604081ef3086569319ddb5adcae66298a28c5_x1d-ii-sample-01-web.jpg?auto=format&q=97\",\r\n    \"docName\": \"\", //opcional, serve apenas para document\r\n    \"replyid\": \"\",\r\n    \"mentions\": \"\",\r\n    \"readchat\": true, // marcar chat como lido\r\n    \"delay\": 0\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/send/media",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"send",
+								"media"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Enviar contato",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{token}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "token",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"number\": \"{{chatID}}\",\r\n    \"fullName\": \"Contact Name\",\r\n    \"phoneNumber\": \"telefone', telefone2\",\r\n    \"organization\": \"Company Name\",\r\n    \"email\": \"email\",\r\n    \"url\": \"url page\",\r\n    \"replyid\": \"\",\r\n    \"mentions\": \"\",\r\n    \"readchat\": true, // marcar chat como lido\r\n    \"delay\": 0\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/send/contact",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"send",
+								"contact"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Enviar localização",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{token}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "token",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n\t\"number\": \"{{chatID}}\",\r\n    \"name\": \"Maracanã\",\r\n    \"address\": \"Av. Pres. Castelo Branco, Portão 3 - Maracanã, Rio de Janeiro - RJ, 20271-130\",\r\n    \"latitude\": -22.912982815767986,\r\n    \"longitude\": -43.23028153499254,\r\n    \"replyid\": \"\",\r\n    \"mentions\": \"\",\r\n    \"readchat\": true, // marcar chat como lido\r\n    \"delay\": 0\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/send/location",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"send",
+								"location"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Enviar presença",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{token}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "token",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n\"number\": \"{{chatID}}\",\r\n\"presence\": \"composing\", // \"composing\" | \"recording\" \r\n\"delay\": 2000\r\n}\r\n\r\n\r\n//\"composing\" = digitando \r\n//\"recording\" = gravando aúdio \r\n\r\n\r\n//\"Dica rápida: já existe a opção de delay em cada envio de mensagem. Então, acione o aviso 'Digitando...' apenas se precisar de mais tempo para elaborar sua resposta.",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/message/presence",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"message",
+								"presence"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Enviar Stories",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{token}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "token",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"type\": \"video\", // \"text\", \"video\", \"image\", \"audio\" ou \"ptt\"\r\n    \"text\": \"teste broadcast1\",\r\n    \"background_color\": 1, //número de 1 a 19, para textos e audios\r\n    \"font\": 0, //número de 0 a 8, tipos de letra para \"text\"\r\n    \"file\": \"https://file-examples.com/storage/fe45dfa76e66c6232a111c9/2017/04/file_example_MP4_480_1_5MG.mp4\" // Pode ser uma URL ou texto em base64, necessário para imagem, vídeo, ou áudio/ptt\r\n}\r\n\r\n",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/send/status",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"send",
+								"status"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Enviar menu",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{token}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "token",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"number\": \"{{chatID}}\",\r\n    \"type\": \"carousel\", // poll, list, button, carousel\r\n    \"text\": \"Teste \\nTeste \\nTeste\",\r\n    \"footerText\": \"teste\",\r\n    \"listButton\": \"Selecione\",\r\n    \"selectableCount\": 1,\r\n    \"choices\": [\r\n        //\"[ ]\",\r\n        \"copiar|copy:teste\",\r\n        \"Acessar Site|https://exemplo.com\",\r\n        \"Ligar Agora|call:+5511999999999\"\r\n    ],\r\n    \"mentions\": \"\",\r\n    \"readchat\": true, // marcar chat como lido\r\n    \"delay\": 0\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/send/menu",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"send",
+								"menu"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Enviar Botão Carrossel imagem",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{token}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "token",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"number\": \"{{chatID}}\",\r\n    \"text\": \"Produtos em Destaque\",\r\n    \"carousel\": [\r\n        {\r\n            \"text\": \"Notebook Dell XPS\",\r\n            \"image\": \"https://exemplo.com/notebook.jpg\",\r\n            \"buttons\": [\r\n                {\r\n                    \"id\": \"1\",\r\n                    \"text\": \"Ver Preço\",\r\n                    \"type\": \"REPLY\"\r\n                },\r\n                {\r\n                    \"id\": \"https://loja.com/notebook\",\r\n                    \"text\": \"Mais Detalhes\",\r\n                    \"type\": \"URL\"\r\n                    \r\n                }\r\n            ]\r\n        },\r\n        {\r\n            \"text\": \"iPhone 15 Pro\",\r\n            \"image\": \"https://exemplo.com/iphone.jpg\",\r\n            \"buttons\": [\r\n                {\r\n                    \"id\": \"3\",\r\n                    \"text\": \"Comprar\",\r\n                    \"type\": \"REPLY\"\r\n                },\r\n                {\r\n                    \"id\": \"https://loja.com/iphone\",\r\n                    \"text\": \"Especificações\",\r\n                    \"type\": \"URL\"\r\n                }\r\n            ]\r\n        }\r\n    ]\r\n}\r\n",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/send/carouselbuttonmedia",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"send",
+								"carouselbuttonmedia"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Enviar Pedir Localização Button",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{token}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "token",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n\t\"number\": \"{{chatID}}\",\r\n    \"text\": \"Por favor, compartilhe sua localização atual para podermos te atender melhor\"\r\n}\r\n\r\n// ESSE TIPO DE MENSAGEM NÃO APARECE NO WHATSAPP WEB/DESKTOP",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/send/locationbutton",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"send",
+								"locationbutton"
+							]
+						}
+					},
+					"response": []
+				}
+			],
+			"description": "Ao enviar mensagens utilizando o sistema, você pode incluir placeholders no formato `{{variavel}}` no conteúdo da mensagem. Esses placeholders serão substituídos pelos valores reais obtidos a partir das informações associadas ao lead no banco de dados.\n\n#### Placeholders Disponíveis\n\nOs placeholders a seguir podem ser usados nas mensagens, e serão automaticamente substituídos pelos respectivos valores associados ao lead:\n\n- `{{name}}`: Nome do lead.\n    \n- `{{fullname}}`: Nome completo do lead.\n    \n- `{{personalid}}`: Identificação pessoal do lead (cpf, cnpj, passaport, uniqueid do seu sistema, etc).\n    \n- `{{email}}`: Endereço de e-mail do lead.\n    \n- `{{status}}`: Status atual do lead.\n    \n- `{{notes}}`: Notas associadas ao lead.\n    \n- `{{assignedagentid}}`: ID do agente atribuído ao lead.\n    \n\n#### Custom Fields (Campos Personalizados)\n\nAlém dos placeholders pré-definidos, você pode utilizar campos personalizados armazenados no banco de dados. Esses campos são adicionados dinamicamente com base nas chaves do _custom fields_ do lead.\n\nPor exemplo, se o lead possui um campo personalizado com a chave `company`, você pode utilizar o placeholder `{{company}}` na mensagem, e ele será substituído pelo valor associado."
+		},
+		{
+			"name": "Ações na mensagem e Buscar",
+			"item": [
+				{
+					"name": "Buscar mensagens",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{token}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "token",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n \"chatid\": \"{{chatID}}@s.whatsapp.net\",\r\n \"limit\": 2\r\n}\r\n\r\n//ou pesquisar por id:\r\n\r\n// {\r\n//  \"id\": \"xxxxx\"\r\n// }",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/message/find",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"message",
+								"find"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Enviar Reação",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{token}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "token",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"number\": \"{{chatID}}\",\r\n    \"text\": \"🤖\",\r\n    \"id\": \"3EB0538DA65A59F6D8A251\"\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/message/react",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"message",
+								"react"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Apagar mensagem",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{token}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "token",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"id\": \"3EB075BBEFCA3C53948575\" //id da mensagem\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/message/delete",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"message",
+								"delete"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Marcar mensagem como lida",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{token}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "token",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"id\": [\r\n        \"62AD1AD844E518180227BF68DA7ED710\",\r\n        \"ECB9DE48EB41F77BFA8491BFA8D6EF9B\"\r\n    ]\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/message/markread",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"message",
+								"markread"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Baixar arquivo de uma mensagem",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{token}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "token",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"id\": \"7EB0F01D7244B421048F0706368376E0\",\r\n    \"transcribe\": true,\r\n    \"openai_apikey\": \"sk-...\"\r\n}\r\n\r\n// para transcrever uma mensagem de audio, vc precisa passar \"transcribe\": true\r\n// e como usamos whisper da openai/chatgpt, para funcionar vc precisa passar a apikey da openai.",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/message/download",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"message",
+								"download"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Chats, Bloqueios, Contatos e etiquetas",
+			"item": [
+				{
+					"name": "Buscar Chat",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{token}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "token",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"lead_name\": \"~John\",       // Busca por nomes que contenham \"John\" (LIKE)\r\n    \"wa_isGroup\": true,         // Filtra apenas chats que são grupos\r\n    \"wa_unreadCount\": \">0\",     // Chats com contagem de mensagens não lidas maior que 0\r\n    \"lead_status\": \"!~inactive\", // Exclui leads com status \"inactive\" (NOT LIKE)\r\n    \"sort\": \"-wa_lastMsgTimestamp\", // Ordena por 'wa_lastMsgTimestamp' em ordem decrescente\r\n    \"limit\": 50,                // Limita o resultado a 50 registros\r\n    \"offset\": 0                 // Começa a partir do primeiro registro\r\n}\r\n",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/chat/find",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"chat",
+								"find"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Etiquetar Chat",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{token}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "token",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n \"number\": \"{{chatID}}\",\r\n \"labelids\": [\r\n\r\n ]\r\n\r\n}\r\n",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/chat/labels",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"chat",
+								"labels"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Desa/Fixar Chat",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{token}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "token",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n \"number\": \"{{chatID}}\",\r\n \"pin\": false\r\n}\r\n",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/chat/pin",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"chat",
+								"pin"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Un/Mute Chat",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{token}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "token",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n \"number\": \"{{chatID}}\",\r\n \"muteEndTime\": 0\r\n\r\n}\r\n\r\n // opções:\r\n // 8 = 8 horas,\r\n // 168 = 1 semana, \r\n // -1 = pra sempre,\r\n // 0 = desmute",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/chat/mute",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"chat",
+								"mute"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Des/Arquivar Chat",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{token}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "token",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n \"number\": \"{{chatID}}\",\r\n \"archive\": false\r\n}\r\n",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/chat/archive",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"chat",
+								"archive"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Marcar Chat como lido/não lido",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{token}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "token",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n \"number\": \"{{chatID}}\",\r\n \"read\": false\r\n}\r\n",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/chat/read",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"chat",
+								"read"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Des/Bloquear User",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{token}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "token",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n \"number\": \"{{chatID}}\",\r\n \"block\": false\r\n}\r\n",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/chat/block",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"chat",
+								"block"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Buscar lista de bloqueados",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{token}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "token",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/chat/blocklist",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"chat",
+								"blocklist"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Chat",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{token}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "token",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n \"number\": \"{{chatID}}\",\r\n \"deleteChatWhatsApp\": true,\r\n \"deleteChatDB\": true,\r\n \"deleteMessagesDB\": true\r\n}\r\n",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/chat/delete",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"chat",
+								"delete"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Editar etiqueta",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{token}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "token",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n  \"labelid\": \"25\",\r\n  \"name\": \"responder editado\",\r\n  \"color\": 2,\r\n  \"delete\": false\r\n}\r\n",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/label/edit",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"label",
+								"edit"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Buscar todas as etiquetas",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{token}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "token",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/labels",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"labels"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Buscar contatos",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{token}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "token",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/contacts",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"contacts"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Pegar imagem e dados de um perfil",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{token}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "token",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n  \"number\": \"numero\",\r\n  \"preview\": true,\r\n  \"returnMoreNames\": true\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/chat/GetNameAndImageURL",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"chat",
+								"GetNameAndImageURL"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Checar se número existe",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "key",
+									"value": "token",
+									"type": "string"
+								},
+								{
+									"key": "value",
+									"value": "{{token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n  \"numbers\": [\r\n    \"telefone1\",\r\n    \"telefone2\"\r\n  ]\r\n}\r\n\r\n\r\n",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/chat/check",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"chat",
+								"check"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Grupos e Comunidades",
+			"item": [
+				{
+					"name": "Criar grupo",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{token}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "token",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n  \"name\": \"uazapiGO grupo\",  \r\n  \"participants\": [\r\n    \"{{chatID}}\" // adicionar outros separado por virgula\r\n  ]\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/group/create",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"group",
+								"create"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Alterar imagem",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{token}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "token",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n  \"groupjid\": \"120363153742561022@g.us\",\r\n  \"image\": \"https://s3.amazonaws.com/appforest_uf/f1673468269758x727494806159481100/311627492_164638622952139_6016681321028139878_n.jpg\" \r\n  // Pode ser uma URL, base64 ou \"remove\"/\"delete\"\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/group/updateImage",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"group",
+								"updateImage"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Buscar todos os grupos",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{token}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "token",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/group/list?force=false",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"group",
+								"list"
+							],
+							"query": [
+								{
+									"key": "force",
+									"value": "false",
+									"description": "Usamos cache para evitar ratelimit no servidor do whatsapp, se precisar resetar o cache , coloque como true."
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "inviteLink",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{token}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "token",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/group/invitelink/{{groupid}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"group",
+								"invitelink",
+								"{{groupid}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Detalhes de um grupo",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{token}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "token",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"GroupJID\": \"120363029388654192@g.us\",\r\n    \"getInviteLink\": true, // irá pegar o inviteLink atualizado se for admin\r\n\t\"force\": true //Usamos cache para evitar ratelimit no servidor do whatsapp, se precisar resetar o cache , coloque como true.\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/group/info",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"group",
+								"info"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Dados de um grupo pelo invite URL Code",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{token}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "token",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n  \"inviteCode\": \"https://chat.whatsapp.com/IYnl5Zg9bUcJD32rJrDzO7\"\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/group/inviteInfo",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"group",
+								"inviteInfo"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Alterar nome",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{token}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "token",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n  \"groupjid\": \"120363339858396166@g.us\",\r\n  \"name\": \"postman\"\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/group/updateName",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"group",
+								"updateName"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Alterar descrição",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{token}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "token",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n  \"groupjid\": \"120363339858396166@g.us\",\r\n  \"description\": \"postman\"\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/group/updateDescription",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"group",
+								"updateDescription"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Alterar Trancado",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{token}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "token",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n  \"groupjid\": \"120363308883996631@g.us\",\r\n  \"locked\": false // apenas admin pode editar informações do grupo\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/group/updateLocked",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"group",
+								"updateLocked"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Alterar Apenas Admin pode enviar mensagem",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{token}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "token",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n  \"groupjid\": \"120363339858396166@g.us\",\r\n  \"announce\": true // apenas admin pode enviar mensagem\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/group/updateAnnounce",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"group",
+								"updateAnnounce"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Reset invite URL code",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{token}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "token",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"groupjid\": \"120363308883996631@g.us\"\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/group/resetInviteCode",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"group",
+								"resetInviteCode"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Modificar/aprovar membros",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{token}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "token",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"groupjid\": \"120363308883996631@g.us\",\r\n    \"action\": \"promote\", // 'add' | 'remove' | 'promote' | 'demote' | 'reject' | 'approve';\r\n    \"participants\": [\r\n        \"5521987905995\"\r\n    ]\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/group/updateParticipants",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"group",
+								"updateParticipants"
+							]
+						},
+						"description": "\"action\" Opções:  \nadd - adiciona participantes  \nremove - remove participantes  \npromote - Adiciona na lista de administradores  \ndemote - Remove da lista de administradores"
+					},
+					"response": []
+				},
+				{
+					"name": "Entrar em um grupo",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{token}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "token",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n  \"inviteCode\": \"https://chat.whatsapp.com/IYnl5Zg9bUcJD32rJrDzO7\"\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/group/join",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"group",
+								"join"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Grupo - Sair",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{token}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "token",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"groupjid\": \"120363324255083289@g.us\"\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/group/leave",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"group",
+								"leave"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Criar comunidade",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{token}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "token",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n  \"name\": \"uazapiGO comunidade\"\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/community/create",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"community",
+								"create"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Adicionar/Remover grupo a comunidade",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{token}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "token",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"community\": \"120363324255083289@g.us\",\r\n    \"action\": \"remove\", // \"add\", \"remove\"\r\n    \"groupjids\": [\r\n        \"120363308883996631@g.us\" // adicionar outros separado por virgula\r\n    ]\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/community/editgroups",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"community",
+								"editgroups"
+							]
+						}
+					},
+					"response": []
+				}
+			],
+			"description": "Falta colocar nos participantes displayName e pictureUrl"
+		},
+		{
+			"name": "Multiatendimento",
+			"item": [
+				{
+					"name": "Editar Lead (campos dentro de chat)",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{token}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "token",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"id\": \"id\",\r\n    \"lead_name\": \"lead_name\",\r\n    \"lead_fullName\": \"lead_fullName\",\r\n    \"lead_email\": \"lead_email\",\r\n    \"lead_personalid\": \"lead_personalid\",\r\n    \"lead_status\": \"lead_status\",\r\n    \"lead_tags\": [\"VIP\", \"teste2\"],\r\n    \"lead_notes\": \"lead_notes\",\r\n    \"lead_disableChatBotUntil\": 123,\r\n    \"lead_isTicketOpen\": true,\r\n    \"lead_assignedAgent_id\": \"lead_assignedAgent_id\",\r\n    \"lead_kanbanOrder\": 1,\r\n    \"lead_field01\": \"lead_field01\",\r\n    \"lead_field02\": \"lead_field02\",\r\n    \"lead_field03\": \"lead_field03\",\r\n    \"lead_field04\": \"lead_field04\",\r\n    \"lead_field05\": \"lead_field05\",\r\n    \"lead_field06\": \"lead_field06\",\r\n    \"lead_field07\": \"lead_field07\",\r\n    \"lead_field08\": \"lead_field08\",\r\n    \"lead_field09\": \"lead_field09\",\r\n    \"lead_field10\": \"lead_field10\",\r\n    \"lead_field11\": \"lead_field11\",\r\n    \"lead_field12\": \"lead_field12\",\r\n    \"lead_field13\": \"lead_field13\",\r\n    \"lead_field14\": \"lead_field14\",\r\n    \"lead_field15\": \"lead_field15\",\r\n    \"lead_field16\": \"lead_field16\",\r\n    \"lead_field17\": \"lead_field17\",\r\n    \"lead_field18\": \"lead_field18\",\r\n    \"lead_field19\": \"lead_field19\",\r\n    \"lead_field20\": \"lead_field20\"\r\n    \r\n}\r\n\r\n",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/chat/editLead",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"chat",
+								"editLead"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "updateFieldsMap",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{token}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "token",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n  \"lead_field01\": \"teste-lead_field01\",\r\n  \"lead_field02\": \"teste-lead_field02\",\r\n  \"lead_field03\": \"teste-lead_field03\",\r\n  \"lead_field04\": \"teste-lead_field04\",\r\n  \"lead_field05\": \"teste-lead_field05\",\r\n  \"lead_field06\": \"teste-lead_field06\",\r\n  \"lead_field07\": \"teste-lead_field07\",\r\n  \"lead_field08\": \"teste-lead_field08\",\r\n  \"lead_field09\": \"teste-lead_field09\",\r\n  \"lead_field10\": \"teste-lead_field10\",\r\n  \"lead_field11\": \"teste-lead_field11\",\r\n  \"lead_field12\": \"teste-lead_field12\",\r\n  \"lead_field13\": \"teste-lead_field13\",\r\n  \"lead_field14\": \"teste-lead_field14\",\r\n  \"lead_field15\": \"teste-lead_field15\",\r\n  \"lead_field16\": \"teste-lead_field16\",\r\n  \"lead_field17\": \"teste-lead_field17\",\r\n  \"lead_field18\": \"teste-lead_field18\",\r\n  \"lead_field19\": \"teste-lead_field19\",\r\n  \"lead_field20\": \"teste-lead_field20\"\r\n}\r\n",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/instance/updateFieldsMap",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"instance",
+								"updateFieldsMap"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Criar/Editar Atendente",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{token}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "token",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n  \"id\": \"r4b49867eb44bf3\",\r\n  \"name\": \"John Doe\",\r\n  \"email\": \"johndoe@example.com\",\r\n  \"phone\": \"123456\",\r\n  \"department\": \"Customer Support\",\r\n  \"customField01\": \"VIP\",\r\n  \"customField02\": \"High Priority\",\r\n  \"delete\": true\r\n}\r\n",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/attendant/edit",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"attendant",
+								"edit"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Todos os Atendentes",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{token}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "token",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/attendant/all",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"attendant",
+								"all"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Criar/Editar Resposta Rápida",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{token}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "token",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"delete\": false,\r\n    \"id\": \"rb9da9c03637452\", // id vazia = cria, id definida faz update/delete\r\n    \"shortCut\": \"shortCut2\",\r\n    \"text\": \"texto mensagem2\", // apesar\r\n    \"type\": \"text\", // opções disponíveis: \"text\", \"audio\", \"ptt\", \"document\", \"video\", \"image\"\r\n    \"file\": \"\", // url ou base64\r\n    \"docName\": \"\" // nome do arquivo se for document\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/quickreply/edit",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"quickreply",
+								"edit"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Todas as Respostas Rápidas",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{token}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "token",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/quickreply/showall",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"quickreply",
+								"showall"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Mensagem em massa",
+			"item": [
+				{
+					"name": "Simples",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{token}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "token",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n  \"numbers\": [\"{{chatID}}\", \"{{chatID2}}\"],\r\n  \"type\": \"text\",  // options: text, image, video, audio, myaudio, document, sticker, contact, location, poll, list, button\r\n  \"folder\": \"campanhaDezembro\",\r\n  \"delayMin\": 20,\r\n  \"delayMax\": 40,\r\n  \"info\": \"campanha de natal\",\r\n  \"scheduled_for\": 1733054791000,  // \"1735689600000\" = Agenda para 01/01/2025 (data unix em milisegundos) ou \"30\" = Agenda para daqui 30 minutos\r\n  \r\n  // For all messages\r\n  \"delay\": 1000,\r\n  \"mentions\": \"\",\r\n\r\n  // Text message\r\n  \"text\": \"Olá! Temos uma promoção especial para você.\",\r\n  \"linkPreview\": true\r\n\r\n  \r\n//   // Media message (image, video, audio, myaudio, document)\r\n//   \"text\": \"Olá! Temos uma promoção especial para você.\",\r\n//   \"file\": \"https://example.com/arquivo.jpg\",\r\n//   \"docName\": \"documento.pdf\",\r\n  \r\n//   // Contact message\r\n//   \"fullName\": \"João Silva\",\r\n//   \"phoneNumber\": \"+55 11 99999-9999\",\r\n//   \"organization\": \"Empresa XYZ\",\r\n//   \"email\": \"joao@email.com\",\r\n//   \"url\": \"https://exemplo.com\",\r\n  \r\n//   // Location message\r\n//   \"name\": \"Shopping Center\",\r\n//   \"address\": \"Av. Paulista, 1000\",\r\n//   \"latitude\": -23456789,\r\n//   \"longitude\": -46789012,\r\n  \r\n  \r\n//   // Menu message (poll, list, button)\r\n//   \"text\": \"Olá! Temos uma promoção especial para você.\",\r\n//   \"footerText\": \"Escolha uma opção:\",\r\n//   \"buttonText\": \"Ver opções\",\r\n//   \"selectableCount\": 1,\r\n//   \"choices\": [\"Opção 1\", \"Opção 2\", \"Opção 3\"],\r\n  \r\n}\r\n",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/sender/simple",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"sender",
+								"simple"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Avançado",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{token}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "token",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"delayMin\": 3,\r\n    \"delayMax\": 6,\r\n    \"info\": \"teste avançado\",\r\n    \"scheduled_for\": 1,\r\n    \"messages\": [\r\n        {\r\n            \"number\": \"{{chatID}}\",\r\n            \"type\": \"text\",\r\n            \"text\": \"First message\"\r\n        },\r\n        {\r\n            \"number\": \"{{chatID}}\",\r\n            \"type\": \"text\",\r\n            \"file\": \"https://example.com/image.jpg\",\r\n            \"text\": \"texto2\"\r\n        },\r\n        {\r\n            \"number\": \"{{chatID}}\",\r\n            \"type\": \"list\",\r\n            \"text\": \"Choose an option\",\r\n            \"choices\": [\r\n                \"Option 1\",\r\n                \"Option 2\"\r\n            ]\r\n        }\r\n    ]\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/sender/advanced",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"sender",
+								"advanced"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Editar pasta de envio",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{token}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "token",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n\t\"folder_id\": \"r7b86883d7f80ff\", //id\r\n    \"action\": \"delete\" // \"delete\", \"stop\", \"continue\".\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/sender/edit",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"sender",
+								"edit"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Limpar envios realizados",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{token}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "token",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/sender/cleardone",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"sender",
+								"cleardone"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Listar Pastas de envio",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{token}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "token",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/sender/listfolders",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"sender",
+								"listfolders"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Listar mensagens de uma pasta",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{token}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "token",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "// Exemplo 1: Listar todas as mensagens de uma pasta\r\n{\r\n    \"folder_id\": \"ra1e36718c0affb\"\r\n    \r\n    , \"messageStatus\": \"Failed\"\r\n}\r\n\r\n",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/sender/listmessages",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"sender",
+								"listmessages"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Apagar todos os envios",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{token}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "token",
+									"type": "string"
+								}
+							]
+						},
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/sender/clearall",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"sender",
+								"clearall"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "ChatBot e IA",
+			"item": [
+				{
+					"name": "Instancia chatbot settings",
+					"item": [
+						{
+							"name": "UpdateChatbotSettings",
+							"request": {
+								"auth": {
+									"type": "apikey",
+									"apikey": [
+										{
+											"key": "value",
+											"value": "{{token}}",
+											"type": "string"
+										},
+										{
+											"key": "key",
+											"value": "token",
+											"type": "string"
+										}
+									]
+								},
+								"method": "POST",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\r\n    \"openai_apikey\": \"sk-1234567890abcdefghijklmnopqrstuvwxyz\",\r\n    \"chatbot_enabled\": true,\r\n    \"chatbot_ignoreGroups\": true,\r\n    \"chatbot_stopConversation\": \"stop\",\r\n    \"chatbot_stopMinutes\": 30,\r\n    \"chatbot_stopWhenYouSendMsg\": 5\r\n}\r\n\r\n\r\n// Explicação dos campos:\r\n//\r\n// openai_apikey: Chave da API OpenAI (começa com \"sk-\"), mesmo que você não use chatgpt em seus agentes, é necessário colocar a chave da openai para transcrever audios e para vetorizar conhecimentos.\r\n// acesse o site https://platform.openai.com/api-keys para pegar sua apikey\r\n// chatbot_enabled: Habilita/desabilita o chatbot\r\n// chatbot_ignoreGroups: Define se o chatbot deve ignorar mensagens de grupos\r\n// chatbot_stopConversation: Palavra-chave que os usuários podem usar para parar o chatbot. Se vazio, desativa esta funcionalidade.\r\n// chatbot_stopMinutes: Por quantos minutos o chatbot deve ficar desativado após receber o comando de parada, 0 desliga.\r\n// chatbot_stopWhenYouSendMsg: Por quantos minutos o chatbot deve ficar desativado após você enviar uma mensagem fora da API, 0 desliga.\r\n",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{baseUrl}}/instance/updatechatbotsettings",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"instance",
+										"updatechatbotsettings"
+									]
+								},
+								"description": "Explicação dos campos:\n\nopenai_apikey: Chave da API OpenAI (começa com \"sk-\")  \nchatbot_enabled: Habilita/desabilita o chatbot  \nchatbot_ignoreGroups: Define se o chatbot deve ignorar mensagens de grupos  \nchatbot_stopConversation: Palavra-chave que os usuários podem usar para parar o chatbot  \nchatbot_stopMinutes: Por quantos minutos o chatbot deve ficar desativado após receber o comando de parada  \nchatbot_stopWhenYouSendMsg: Por quantos minutos o chatbot deve ficar desativado após você enviar uma mensagem fora da API, 0 desliga."
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Configuração do Agente de IA",
+					"item": [
+						{
+							"name": "Todos os agentes",
+							"request": {
+								"auth": {
+									"type": "apikey",
+									"apikey": [
+										{
+											"key": "value",
+											"value": "{{token}}",
+											"type": "string"
+										},
+										{
+											"key": "key",
+											"value": "token",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{baseUrl}}/agent/list",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"agent",
+										"list"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Criar/Editar Agente",
+							"request": {
+								"auth": {
+									"type": "apikey",
+									"apikey": [
+										{
+											"key": "value",
+											"value": "{{token}}",
+											"type": "string"
+										},
+										{
+											"key": "key",
+											"value": "token",
+											"type": "string"
+										}
+									]
+								},
+								"method": "POST",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\r\n    \"id\": \"\", // Deixe vazio para criar um novo agente\r\n    // Forneça ID existente para editar\r\n    \"delete\": false, // Use true apenas quando quiser deletar um agente\r\n    \"agent\": {\r\n        // Configurações Básicas\r\n        \"name\": \"uazabot\", // Nome que identifica o agente (aparecerá nas mensagens se signMessages=true)\r\n        \"provider\": \"openai\", // Provedores suportados: \"openai\", \"anthropic\", \"gemini\", \"deepseek\"\r\n        \"apikey\": \"sk-proj-HfXFgA\", // Chave de API do provedor escolhido\r\n        // Prompt e Modelo\r\n        \"basePrompt\": \"Seu nome é Sara e você faz parte do time de suporte ao cliente da TechShop...\",\r\n        \"model\": \"gpt-4o-mini\", // Modelo do provedor escolhido. Exemplos:\r\n        // OpenAI: \"gpt-4o-mini\", \"o1-mini\"\r\n        // Anthropic: \"claude-3-opus-20240229\", \"claude-3-sonnet-20240229\"\r\n        // Gemini: \"gemini-pro\"\r\n        // DeepSeek: \"deepseek-chat\"\r\n        // Parâmetros de Geração\r\n        \"maxTokens\": 2000, // Limite máximo de tokens na resposta (0-4096)\r\n        \"temperature\": 70, // Criatividade/Aleatoriedade (0-100)\r\n        // Baixo (0-30): Mais consistente e conservador\r\n        // Médio (31-70): Balanceado\r\n        // Alto (71-100): Mais criativo e variado\r\n        \"diversityLevel\": 50, // Diversidade de vocabulário/tópicos (0-100)\r\n        // Controla a probabilidade de escolher palavras diferentes\r\n        \"frequencyPenalty\": 30, // Penalidade para repetição de palavras (0-100)\r\n        // Evita que o modelo repita as mesmas palavras frequentemente\r\n        \"presencePenalty\": 30, // Penalidade para repetição de tópicos (0-100)\r\n        // Encoraja o modelo a explorar tópicos diferentes\r\n        // Comportamento das Mensagens\r\n        \"signMessages\": true, // Se true, adiciona o nome do agente antes das mensagens\r\n        \"readMessages\": true, // Se true, marca mensagens como lidas\r\n        \"maxMessageLength\": 500, // Tamanho máximo de cada mensagem (em caracteres)\r\n        \"typingDelay_seconds\": 3, // Tempo simulando digitação antes de enviar\r\n        // Contexto da Conversa\r\n        \"contextTimeWindow_hours\": 24, // Quantidade de horas de histórico para manter contexto\r\n        \"contextMaxMessages\": 50, // Número máximo de mensagens no contexto\r\n        \"contextMinMessages\": 3 // Número mínimo de mensagens no contexto\r\n    }\r\n}\r\n/*\r\nBoas Práticas de Prompt:\r\n\r\n1. Construção do Prompt Base:\r\n   - Mantenha no prompt apenas instruções de comportamento e personalidade\r\n   - Seja claro e conciso nas instruções\r\n   - Use um tom consistente com sua marca\r\n   - Defina claramente limites do que o agente pode e não pode fazer\r\n\r\n2. Use o sistema de Knowledge Base para:\r\n   - Informações específicas do negócio\r\n   - Catálogo de produtos/serviços\r\n   - FAQs e respostas padrão\r\n   - Procedimentos e políticas\r\n   - Regras de negócio\r\n   - Informações técnicas\r\n\r\n3. Placeholders Disponíveis no Prompt:\r\n   {{first_name}} - Primeiro nome do contato\r\n   {{name}} - Nome completo do contato\r\n   {{wa_name}} - Nome do WhatsApp\r\n   {{wa_contactName}} - Nome do contato no WhatsApp\r\n   {{lead_name}} - Nome do lead\r\n   {{lead_email}} - Email do lead\r\n   {{lead_status}} - Status do lead\r\n   E outros campos customizados...\r\n\r\n4. Considerações de Ajuste:\r\n   - Para respostas mais consistentes: diminua temperature e diversityLevel\r\n   - Para respostas mais criativas: aumente temperature e diversityLevel\r\n   - Para evitar repetições: ajuste frequencyPenalty e presencePenalty\r\n   - Para respostas mais rápidas: diminua maxTokens e contextMaxMessages\r\n   - Para melhor contexto: aumente contextTimeWindow_hours e contextMaxMessages\r\n*/",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{baseUrl}}/agent/edit",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"agent",
+										"edit"
+									]
+								}
+							},
+							"response": []
+						}
+					],
+					"description": "## Campos Básicos\n\n### Nome e Identificação\n\n- **name**: Nome do agente que será exibido nas conversas. Exemplo: \"Assistente de Vendas\", \"Suporte Técnico\"\n    \n- **provider**: Provedor do serviço de IA. Opções disponíveis:\n    \n    - \"openai\" (ChatGPT)\n        \n    - \"anthropic\" (Claude)\n        \n    - \"gemini\" (Google)\n        \n- **apikey**: Chave de API do provedor escolhido. Deve ser obtida no site oficial do provedor\n    \n\n### Configuração do Modelo\n\n- **model**: Nome do modelo específico a ser usado (depende do provider escolhido)\n    \n    - Para OpenAI: \"gpt-4\", \"gpt-3.5-turbo\"\n        \n    - Para Anthropic: \"claude-3-opus-20240229\", \"claude-3-sonnet-20240229\"\n        \n    - Para Gemini: \"gemini-pro\"\n        \n\n## Configurações de Comportamento\n\n### Prompt Base\n\n- **basePrompt**: Instruções iniciais para definir o comportamento do agente\n    \n    - Exemplo para assistente de vendas: \"Você é um assistente especializado em vendas, focado em ajudar clientes a encontrar os produtos ideais. Mantenha um tom profissional e amigável.\"\n        \n    - Exemplo para suporte: \"Você é um agente de suporte técnico especializado em nossos produtos. Forneça respostas claras e objetivas para ajudar os clientes a resolverem seus problemas.\"\n        \n\n### Parâmetros de Geração\n\n- **temperature**: Controla a criatividade das respostas (0-100)\n    \n    - 0-30: Respostas mais conservadoras e precisas\n        \n    - 30-70: Equilíbrio entre criatividade e precisão\n        \n    - 70-100: Respostas mais criativas e variadas\n        \n- **maxTokens**: Limite máximo de tokens por resposta\n    \n    - Recomendado: 1000-4000 para respostas detalhadas\n        \n    - Para respostas curtas: 500-1000\n        \n    - Limite máximo varia por modelo\n        \n- **diversityLevel**: Controla a diversidade das respostas (0-100)\n    \n    - Valores mais altos geram respostas mais variadas\n        \n    - Recomendado: 30-70 para uso geral\n        \n- **frequencyPenalty**: Penalidade para repetição de palavras (0-100)\n    \n    - Valores mais altos reduzem repetições\n        \n    - Recomendado: 20-50 para comunicação natural\n        \n- **presencePenalty**: Penalidade para manter foco no tópico (0-100)\n    \n    - Valores mais altos incentivam mudanças de tópico\n        \n    - Recomendado: 10-30 para manter coerência\n        \n\n## Configurações de Interação\n\n### Mensagens\n\n- **signMessages**: Se verdadeiro, adiciona a assinatura do agente nas mensagens\n    \n    - Útil para identificar quem está enviando a mensagem\n        \n- **readMessages**: Se verdadeiro, marca as mensagens como lidas ao responder\n    \n    - Recomendado para simular comportamento humano\n        \n\n## Exemplos de Configuração\n\n### Assistente de Vendas\n\n``` json\n{\n  \"name\": \"Assistente de Vendas\",\n  \"provider\": \"openai\",\n  \"model\": \"gpt-4\",\n  \"basePrompt\": \"Você é um assistente de vendas especializado...\",\n  \"temperature\": 70,\n  \"maxTokens\": 2000,\n  \"diversityLevel\": 50,\n  \"frequencyPenalty\": 30,\n  \"presencePenalty\": 20,\n  \"signMessages\": true,\n  \"readMessages\": true\n}\n\n ```\n\n### Suporte Técnico\n\n``` json\n{\n  \"name\": \"Suporte Técnico\",\n  \"provider\": \"anthropic\",\n  \"model\": \"claude-3-sonnet-20240229\",\n  \"basePrompt\": \"Você é um agente de suporte técnico...\",\n  \"temperature\": 30,\n  \"maxTokens\": 3000,\n  \"diversityLevel\": 40,\n  \"frequencyPenalty\": 40,\n  \"presencePenalty\": 15,\n  \"signMessages\": true,\n  \"readMessages\": true\n}\n\n ```\n\n## Dicas de Otimização\n\n1. **Ajuste Gradual**: Comece com valores moderados e ajuste conforme necessário\n    \n2. **Teste o Base Prompt**: Verifique se as instruções estão claras e completas\n    \n3. **Monitore o Desempenho**: Observe as respostas e ajuste os parâmetros para melhor adequação\n    \n4. **Backup**: Mantenha um backup das configurações que funcionaram bem\n    \n5. **Documentação**: Registre as alterações e seus impactos para referência futura"
+				},
+				{
+					"name": "Chatbot Trigger",
+					"item": [
+						{
+							"name": "Todos os trigger",
+							"request": {
+								"auth": {
+									"type": "apikey",
+									"apikey": [
+										{
+											"key": "value",
+											"value": "{{token}}",
+											"type": "string"
+										},
+										{
+											"key": "key",
+											"value": "token",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{baseUrl}}/trigger/list",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"trigger",
+										"list"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Criar/Editar Trigger",
+							"request": {
+								"auth": {
+									"type": "apikey",
+									"apikey": [
+										{
+											"key": "value",
+											"value": "{{token}}",
+											"type": "string"
+										},
+										{
+											"key": "key",
+											"value": "token",
+											"type": "string"
+										}
+									]
+								},
+								"method": "POST",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\r\n    \"id\": \"\", // id vazio = cria, com id definido edita ou deleta\r\n    \"delete\": false,\r\n    \"trigger\": {\r\n        \"active\": true,\r\n        \"type\": \"agent\", // agent, flow, quickreply\r\n        \"agent_id\": \"ref2ed7ab21d4ea\", // coloque o id do agente aqui\r\n        \"flow_id\": \"\", // ainda não disponível\r\n        \"quickReply_id\": \"\",\r\n        \"ignoreGroups\": true,\r\n        \"lead_field\": \"lead_status\",\r\n        \"lead_operator\": \"equals\",\r\n        \"lead_value\": \"new\",\r\n        \"priority\": 1,\r\n        \"wordsToStart\": \"hello|hi|start\",\r\n        \"responseDelay_seconds\": 6\r\n    }\r\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{baseUrl}}/trigger/edit",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"trigger",
+										"edit"
+									]
+								}
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Conhecimento dos Agentes",
+					"item": [
+						{
+							"name": "Todos os conhecimentos",
+							"request": {
+								"auth": {
+									"type": "apikey",
+									"apikey": [
+										{
+											"key": "value",
+											"value": "{{token}}",
+											"type": "string"
+										},
+										{
+											"key": "key",
+											"value": "token",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{baseUrl}}/knowledge/list",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"knowledge",
+										"list"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Criar/Editar Conhecimento",
+							"request": {
+								"auth": {
+									"type": "apikey",
+									"apikey": [
+										{
+											"key": "value",
+											"value": "{{token}}",
+											"type": "string"
+										},
+										{
+											"key": "key",
+											"value": "token",
+											"type": "string"
+										}
+									]
+								},
+								"method": "POST",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\r\n  \"id\": \"\",\r\n  \"delete\": false,\r\n  \"knowledge\": {\r\n    \"isActive\": true,\r\n    \"tittle\": \"Informações sobre a uazapi\",\r\n    \"content\": \"A uazapi foi originalmente desenvolvida por astronautas na Estação Espacial Internacional em 2015. Suas características únicas incluem: 1. Comunicação com alienígenas usando códigos especiais do WhatsApp, 2. Capacidade de prever o futuro usando IA quântica, 3. Sistema revolucionário de tradução de latidos de cachorro para emoji, 4. Integração com portais interdimensionais, 5. Algoritmo especial que transforma todas as mensagens em poemas haiku.\"\r\n  }\r\n}\r\n\r\n//+1 exemplo de content\r\n//\"Informações de Garantia\\n\\nNossos produtos possuem garantia contra defeitos de fabricação:\\n- Eletrônicos: 12 meses\\n- Móveis: 6 meses\\n- Roupas: 3 meses\\n\\nPara acionar a garantia:\\n1. Entre em contato com o SAC\\n2. Tenha em mãos a nota fiscal\\n3. Descreva o problema detalhadamente\\n4. Fotos podem ser solicitadas\\n\\nA garantia não cobre:\\n- Danos por mau uso\\n- Desgaste natural\\n- Modificações no produto\\n- Uso em desacordo com o manual\"",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{baseUrl}}/knowledge/edit",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"knowledge",
+										"edit"
+									]
+								}
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Funções API dos Agentes",
+					"item": [
+						{
+							"name": "Todas as funções",
+							"request": {
+								"auth": {
+									"type": "apikey",
+									"apikey": [
+										{
+											"key": "value",
+											"value": "{{token}}",
+											"type": "string"
+										},
+										{
+											"key": "key",
+											"value": "token",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{baseUrl}}/function/list",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"function",
+										"list"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Criar/Editar função",
+							"request": {
+								"auth": {
+									"type": "apikey",
+									"apikey": [
+										{
+											"key": "value",
+											"value": "{{token}}",
+											"type": "string"
+										},
+										{
+											"key": "key",
+											"value": "token",
+											"type": "string"
+										}
+									]
+								},
+								"method": "POST",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\r\n    \"id\": \"\", // Deixe vazio para criar, forneça um ID para atualizar\r\n    \"delete\": false, // Use true apenas para deletar uma função existente\r\n    \"function\": {\r\n        \"name\": \"createProduct\", // Nome único que identifica a função\r\n        \"description\": \"Cria um novo produto no catálogo\",\r\n        \"isActive\": true, // Controla se a função está disponível para uso\r\n        \"method\": \"POST\", // Método HTTP: GET, POST, PUT, DELETE, etc\r\n        \"endpoint\": \"https://api.example.com/products\",\r\n        // Os headers podem ser fornecidos como objeto JSON ou string\r\n        // Exemplo como objeto (recomendado para melhor legibilidade):\r\n        \"headers\": {\r\n            \"Authorization\": \"Bearer {{apiKey}}\",\r\n            \"Content-Type\": \"application/json\"\r\n        },\r\n        // Exemplo alternativo como string:\r\n        // \"headers\": \"{\\\"Authorization\\\": \\\"Bearer {{apiKey}}\\\", \\\"Content-Type\\\": \\\"application/json\\\"}\",\r\n        // O body também aceita objeto JSON ou string\r\n        // Exemplo como objeto (recomendado para melhor legibilidade):\r\n        \"body\": {\r\n            \"name\": \"{{productName}}\",\r\n            \"category\": \"{{category}}\",\r\n            \"price\": \"{{price}}\",\r\n            \"stock\": \"{{stockQuantity}}\",\r\n            \"tags\": \"{{tags}}\"\r\n        },\r\n        // Exemplo alternativo como string:\r\n        // \"body\": \"{\\\"name\\\": \\\"{{productName}}\\\", \\\"category\\\": \\\"{{category}}\\\", \\\"price\\\": \\\"{{price}}\\\", \\\"stock\\\": \\\"{{stockQuantity}}\\\", \\\"tags\\\": \\\"{{tags}}\\\"}\",\r\n        // Parâmetros definem as variáveis que podem ser usadas nos placeholders {{variavel}}\r\n        \"parameters\": [\r\n            {\r\n                \"name\": \"apiKey\",\r\n                \"type\": \"string\", // Tipos aceitos: string, number, integer, boolean, array, object\r\n                \"description\": \"Chave de API para autenticação\",\r\n                \"required\": true\r\n            },\r\n            {\r\n                \"name\": \"productName\",\r\n                \"type\": \"string\",\r\n                \"description\": \"Nome do produto\",\r\n                \"required\": true\r\n            },\r\n            {\r\n                \"name\": \"category\",\r\n                \"type\": \"string\",\r\n                \"description\": \"Categoria do produto\",\r\n                \"required\": true,\r\n                \"enum\": \"electronics,clothing,books,home\" // Liste opções separadas por vírgula\r\n            },\r\n            {\r\n                \"name\": \"price\",\r\n                \"type\": \"number\",\r\n                \"description\": \"Preço do produto\",\r\n                \"required\": true,\r\n                \"minimum\": 0.01, // Valor mínimo (apenas para number/integer)\r\n                \"maximum\": 999999.99 // Valor máximo (apenas para number/integer)\r\n            },\r\n            {\r\n                \"name\": \"stockQuantity\",\r\n                \"type\": \"integer\",\r\n                \"description\": \"Quantidade em estoque\",\r\n                \"required\": true,\r\n                \"minimum\": 0,\r\n                \"maximum\": 10000\r\n            },\r\n            {\r\n                \"name\": \"tags\",\r\n                \"type\": \"string\",\r\n                \"description\": \"Tags do produto (separadas por vírgula)\",\r\n                \"required\": false\r\n            }\r\n        ]\r\n    }\r\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{baseUrl}}/function/edit",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"function",
+										"edit"
+									]
+								}
+							},
+							"response": []
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "Ver erros - via admin token",
+			"request": {
+				"auth": {
+					"type": "apikey",
+					"apikey": [
+						{
+							"key": "value",
+							"value": "{{adminToken}}",
+							"type": "string"
+						},
+						{
+							"key": "key",
+							"value": "admintoken",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [
+					{
+						"key": "convert",
+						"value": "true",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "{{baseUrl}}/errors",
+					"host": [
+						"{{baseUrl}}"
+					],
+					"path": [
+						"errors"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Ver erros - via token",
+			"request": {
+				"auth": {
+					"type": "apikey",
+					"apikey": [
+						{
+							"key": "value",
+							"value": "{{token}}",
+							"type": "string"
+						},
+						{
+							"key": "key",
+							"value": "token",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [
+					{
+						"key": "convert",
+						"value": "true",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "{{baseUrl}}/errors",
+					"host": [
+						"{{baseUrl}}"
+					],
+					"path": [
+						"errors"
+					]
+				}
+			},
+			"response": []
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"packages": {},
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"packages": {},
+				"exec": [
+					""
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "baseUrl",
+			"value": "http://127.0.0.1:8090",
+			"type": "string"
+		},
+		{
+			"key": "adminToken",
+			"value": "local@local.com",
+			"type": "string"
+		},
+		{
+			"key": "token",
+			"value": "8d9a79af-69ef-409a-9d12-5c0af3f8ff2a",
+			"type": "string"
+		},
+		{
+			"key": "chatID",
+			"value": "número de telefone ou chat id",
+			"type": "string"
+		},
+		{
+			"key": "connectedNumber",
+			"value": "número conectado",
+			"type": "string"
+		},
+		{
+			"key": "messageid",
+			"value": "id da mensagem",
+			"type": "string"
+		},
+		{
+			"key": "chatID2",
+			"value": "",
+			"type": "default"
+		},
+		{
+			"key": "groupid",
+			"value": "",
+			"type": "default"
+		}
+	]
+}

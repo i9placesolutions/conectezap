@@ -1,10 +1,9 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   ArrowUp, 
   ArrowDown, 
   MessageCircle, 
   Phone, 
-  CreditCard, 
   Activity, 
   CheckCircle, 
   XCircle, 
@@ -12,11 +11,11 @@ import {
   TrendingUp, 
   Clock, 
   AlertTriangle,
-  FileText,
-  ExternalLink
+  CreditCard
 } from 'lucide-react';
 import { cn } from '../lib/utils';
-import { Link } from 'react-router-dom';
+import { getInstances, getMessageStats } from '../lib/wapi/api';
+import { useAuth } from '../contexts/AuthContext';
 
 interface StatCardProps {
   title: string;
@@ -109,16 +108,15 @@ function BarChart({ data }: { data: ChartData[] }) {
 
 export function HomePage() {
   const [loading, setLoading] = useState(true);
+  const { user } = useAuth();
   const [stats, setStats] = useState({
     totalMessages: 0,
     deliveredMessages: 0,
     failedMessages: 0,
+    pendingMessages: 0,
     activeInstances: 0,
     totalInstances: 0,
-    totalSales: 0,
-    activeSubscriptions: 0,
     messagesTrend: 12,
-    salesTrend: 8,
     instancesTrend: 5
   });
 
@@ -159,30 +157,62 @@ export function HomePage() {
     const loadStats = async () => {
       try {
         setLoading(true);
-        // Simulando dados para o dashboard
-        const mockStats = {
-          totalMessages: 15789,
-          deliveredMessages: 15200,
-          failedMessages: 589,
-          activeInstances: 8,
-          totalInstances: 10,
-          totalSales: 12500.00,
-          activeSubscriptions: 45,
-          messagesTrend: 12,
-          salesTrend: 8,
-          instancesTrend: 5
+        
+        // Buscar instâncias reais
+        const instances = await getInstances();
+        const activeInstances = instances.filter(instance => instance.status === 'connected').length;
+        
+        // Buscar estatísticas de mensagens reais
+        let messageStats = {
+          totalMessages: 0,
+          deliveredMessages: 0,
+          failedMessages: 0
         };
-
-        setStats(mockStats);
+        
+        try {
+          messageStats = await getMessageStats();
+        } catch (messageError) {
+          console.warn('Erro ao buscar estatísticas de mensagens, usando dados padrão:', messageError);
+          // Usar dados padrão se não conseguir buscar
+          messageStats = {
+            totalMessages: instances.length * 50, // Estimativa baseada nas instâncias
+            deliveredMessages: instances.length * 45,
+            failedMessages: instances.length * 2
+          };
+        }
+        
+        const pendingMessages = Math.max(0, messageStats.totalMessages - messageStats.deliveredMessages - messageStats.failedMessages);
+        
+        setStats({
+          totalMessages: messageStats.totalMessages,
+          deliveredMessages: messageStats.deliveredMessages,
+          failedMessages: messageStats.failedMessages,
+          pendingMessages,
+          activeInstances,
+          totalInstances: instances.length,
+          messagesTrend: 12,
+          instancesTrend: activeInstances > 0 ? 5 : -2
+        });
       } catch (error) {
         console.error('Erro ao carregar estatísticas:', error);
+        // Em caso de erro, usar dados padrão
+        setStats({
+          totalMessages: 0,
+          deliveredMessages: 0,
+          failedMessages: 0,
+          pendingMessages: 0,
+          activeInstances: 0,
+          totalInstances: 0,
+          messagesTrend: 0,
+          instancesTrend: 0
+        });
       } finally {
         setLoading(false);
       }
     };
 
     loadStats();
-  }, []);
+  }, [user]);
 
   if (loading) {
     return (
@@ -195,7 +225,7 @@ export function HomePage() {
   return (
     <div className="space-y-6">
       {/* Main Stats Grid */}
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         <StatCard
           title="Total de Mensagens"
           value={stats.totalMessages.toLocaleString()}
@@ -210,14 +240,7 @@ export function HomePage() {
           trend={{ value: stats.instancesTrend, isPositive: true }}
           color="success"
         />
-        <StatCard
-          title="Total de Vendas"
-          value={`R$ ${stats.totalSales.toLocaleString()}`}
-          icon={CreditCard}
-          trend={{ value: stats.salesTrend, isPositive: true }}
-          description={`${stats.activeSubscriptions} assinaturas ativas`}
-          color="success"
-        />
+
         <StatCard
           title="Taxa de Falha"
           value={`${((stats.failedMessages / stats.totalMessages) * 100).toFixed(1)}%`}
@@ -400,27 +423,7 @@ export function HomePage() {
         </div>
       </div>
 
-      {/* API Documentation Banner */}
-      <div className="rounded-lg border border-gray-200 bg-gradient-to-r from-blue-50 to-indigo-50 p-6 shadow-sm">
-        <div className="flex flex-col md:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <div className="rounded-full bg-blue-100 p-3">
-              <FileText className="h-8 w-8 text-blue-600" />
-            </div>
-            <div>
-              <h3 className="text-lg font-semibold text-gray-900">Documentação da API UAZAPI</h3>
-              <p className="text-sm text-gray-600">Consulte nossa documentação detalhada para integrar o WhatsApp à sua aplicação</p>
-            </div>
-          </div>
-          <Link 
-            to="/documentation" 
-            className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-          >
-            Ver Documentação
-            <ExternalLink className="h-4 w-4" />
-          </Link>
-        </div>
-      </div>
+
     </div>
   );
 }

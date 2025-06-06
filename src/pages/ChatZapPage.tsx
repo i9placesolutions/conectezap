@@ -1,10 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
-  Search, MessageCircle, Phone, Paperclip, Send, MoreVertical, Smartphone, 
-  Trash, Check, Reply, Forward, Mic
+  Search, MessageCircle, Phone, Paperclip, Send, MoreVertical, 
+  Check, Reply, Forward, Download, Smartphone
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { SelectInstanceModal } from '../components/instance/SelectInstanceModal';
+import { ContactsModal } from '../components/ContactsModal';
+import { BlocksModal } from '../components/BlocksModal';
+import { LabelsModal } from '../components/LabelsModal';
 import { 
   getProfileInfo,
   getGroups,
@@ -19,6 +22,7 @@ import {
   searchAllMessages,
   API_URL
 } from '../lib/wapi/api';
+import { uazapiService } from '../services/uazapiService';
 import type { ChatFilters } from '../lib/wapi/types';
 
 interface Instance {
@@ -135,9 +139,21 @@ export function ChatZapPage() {
   const [globalSearchTerm, setGlobalSearchTerm] = useState('');
   const [globalSearchResults, setGlobalSearchResults] = useState<any[]>([]);
   const [searchingGlobally, setSearchingGlobally] = useState(false);
-  const [isUsingMockData] = useState(false);
+
   const [showDiagnosticInfo, setShowDiagnosticInfo] = useState(false);
   const [apiRequestStatus, setApiRequestStatus] = useState<{lastCall: string, status: string}>({ lastCall: '', status: 'nenhuma' });
+  const [isDownloadingAllMessages, setIsDownloadingAllMessages] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState<{current: number, total: number}>({current: 0, total: 0});
+  const [allChatsData, setAllChatsData] = useState<any[]>([]);
+  const [allMessagesData, setAllMessagesData] = useState<any[]>([]);
+  
+  // Estados para os novos modais
+  const [showContactsModal, setShowContactsModal] = useState(false);
+  const [showBlocksModal, setShowBlocksModal] = useState(false);
+  const [showLabelsModal, setShowLabelsModal] = useState(false);
+  const [contacts, setContacts] = useState([]);
+  const [blockedContacts, setBlockedContacts] = useState([]);
+  const [labels, setLabels] = useState([]);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -227,81 +243,52 @@ export function ChatZapPage() {
     }
   };
 
-  const loadChats = async () => {
+  // Função para listar TODOS os chats sem filtros
+  const listAllChats = async (instanceToUse?: Instance) => {
+    const instance = instanceToUse || selectedInstance;
+    if (!instance || !instance.token) {
+      toast.error('Nenhuma instância selecionada');
+      return;
+    }
+
     try {
-      if (!selectedInstance || !selectedInstance.token) {
-         console.error('[UI_ERROR] Tentando carregar chats sem instância selecionada ou token.');
-         setError('Instância inválida ou não selecionada.');
-         setLoading(false);
-         return;
-      }
-
       setLoading(true);
-      setError(null);
-      setApiRequestStatus({ lastCall: `chat.getAll(${selectedInstance.id}) via POST /chat/find`, status: 'iniciada' });
+      toast.loading('Listando todos os chats...');
+      
+      // Buscar todos os chats sem filtros
+      const response = await fetch(`${API_URL}/chat/find`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Token': instance.token
+        },
+        body: JSON.stringify({
+          operator: "AND",
+          sort: "-wa_lastMsgTimestamp",
+          limit: 1000, // Aumentar limite para pegar mais chats
+          offset: 0
+        })
+      });
 
-      console.log('[UI_LOG] Iniciando busca de chats (POST /chat/find) para a instância:', selectedInstance.id);
-
-      // Preparar parâmetros de busca se houver searchTerm
-      const searchParams = searchTerm ? { lead_name: `~${searchTerm}` } : {};
-
-      // Buscar chats usando o endpoint corrigido (POST /chat/find)
-      const chatResponse = await chat.getAll(selectedInstance.id, selectedInstance.token, searchParams);
-
-      console.log('[UI_LOG] Resposta recebida de chat.getAll (POST /chat/find):', chatResponse);
-      setApiRequestStatus(prev => ({ ...prev, status: chatResponse?.chats?.length > 0 ? 'sucesso' : 'falha ou vazio' }));
-
-      if (chatResponse && Array.isArray(chatResponse.chats)) {
-        console.log(`[UI_LOG] Processando ${chatResponse.chats.length} chats recebidos de POST /chat/find`);
+      const data = await response.json();
+      
+      if (data && data.chats) {
+        setAllChatsData(data.chats);
+        toast.success(`${data.chats.length} chats encontrados`);
+        console.log('Todos os chats:', data.chats);
         
-        // Log do primeiro chat para análise da estrutura (vindo de /chat/find)
-        if (chatResponse.chats.length > 0) {
-          console.log('[UI_LOG] Estrutura do primeiro chat (de /chat/find):', JSON.stringify(chatResponse.chats[0], null, 2));
-          
-          // Log específico para o chat "Rafael Mendes" se encontrado
-          const chatTargetId = 'r3672040bcbc676';
-          const rafaelChatData = chatResponse.chats.find((c: any) => c.id === chatTargetId || c.wa_chatid === chatTargetId);
-          if (rafaelChatData) {
-            console.log(`[UI_LOG] DADOS CRUS DO CHAT ${chatTargetId} recebidos de /chat/find:`, JSON.stringify(rafaelChatData, null, 2));
-          }
-        }
-
-        // O filtro já foi aplicado na API se searchParams foi enviado
-        // Se não, podemos filtrar localmente se necessário, mas idealmente a API filtra.
-        let processedChats = chatResponse.chats;
-
-        const formattedChats = processedChats.map((chatData: any): Chat => {
-          // Mapeamento baseado na estrutura esperada de /chat/find
+        // Também atualizar a lista de chats na interface
+        const formattedChats = data.chats.map((chatData: any): Chat => {
           const isGroup = Boolean(chatData.wa_isGroup);
-          
-          // Nome: wa_contactName (preferencial), wa_name, ou name (lead_name)
           const name = chatData.wa_contactName || chatData.wa_name || chatData.lead_name || 
                       (isGroup ? 'Grupo' : 'Contato Desconhecido');
-          
-          // ID do chat: PRIORIZAR wa_chatid, depois id. Garantir que não seja nulo.
           const chatId = chatData.wa_chatid || chatData.id || `chat-${Math.random()}-${Date.now()}`;
-
-          // Número (parte antes do @ ou telefone) - Usar o chatId (preferencialmente wa_chatid)
           const number = chatData.phone || (chatId.includes('@') ? chatId.split('@')[0] : chatId);
-          
-          // Última mensagem: wa_lastMessageTextVote ou lastMessage
           const lastMessageText = chatData.wa_lastMessageTextVote || chatData.lastMessage || '';
-          
-          // Timestamp: wa_lastMsgTimestamp (em segundos, precisa multiplicar por 1000)
           const timestamp = chatData.wa_lastMsgTimestamp ? Number(chatData.wa_lastMsgTimestamp) * 1000 : Date.now();
+          const profileImage = chatData.image || chatData.imagePreview || chatData.imgUrl || chatData.picture || chatData.profilePic || '';
 
-           // Imagem: Tentar múltiplos campos possíveis
-           const profileImage = chatData.image || 
-                                chatData.imagePreview || 
-                                chatData.imgUrl || 
-                                chatData.picture || 
-                                chatData.profilePic || 
-                                ''; // Default vazio se nenhum for encontrado
-
-           // Log da URL da imagem encontrada para este chat
-           // console.log(`[UI_LOG] Chat ID: ${chatId}, Nome: ${name}, profileImage URL: ${profileImage || 'Nenhuma'}`);
-
-          const formattedChat: Chat = {
+          return {
             id: chatId,
             name: name,
             displayNumber: number,
@@ -313,15 +300,178 @@ export function ChatZapPage() {
             number: number,
             lastSeen: chatData.wa_lastSeen ? Number(chatData.wa_lastSeen) * 1000 : 0
           };
-          return formattedChat;
+        });
+        
+        setChats(formattedChats);
+      } else {
+        toast.error('Nenhum chat encontrado');
+      }
+    } catch (error: any) {
+      console.error('Erro ao listar todos os chats:', error);
+      toast.error('Erro ao listar chats: ' + error.message);
+    } finally {
+      setLoading(false);
+      toast.dismiss();
+    }
+  };
+
+  // Função para baixar todas as mensagens de todos os chats
+  const downloadAllMessages = async (instanceToUse?: Instance) => {
+    const instance = instanceToUse || selectedInstance;
+    if (!instance || !instance.token) {
+      toast.error('Nenhuma instância selecionada');
+      return;
+    }
+
+    if (allChatsData.length === 0) {
+      toast.error('Primeiro liste todos os chats');
+      return;
+    }
+
+    try {
+      setIsDownloadingAllMessages(true);
+      setDownloadProgress({current: 0, total: allChatsData.length});
+      const allMessages: any[] = [];
+      
+      toast.loading('Baixando todas as mensagens...');
+
+      for (let i = 0; i < allChatsData.length; i++) {
+        const chat = allChatsData[i];
+        const chatId = chat.wa_chatid || chat.id;
+        
+        if (!chatId) continue;
+        
+        setDownloadProgress({current: i + 1, total: allChatsData.length});
+        
+        try {
+          // Buscar mensagens do chat usando o endpoint /message/find
+          const response = await fetch(`${API_URL}/message/find`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Token': instance.token
+            },
+            body: JSON.stringify({
+              chatid: chatId,
+              limit: 1000 // Pegar até 1000 mensagens por chat
+            })
+          });
+
+          const messageData = await response.json();
+          
+          if (messageData && messageData.messages) {
+            // Adicionar informações do chat às mensagens
+            const messagesWithChatInfo = messageData.messages.map((msg: any) => ({
+              ...msg,
+              chatName: chat.wa_contactName || chat.wa_name || chat.lead_name,
+              chatId: chatId,
+              isGroup: chat.wa_isGroup
+            }));
+            
+            allMessages.push(...messagesWithChatInfo);
+          }
+          
+          // Pequeno delay para não sobrecarregar a API
+          await new Promise(resolve => setTimeout(resolve, 100));
+          
+        } catch (error) {
+          console.error(`Erro ao baixar mensagens do chat ${chatId}:`, error);
+        }
+      }
+      
+      setAllMessagesData(allMessages);
+      toast.success(`${allMessages.length} mensagens baixadas de ${allChatsData.length} chats`);
+      
+      // Criar arquivo JSON para download
+      const dataToDownload = {
+        timestamp: new Date().toISOString(),
+        instance: instance.name,
+        totalChats: allChatsData.length,
+        totalMessages: allMessages.length,
+        chats: allChatsData,
+        messages: allMessages
+      };
+      
+      const blob = new Blob([JSON.stringify(dataToDownload, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `whatsapp-backup-${instance.name}-${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      
+    } catch (error: any) {
+      console.error('Erro ao baixar todas as mensagens:', error);
+      toast.error('Erro ao baixar mensagens: ' + error.message);
+    } finally {
+      setIsDownloadingAllMessages(false);
+      setDownloadProgress({current: 0, total: 0});
+      toast.dismiss();
+    }
+  };
+
+  const loadChats = async () => {
+    try {
+      if (!selectedInstance || !selectedInstance.token) {
+         console.error('[UI_ERROR] Tentando carregar chats sem instância selecionada ou token.');
+         setError('Instância inválida ou não selecionada.');
+         setLoading(false);
+         return;
+      }
+
+      setLoading(true);
+      setError(null);
+      setApiRequestStatus({ lastCall: `uazapiService.searchChats() via POST /chat/find`, status: 'iniciada' });
+
+      console.log('[UI_LOG] Iniciando busca de chats usando uazapiService para a instância:', selectedInstance.id);
+
+      // Preparar filtros de busca
+      const filters: any = {
+        operator: "AND",
+        sort: "-wa_lastMsgTimestamp",
+        limit: 1000,
+        offset: 0
+      };
+      
+      // Adicionar filtro de busca se houver searchTerm
+      if (searchTerm) {
+        filters.lead_name = `~${searchTerm}`;
+      }
+
+      // Buscar chats usando o novo serviço
+      const chatsFromService = await uazapiService.searchChats(selectedInstance.token, filters);
+
+      console.log('[UI_LOG] Resposta recebida de uazapiService.searchChats:', chatsFromService);
+      setApiRequestStatus(prev => ({ ...prev, status: chatsFromService?.length > 0 ? 'sucesso' : 'falha ou vazio' }));
+
+      if (Array.isArray(chatsFromService)) {
+        console.log(`[UI_LOG] Processando ${chatsFromService.length} chats recebidos do uazapiService`);
+        
+        // Converter do formato do serviço para o formato da interface
+        const formattedChats = chatsFromService.map((chatData): Chat => {
+          return {
+            id: chatData.id,
+            name: chatData.name,
+            displayNumber: chatData.id.includes('@') ? chatData.id.split('@')[0] : chatData.id,
+            lastMessage: '', // Será preenchido se disponível
+            timestamp: chatData.lastMessageTimestamp || Date.now(),
+            unreadCount: chatData.unreadCount,
+            isGroup: chatData.isGroup,
+            profileImage: chatData.profilePicUrl,
+            number: chatData.id.includes('@') ? chatData.id.split('@')[0] : chatData.id,
+            lastSeen: 0
+          };
         });
 
-        console.log('[UI_LOG] Chats finais formatados (de /chat/find):', formattedChats);
+        console.log('[UI_LOG] Chats finais formatados do uazapiService:', formattedChats);
         setChats(formattedChats);
-        if (formattedChats.length === 0 && chatResponse.chats.length > 0) {
-           console.warn('[UI_LOG] Nenhum chat visível, mas a API retornou chats. Verifique o mapeamento.');
+        
+        if (formattedChats.length === 0 && chatsFromService.length > 0) {
+           console.warn('[UI_LOG] Nenhum chat visível, mas o serviço retornou chats. Verifique o mapeamento.');
         } else if (formattedChats.length === 0) {
-           console.warn('[UI_LOG] Nenhum chat retornado pela API /chat/find.');
+           console.warn('[UI_LOG] Nenhum chat retornado pelo uazapiService.');
         }
 
       } else {
@@ -643,76 +793,46 @@ export function ChatZapPage() {
         scrollToBottom();
         
         try {
+          // Preparar dados para envio usando o endpoint /send/media
+          let caption = '';
+          let displayContent = '';
+          let docName = '';
+          
           if (fileType === 'image') {
-            const caption = prompt('Digite uma legenda para a imagem (opcional):') || '';
-            result = await message.sendImage(
-              selectedInstance.id,
-              selectedChat.id,
-              dataUrl,
-              caption,
-              {},
-              selectedInstance.token
-            ) as ResultWithKey;
-            
-            // Atualizar a mensagem temporária
-            tempMessage = {
-              ...tempMessage,
-              content: caption || '[Imagem]',
-              mediaUrl: URL.createObjectURL(file)
-            };
-          } 
-          else if (fileType === 'video') {
-            const caption = prompt('Digite uma legenda para o vídeo (opcional):') || '';
-            result = await message.sendVideo(
-              selectedInstance.id,
-              selectedChat.id,
-              dataUrl,
-              caption,
-              {},
-              selectedInstance.token
-            ) as ResultWithKey;
-            
-            // Atualizar a mensagem temporária
-            tempMessage = {
-              ...tempMessage,
-              content: caption || '[Vídeo]',
-              mediaUrl: URL.createObjectURL(file)
-            };
-          } 
-          else if (fileType === 'audio') {
-            result = await message.sendAudio(
-              selectedInstance.id,
-              selectedChat.id,
-              dataUrl,
-              {},
-              selectedInstance.token
-            ) as ResultWithKey;
-            
-            // Atualizar a mensagem temporária
-            tempMessage = {
-              ...tempMessage,
-              content: '[Áudio]',
-              mediaUrl: URL.createObjectURL(file)
-            };
-          } 
-          else {
-            result = await message.sendDocument(
-              selectedInstance.id,
-              selectedChat.id,
-              dataUrl,
-              file.name,
-              '',
-              {},
-              selectedInstance.token
-            ) as ResultWithKey;
-            
-            // Atualizar a mensagem temporária
-            tempMessage = {
-              ...tempMessage,
-              content: `[Documento] ${file.name}`,
-              fileName: file.name
-            };
+            caption = prompt('Digite uma legenda para a imagem (opcional):') || '';
+            displayContent = caption || '[Imagem]';
+          } else if (fileType === 'video') {
+            caption = prompt('Digite uma legenda para o vídeo (opcional):') || '';
+            displayContent = caption || '[Vídeo]';
+          } else if (fileType === 'audio') {
+            displayContent = '[Áudio]';
+          } else {
+            displayContent = `[Documento] ${file.name}`;
+            docName = file.name;
           }
+          
+          // Enviar arquivo usando o endpoint /send/media
+          result = await message.sendMedia(
+            selectedChat.id,
+            fileType,
+            dataUrl,
+            caption || undefined,
+            docName || undefined,
+            file.type,
+            undefined, // replyid
+            undefined, // mentions
+            true, // readchat
+            0, // delay
+            selectedInstance.token
+          ) as ResultWithKey;
+          
+          // Atualizar a mensagem temporária
+          tempMessage = {
+            ...tempMessage,
+            content: displayContent,
+            mediaUrl: URL.createObjectURL(file),
+            fileName: fileType === 'document' ? file.name : undefined
+          };
           
           // Atualizar mensagem temporária com ID real
           if (result && result.key && result.key.id) {
@@ -889,56 +1009,77 @@ export function ChatZapPage() {
       setLoading(true);
       setError(null);
       setMessages([]); // Limpa mensagens antigas ao carregar novas
-      setApiRequestStatus({ lastCall: `getAllMessagesFromChat(${chatId}) via POST /message/find`, status: 'iniciada' });
+      setApiRequestStatus({ lastCall: `uazapiService.searchMessages(${chatId}) via POST /message/find`, status: 'iniciada' });
 
-      console.log('[UI_LOG] Carregando mensagens (POST /message/find) para o chat:', chatId);
+      console.log('[UI_LOG] Carregando mensagens usando uazapiService para o chat:', chatId);
 
-      // Chamar a função corrigida que usa POST /message/find
-      const messagesResponse = await getAllMessagesFromChat(
-        selectedInstance.id, 
-        chatId, 
-        selectedInstance.token
-      );
+      // Usar o novo serviço para buscar mensagens
+      const messagesFromService = await uazapiService.searchMessages(selectedInstance.token, {
+        chatid: chatId,
+        limit: 1000
+      });
       
-      console.log('[UI_LOG] Resposta recebida de getAllMessagesFromChat (POST /message/find):', messagesResponse);
+      console.log('[UI_LOG] Resposta recebida de uazapiService.searchMessages:', messagesFromService);
       
-      if (messagesResponse.success && Array.isArray(messagesResponse.messages)) {
-        console.log(`[UI_LOG] Processando ${messagesResponse.messages.length} mensagens recebidas de POST /message/find`);
+      if (Array.isArray(messagesFromService)) {
+        console.log(`[UI_LOG] Processando ${messagesFromService.length} mensagens recebidas do uazapiService`);
 
-        // Log da primeira mensagem para análise da estrutura (vindo de /message/find)
-        if (messagesResponse.messages.length > 0) {
-          console.log('[UI_LOG] Estrutura da primeira mensagem (de /message/find):', JSON.stringify(messagesResponse.messages[0], null, 2));
-        }
+        // Converter do formato do serviço para o formato da interface
+        const formattedMessages = messagesFromService.map((msgData): Message => {
+          return {
+            id: msgData.id,
+            messageId: msgData.id,
+            sender: msgData.fromMe ? 'me' : msgData.author || msgData.chatId,
+            senderName: msgData.pushName || (msgData.fromMe ? 'Você' : 'Contato'),
+            content: msgData.body || '',
+            timestamp: msgData.timestamp,
+            fromMe: msgData.fromMe,
+            status: msgData.status,
+            read: true, // Assumir como lida por padrão
+            mediaType: msgData.type !== 'text' ? msgData.type : undefined,
+            mediaUrl: msgData.mediaUrl,
+            chatId: msgData.chatId,
+            quotedMsg: msgData.quotedMsg,
+            isForwarded: msgData.isForwarded
+          };
+        });
 
-        // Ordenar mensagens pelo timestamp (a função da API já deve retornar formatado)
-        const sortedMessages = [...messagesResponse.messages].sort((a: Message, b: Message) => {
+        // Ordenar mensagens pelo timestamp
+        const sortedMessages = [...formattedMessages].sort((a: Message, b: Message) => {
           return (a.timestamp || 0) - (b.timestamp || 0);
         });
 
-        console.log('[UI_LOG] Mensagens finais formatadas e ordenadas (de /message/find):', sortedMessages);
+        console.log('[UI_LOG] Mensagens finais formatadas e ordenadas do uazapiService:', sortedMessages);
         setMessages(sortedMessages);
         setApiRequestStatus(prev => ({ ...prev, status: `sucesso: ${sortedMessages.length} mensagens` }));
 
-        // Marcar mensagens como lidas
+        // Marcar mensagens como lidas usando o novo serviço
         const unreadMessages = sortedMessages.filter((msg: Message) => !msg.fromMe && !msg.read);
         if (unreadMessages.length > 0) {
-          console.log(`[UI_LOG] Marcando ${unreadMessages.length} mensagens como lidas.`);
-          // ... (código para marcar como lido)
+          console.log(`[UI_LOG] Marcando ${unreadMessages.length} mensagens como lidas usando uazapiService.`);
+          try {
+            const messageIds = unreadMessages.map(msg => msg.id).filter(Boolean);
+            if (messageIds.length > 0) {
+              await uazapiService.markMessageAsRead(selectedInstance.token, messageIds);
+            }
+          } catch (error) {
+            console.error('Erro ao marcar mensagens como lidas:', error);
+          }
         }
 
         // Rolar para o final
         setTimeout(scrollToBottom, 100);
 
       } else {
-        console.error('[UI_ERROR] Erro na resposta da API de mensagens (POST /message/find) ou formato inválido:', messagesResponse.error || messagesResponse);
-        toast.error(`Erro ao carregar mensagens: ${messagesResponse.error || 'Formato inválido'}`);
-        setError(messagesResponse.error || 'Erro ao carregar mensagens');
+        console.error('[UI_ERROR] Erro na resposta do uazapiService.searchMessages ou formato inválido:', messagesFromService);
+        toast.error('Erro ao carregar mensagens: Formato inválido');
+        setError('Erro ao carregar mensagens');
         setMessages([]);
-        setApiRequestStatus(prev => ({ ...prev, status: `falha: ${messagesResponse.error || 'formato inválido'}` }));
+        setApiRequestStatus(prev => ({ ...prev, status: 'falha: formato inválido' }));
       }
 
     } catch (error: any) {
-      console.error('[UI_ERROR] Erro ao carregar mensagens (POST /message/find):', error);
+      console.error('[UI_ERROR] Erro ao carregar mensagens usando uazapiService:', error);
       toast.error(`Falha ao carregar mensagens: ${error.message || 'Erro desconhecido'}`);
       setError('Falha ao carregar mensagens. Verifique o console (F12).');
       setMessages([]);
@@ -992,11 +1133,30 @@ export function ChatZapPage() {
     // }
   };
 
-  const handleSelectInstance = (instance: Instance) => {
+  const handleSelectInstance = async (instance: Instance) => {
     setSelectedInstance(instance);
     setShowInstanceModal(false);
     setSelectedChat(null);
     setMessages([]);
+    
+    // Executar automaticamente as funções após selecionar a instância
+    try {
+      // Aguardar um pouco para garantir que a instância foi definida
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      // Listar todos os chats automaticamente
+       await listAllChats(instance);
+       
+       // Aguardar um pouco antes de baixar as mensagens
+       await new Promise(resolve => setTimeout(resolve, 2000));
+       
+       // Baixar todas as mensagens automaticamente
+       await downloadAllMessages(instance);
+      
+    } catch (error) {
+      console.error('Erro na execução automática:', error);
+      toast.error('Erro na execução automática das funções');
+    }
   };
 
   // Adicionar função para buscar mensagens
@@ -1324,13 +1484,344 @@ export function ChatZapPage() {
             Limpar Console
           </button>
         </div>
-      </div>
-    );
-  };
+
+      {/* Modais */}
+      <ContactsModal
+        isOpen={showContactsModal}
+        onClose={() => setShowContactsModal(false)}
+        contacts={contacts}
+        onBlockContact={handleBlockContact}
+        onUnblockContact={handleUnblockContact}
+      />
+
+      <BlocksModal
+        isOpen={showBlocksModal}
+        onClose={() => setShowBlocksModal(false)}
+        blockedContacts={blockedContacts}
+        onUnblockContact={handleUnblockContact}
+      />
+
+      <LabelsModal
+        isOpen={showLabelsModal}
+        onClose={() => setShowLabelsModal(false)}
+        labels={labels}
+        onCreateLabel={handleCreateLabel}
+        onDeleteLabel={handleDeleteLabel}
+        onAddLabelToChat={handleAddLabelToChat}
+        onRemoveLabelFromChat={handleRemoveLabelFromChat}
+      />
+    </div>
+  );
+};
 
   // Função para reselecionar a instância atual
   const handleReopenInstanceSelection = () => {
     setShowInstanceModal(true);
+  };
+
+  // Funções para gerenciar contatos
+  const loadContacts = async () => {
+    if (!selectedInstance) return;
+    
+    try {
+      setLoading(true);
+      const result = await uazapiService.getContacts(selectedInstance.id);
+      if (result.success && result.data) {
+        setContacts(result.data);
+      } else {
+        toast.error('Erro ao carregar contatos');
+      }
+    } catch (error) {
+      console.error('Erro ao carregar contatos:', error);
+      toast.error('Erro ao carregar contatos');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleBlockContact = async (contactId: string) => {
+    if (!selectedInstance) return;
+    
+    try {
+      const result = await uazapiService.blockContact(selectedInstance.id, contactId);
+      if (result.success) {
+        toast.success('Contato bloqueado com sucesso');
+        loadContacts();
+        loadBlockedContacts();
+      } else {
+        toast.error('Erro ao bloquear contato');
+      }
+    } catch (error) {
+      console.error('Erro ao bloquear contato:', error);
+      toast.error('Erro ao bloquear contato');
+    }
+  };
+
+  const handleUnblockContact = async (contactId: string) => {
+    if (!selectedInstance) return;
+    
+    try {
+      const result = await uazapiService.unblockContact(selectedInstance.id, contactId);
+      if (result.success) {
+        toast.success('Contato desbloqueado com sucesso');
+        loadContacts();
+        loadBlockedContacts();
+      } else {
+        toast.error('Erro ao desbloquear contato');
+      }
+    } catch (error) {
+      console.error('Erro ao desbloquear contato:', error);
+      toast.error('Erro ao desbloquear contato');
+    }
+  };
+
+  // Funções para gerenciar bloqueios
+  const loadBlockedContacts = async () => {
+    if (!selectedInstance) return;
+    
+    try {
+      setLoading(true);
+      const result = await uazapiService.getBlockedContacts(selectedInstance.id);
+      if (result.success && result.data) {
+        setBlockedContacts(result.data);
+      } else {
+        toast.error('Erro ao carregar contatos bloqueados');
+      }
+    } catch (error) {
+      console.error('Erro ao carregar contatos bloqueados:', error);
+      toast.error('Erro ao carregar contatos bloqueados');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Funções para gerenciar etiquetas
+  const loadLabels = async () => {
+    if (!selectedInstance) return;
+    
+    try {
+      setLoading(true);
+      const result = await uazapiService.getLabels(selectedInstance.id);
+      if (result.success && result.data) {
+        setLabels(result.data);
+      } else {
+        toast.error('Erro ao carregar etiquetas');
+      }
+    } catch (error) {
+      console.error('Erro ao carregar etiquetas:', error);
+      toast.error('Erro ao carregar etiquetas');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCreateLabel = async (labelName: string, labelColor: string) => {
+    if (!selectedInstance) return;
+    
+    try {
+      const result = await uazapiService.createLabel(selectedInstance.id, labelName, labelColor);
+      if (result.success) {
+        toast.success('Etiqueta criada com sucesso');
+        loadLabels();
+      } else {
+        toast.error('Erro ao criar etiqueta');
+      }
+    } catch (error) {
+      console.error('Erro ao criar etiqueta:', error);
+      toast.error('Erro ao criar etiqueta');
+    }
+  };
+
+  const handleDeleteLabel = async (labelId: string) => {
+    if (!selectedInstance) return;
+    
+    try {
+      const result = await uazapiService.deleteLabel(selectedInstance.id, labelId);
+      if (result.success) {
+        toast.success('Etiqueta excluída com sucesso');
+        loadLabels();
+      } else {
+        toast.error('Erro ao excluir etiqueta');
+      }
+    } catch (error) {
+      console.error('Erro ao excluir etiqueta:', error);
+      toast.error('Erro ao excluir etiqueta');
+    }
+  };
+
+  const handleAddLabelToChat = async (chatId: string, labelId: string) => {
+    if (!selectedInstance) return;
+    
+    try {
+      const result = await uazapiService.addLabelToChat(selectedInstance.id, chatId, labelId);
+      if (result.success) {
+        toast.success('Etiqueta adicionada ao chat');
+        loadChats();
+      } else {
+        toast.error('Erro ao adicionar etiqueta ao chat');
+      }
+    } catch (error) {
+      console.error('Erro ao adicionar etiqueta ao chat:', error);
+      toast.error('Erro ao adicionar etiqueta ao chat');
+    }
+  };
+
+  const handleRemoveLabelFromChat = async (chatId: string, labelId: string) => {
+    if (!selectedInstance) return;
+    
+    try {
+      const result = await uazapiService.removeLabelFromChat(selectedInstance.id, chatId, labelId);
+      if (result.success) {
+        toast.success('Etiqueta removida do chat');
+        loadChats();
+      } else {
+        toast.error('Erro ao remover etiqueta do chat');
+      }
+    } catch (error) {
+      console.error('Erro ao remover etiqueta do chat:', error);
+      toast.error('Erro ao remover etiqueta do chat');
+    }
+  };
+
+  // Funções para ações de mensagem
+  const handleStarMessage = async (messageId: string) => {
+    if (!selectedInstance) return;
+    
+    try {
+      const result = await uazapiService.starMessage(selectedInstance.id, messageId);
+      if (result.success) {
+        toast.success('Mensagem marcada como favorita');
+        if (selectedChat) {
+          loadMessages(selectedChat.id);
+        }
+      } else {
+        toast.error('Erro ao marcar mensagem como favorita');
+      }
+    } catch (error) {
+      console.error('Erro ao marcar mensagem como favorita:', error);
+      toast.error('Erro ao marcar mensagem como favorita');
+    }
+  };
+
+  const handleUnstarMessage = async (messageId: string) => {
+    if (!selectedInstance) return;
+    
+    try {
+      const result = await uazapiService.unstarMessage(selectedInstance.id, messageId);
+      if (result.success) {
+        toast.success('Mensagem desmarcada como favorita');
+        if (selectedChat) {
+          loadMessages(selectedChat.id);
+        }
+      } else {
+        toast.error('Erro ao desmarcar mensagem como favorita');
+      }
+    } catch (error) {
+      console.error('Erro ao desmarcar mensagem como favorita:', error);
+      toast.error('Erro ao desmarcar mensagem como favorita');
+    }
+  };
+
+  const handleArchiveChat = async (chatId: string) => {
+    if (!selectedInstance) return;
+    
+    try {
+      const result = await uazapiService.archiveChat(selectedInstance.id, chatId);
+      if (result.success) {
+        toast.success('Chat arquivado com sucesso');
+        loadChats();
+      } else {
+        toast.error('Erro ao arquivar chat');
+      }
+    } catch (error) {
+      console.error('Erro ao arquivar chat:', error);
+      toast.error('Erro ao arquivar chat');
+    }
+  };
+
+  const handleUnarchiveChat = async (chatId: string) => {
+    if (!selectedInstance) return;
+    
+    try {
+      const result = await uazapiService.unarchiveChat(selectedInstance.id, chatId);
+      if (result.success) {
+        toast.success('Chat desarquivado com sucesso');
+        loadChats();
+      } else {
+        toast.error('Erro ao desarquivar chat');
+      }
+    } catch (error) {
+      console.error('Erro ao desarquivar chat:', error);
+      toast.error('Erro ao desarquivar chat');
+    }
+  };
+
+  const handlePinChat = async (chatId: string) => {
+    if (!selectedInstance) return;
+    
+    try {
+      const result = await uazapiService.pinChat(selectedInstance.id, chatId);
+      if (result.success) {
+        toast.success('Chat fixado com sucesso');
+        loadChats();
+      } else {
+        toast.error('Erro ao fixar chat');
+      }
+    } catch (error) {
+      console.error('Erro ao fixar chat:', error);
+      toast.error('Erro ao fixar chat');
+    }
+  };
+
+  const handleUnpinChat = async (chatId: string) => {
+    if (!selectedInstance) return;
+    
+    try {
+      const result = await uazapiService.unpinChat(selectedInstance.id, chatId);
+      if (result.success) {
+        toast.success('Chat desfixado com sucesso');
+        loadChats();
+      } else {
+        toast.error('Erro ao desfixar chat');
+      }
+    } catch (error) {
+      console.error('Erro ao desfixar chat:', error);
+      toast.error('Erro ao desfixar chat');
+    }
+  };
+
+  const handleMarkChatAsRead = async (chatId: string) => {
+    if (!selectedInstance) return;
+    
+    try {
+      const result = await uazapiService.markChatAsRead(selectedInstance.id, chatId);
+      if (result.success) {
+        toast.success('Chat marcado como lido');
+        loadChats();
+      } else {
+        toast.error('Erro ao marcar chat como lido');
+      }
+    } catch (error) {
+      console.error('Erro ao marcar chat como lido:', error);
+      toast.error('Erro ao marcar chat como lido');
+    }
+  };
+
+  const handleMarkChatAsUnread = async (chatId: string) => {
+    if (!selectedInstance) return;
+    
+    try {
+      const result = await uazapiService.markChatAsUnread(selectedInstance.id, chatId);
+      if (result.success) {
+        toast.success('Chat marcado como não lido');
+        loadChats();
+      } else {
+        toast.error('Erro ao marcar chat como não lido');
+      }
+    } catch (error) {
+      console.error('Erro ao marcar chat como não lido:', error);
+      toast.error('Erro ao marcar chat como não lido');
+    }
   };
 
   return (
@@ -1377,6 +1868,76 @@ export function ChatZapPage() {
           >
             <Smartphone className="h-3 w-3 mr-1" />
             Trocar Instância
+          </button>
+          
+          {/* Botão para listar todos os chats */}
+          <button 
+            onClick={listAllChats}
+            disabled={!selectedInstance || loading}
+            className="text-xs bg-green-100 hover:bg-green-200 text-green-700 px-2 py-1 rounded flex items-center disabled:opacity-50"
+            title="Listar todos os chats e conversas"
+          >
+            <MessageCircle className="h-3 w-3 mr-1" />
+            Listar Chats
+          </button>
+          
+          {/* Botão para baixar todas as mensagens */}
+          <button 
+            onClick={downloadAllMessages}
+            disabled={!selectedInstance || loading || isDownloadingAllMessages || allChatsData.length === 0}
+            className="text-xs bg-purple-100 hover:bg-purple-200 text-purple-700 px-2 py-1 rounded flex items-center disabled:opacity-50"
+            title="Baixar todas as mensagens de todos os chats"
+          >
+            <Download className="h-3 w-3 mr-1" />
+            {isDownloadingAllMessages ? `Baixando... ${downloadProgress}%` : 'Baixar Mensagens'}
+          </button>
+          
+          {/* Botão para gerenciar contatos */}
+          <button 
+            onClick={() => {
+              setShowContactsModal(true);
+              loadContacts();
+            }}
+            disabled={!selectedInstance}
+            className="text-xs bg-indigo-100 hover:bg-indigo-200 text-indigo-700 px-2 py-1 rounded flex items-center disabled:opacity-50"
+            title="Gerenciar contatos"
+          >
+            <svg className="h-3 w-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+            </svg>
+            Contatos
+          </button>
+          
+          {/* Botão para gerenciar bloqueios */}
+          <button 
+            onClick={() => {
+              setShowBlocksModal(true);
+              loadBlockedContacts();
+            }}
+            disabled={!selectedInstance}
+            className="text-xs bg-red-100 hover:bg-red-200 text-red-700 px-2 py-1 rounded flex items-center disabled:opacity-50"
+            title="Gerenciar bloqueios"
+          >
+            <svg className="h-3 w-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728L5.636 5.636m12.728 12.728L18.364 5.636M5.636 18.364l12.728-12.728" />
+            </svg>
+            Bloqueios
+          </button>
+          
+          {/* Botão para gerenciar etiquetas */}
+          <button 
+            onClick={() => {
+              setShowLabelsModal(true);
+              loadLabels();
+            }}
+            disabled={!selectedInstance}
+            className="text-xs bg-yellow-100 hover:bg-yellow-200 text-yellow-700 px-2 py-1 rounded flex items-center disabled:opacity-50"
+            title="Gerenciar etiquetas"
+          >
+            <svg className="h-3 w-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.99 1.99 0 013 12V7a4 4 0 014-4z" />
+            </svg>
+            Etiquetas
           </button>
         </div>
         
@@ -1448,7 +2009,7 @@ export function ChatZapPage() {
                     <MessageCircle className="h-8 w-8 text-gray-400" />
                   </div>
                   <p className="text-gray-500 mb-2">
-                    {isUsingMockData ? 
+                    {false ? 
                       'Nenhuma conversa encontrada. Os dados mostrados são exemplos.' : 
                       'Nenhuma conversa encontrada. Verifique a conexão com a API uazapiGO.'}
                   </p>
@@ -1603,10 +2164,18 @@ export function ChatZapPage() {
                       const options = [
                         {label: 'Informações do contato', action: () => loadProfileInfo(selectedChat.id)},
                         {label: 'Atualizar chat', action: () => loadMessages(selectedChat.id)},
+                        {label: 'Arquivar chat', action: () => handleArchiveChat(selectedChat.id)},
+                        {label: 'Fixar chat', action: () => handlePinChat(selectedChat.id)},
+                        {label: 'Marcar como lido', action: () => handleMarkChatAsRead(selectedChat.id)},
+                        {label: 'Marcar como não lido', action: () => handleMarkChatAsUnread(selectedChat.id)},
                       ];
-                      const action = prompt('Escolha uma ação:\n1. Informações do contato\n2. Atualizar chat');
+                      const action = prompt('Escolha uma ação:\n1. Informações do contato\n2. Atualizar chat\n3. Arquivar chat\n4. Fixar chat\n5. Marcar como lido\n6. Marcar como não lido');
                       if (action === '1') options[0].action();
                       if (action === '2') options[1].action();
+                      if (action === '3') options[2].action();
+                      if (action === '4') options[3].action();
+                      if (action === '5') options[4].action();
+                      if (action === '6') options[5].action();
                     }}
                   >
                     <MoreVertical className="h-5 w-5" />

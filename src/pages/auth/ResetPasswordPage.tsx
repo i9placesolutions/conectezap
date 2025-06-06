@@ -1,13 +1,14 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
-import { toast } from 'react-hot-toast';
-import { Input } from '../../components/ui/Input';
+import { ArrowLeft, Eye, EyeOff } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
-import { Eye, EyeOff } from 'lucide-react';
-import { authService } from '../../lib/supabase';
+import { Input } from '../../components/ui/Input';
+import { toast } from 'react-hot-toast';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface ResetPasswordForm {
+  code: string;
   password: string;
   confirmPassword: string;
 }
@@ -17,23 +18,20 @@ export function ResetPasswordPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
+  const { resetPassword } = useAuth();
   const { register, handleSubmit, watch, formState: { errors } } = useForm<ResetPasswordForm>();
 
   const password = watch('password');
+  const email = location.state?.email;
 
   useEffect(() => {
-    // Check if we have a valid recovery token (simulado)
-    const checkRecoveryToken = async () => {
-      const { data: { session }, error } = await authService.getSession();
-      
-      if (error || !session?.user) {
-        toast.error('Link de recuperação inválido ou expirado');
-        navigate('/recover-password');
-      }
-    };
-
-    checkRecoveryToken();
-  }, [navigate]);
+    // Verifica se temos o email do estado anterior
+    if (!email) {
+      toast.error('Acesso inválido. Solicite um novo código de recuperação.');
+      navigate('/recover-password');
+    }
+  }, [email, navigate]);
 
   const onSubmit = async (data: ResetPasswordForm) => {
     try {
@@ -43,18 +41,14 @@ export function ResetPasswordPage() {
         throw new Error('As senhas não coincidem');
       }
 
-      // Simulado - já que não estamos realmente mudando senha em uma API real
-      // Em um ambiente real, usaríamos algo como authService.updateUser({ password })
-      const { error } = { error: null }; // Simula sucesso
+      if (!email) {
+        throw new Error('Email não encontrado');
+      }
 
-      if (error) throw error;
-
-      toast.success('Senha alterada com sucesso!');
+      await resetPassword(email, data.code, data.password);
       navigate('/login');
     } catch (error) {
       console.error('Error resetting password:', error);
-      const message = error instanceof Error ? error.message : 'Erro ao redefinir senha';
-      toast.error(message);
     } finally {
       setIsLoading(false);
     }
@@ -62,14 +56,36 @@ export function ResetPasswordPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Redefinir senha</h1>
-        <p className="mt-2 text-sm text-gray-600">
-          Digite sua nova senha abaixo.
-        </p>
+      <div className="flex items-center gap-4">
+        <button
+          onClick={() => navigate(-1)}
+          className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+        >
+          <ArrowLeft className="h-5 w-5" />
+        </button>
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Redefinir senha</h1>
+          <p className="mt-2 text-sm text-gray-600">
+            Digite o código enviado para {email} e sua nova senha.
+          </p>
+        </div>
       </div>
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+        <div>
+          <Input
+            type="text"
+            placeholder="Código de verificação"
+            error={errors.code?.message}
+            {...register('code', {
+              required: 'Código é obrigatório',
+              pattern: {
+                value: /^[0-9]{6}$/,
+                message: 'Código deve ter 6 dígitos',
+              },
+            })}
+          />
+        </div>
         <div className="relative">
           <Input
             type={showPassword ? 'text' : 'password'}

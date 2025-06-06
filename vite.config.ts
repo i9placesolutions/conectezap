@@ -56,7 +56,7 @@ export default defineConfig({
           });
         },
       },
-      '/instance/sse': {
+      '/sse': {
         target: 'https://i9place1.uazapi.com',
         changeOrigin: true,
         secure: false,

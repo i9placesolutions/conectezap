@@ -1,12 +1,17 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
+import { getInstances } from '../lib/wapi/api';
 
 export interface Instance {
   id: string;
   name: string;
   status: 'connected' | 'disconnected' | 'connecting';
   isDefault: boolean;
+  token?: string;
+  phoneConnected?: string;
+  profileName?: string;
+  systemName?: string;
 }
 
 interface InstanceContextType {
@@ -25,27 +30,17 @@ interface InstanceContextType {
 
 const InstanceContext = createContext<InstanceContextType | undefined>(undefined);
 
-// Dados simulados de instâncias
-const mockInstances: Instance[] = [
-  { 
-    id: '1', 
-    name: 'Instância Principal', 
-    status: 'connected',
-    isDefault: true
-  },
-  { 
-    id: '2', 
-    name: 'Instância Secundária', 
-    status: 'connected',
-    isDefault: false
-  },
-  { 
-    id: '3', 
-    name: 'Suporte', 
-    status: 'disconnected',
-    isDefault: false
-  }
-];
+// Função para converter dados da API para o formato do contexto
+const formatApiInstance = (apiInstance: any, isDefault: boolean = false): Instance => ({
+  id: apiInstance.id,
+  name: apiInstance.name || apiInstance.profileName || apiInstance.id,
+  status: apiInstance.status,
+  isDefault,
+  token: apiInstance.token,
+  phoneConnected: apiInstance.phoneConnected,
+  profileName: apiInstance.profileName,
+  systemName: apiInstance.systemName
+});
 
 export function InstanceProvider({ children }: { children: React.ReactNode }) {
   const [instances, setInstances] = useState<Instance[]>([]);
@@ -87,21 +82,32 @@ export function InstanceProvider({ children }: { children: React.ReactNode }) {
   const loadInstances = async () => {
     try {
       setLoading(true);
-      // Simulação de carregamento de instâncias
-      setTimeout(() => {
-        setInstances(mockInstances);
-        const defaultInst = mockInstances.find(i => i.isDefault) || mockInstances[0];
-        setDefaultInstance(defaultInst);
-  
-        // Para multi-chat page, automaticamente selecionar a instância padrão
-        if (location.pathname === '/messages/multi') {
-          setSelectedInstance(defaultInst);
-        }
-        setLoading(false);
-      }, 500);
+      
+      // Carregar instâncias da API real
+      const apiInstances = await getInstances();
+      
+      // Converter para o formato do contexto
+      const formattedInstances = apiInstances.map((instance, index) => 
+        formatApiInstance(instance, index === 0) // Primeira instância como padrão
+      );
+      
+      setInstances(formattedInstances);
+      const defaultInst = formattedInstances.find(i => i.isDefault) || formattedInstances[0];
+      setDefaultInstance(defaultInst);
+
+      // Para multi-chat page, automaticamente selecionar a instância padrão
+      if (location.pathname === '/messages/multi' && defaultInst) {
+        setSelectedInstance(defaultInst);
+      }
+      
     } catch (error) {
       console.error('Erro ao carregar instâncias:', error);
-      toast.error('Erro ao carregar instâncias');
+      toast.error('Erro ao carregar instâncias da API');
+      
+      // Em caso de erro, usar dados vazios
+      setInstances([]);
+      setDefaultInstance(null);
+    } finally {
       setLoading(false);
     }
   };

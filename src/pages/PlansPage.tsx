@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useAuth } from '../contexts/AuthContext';
+
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { 
@@ -7,7 +7,6 @@ import {
   Pencil, 
   Trash2, 
   AlertTriangle,
-  Check,
   X,
   MessageCircle,
   Users,
@@ -25,7 +24,7 @@ import {
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { toast } from 'react-hot-toast';
-import { dbService } from '../lib/supabase';
+import { supabase } from '../lib/supabase';
 
 interface Feature {
   id: string;
@@ -141,7 +140,6 @@ const defaultFeatures: Feature[] = [
 ];
 
 export function PlansPage() {
-  const { user } = useAuth();
   const [plans, setPlans] = useState<Plan[]>([]);
   const [isCreating, setIsCreating] = useState(false);
   const [isEditing, setIsEditing] = useState<string | null>(null);
@@ -172,7 +170,7 @@ export function PlansPage() {
       };
 
       if (isEditing) {
-        const { error } = await dbService
+        const { error } = await supabase
           .from('plans')
           .update(planData)
           .eq('id', isEditing);
@@ -180,7 +178,7 @@ export function PlansPage() {
         if (error) throw error;
         toast.success('Plano atualizado com sucesso!');
       } else {
-        const { error } = await dbService
+        const { error } = await supabase
           .from('plans')
           .insert([planData]);
 
@@ -199,7 +197,7 @@ export function PlansPage() {
 
   const handleDelete = async (planId: string) => {
     try {
-      const { error } = await dbService
+      const { error } = await supabase
         .from('plans')
         .delete()
         .eq('id', planId);
@@ -218,7 +216,7 @@ export function PlansPage() {
   const loadPlans = async () => {
     try {
       setLoading(true);
-      const { data, error } = await dbService
+      const { data, error } = await supabase
         .from('plans')
         .select('*');
 

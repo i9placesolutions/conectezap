@@ -23,9 +23,8 @@ import { InstancesPage } from '../pages/InstancesPage';
 import { MassMessagingPage } from '../pages/MassMessagingPage';
 import { ReportsPage } from '../pages/ReportsPage';
 import { BillingPage } from '../pages/BillingPage';
-import { PlansPage } from '../pages/PlansPage';
 import { CheckoutPage } from '../pages/CheckoutPage';
-import { DocumentationPage } from '../pages/DocumentationPage';
+
 
 export function AppRoutes() {
   const { user, loading } = useAuth();
@@ -49,7 +48,6 @@ export function AppRoutes() {
         <Route path="/" element={<HomePage />} />
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="/settings/profile" element={<ProfileSettingsPage />} />
-        <Route path="/settings/plans" element={<PlansPage />} />
         <Route path="/clients" element={<ClientsPage />} />
         <Route path="/messages/chatzap" element={<ChatZapPage />} />
         <Route path="/messages/multi" element={<ChatPage />} />
@@ -59,7 +57,7 @@ export function AppRoutes() {
         <Route path="/messages/reports" element={<ReportsPage />} />
         <Route path="/billing" element={<BillingPage />} />
         <Route path="/checkout" element={<CheckoutPage />} />
-        <Route path="/documentation" element={<DocumentationPage />} />
+
       </Route>
 
       {/* Catch all unmatched routes */}

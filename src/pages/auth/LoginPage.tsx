@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import { Eye, EyeOff } from 'lucide-react';
 
 export function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const navigate = useNavigate();
   const { signIn } = useAuth();
 
@@ -57,18 +59,44 @@ export function LoginPage() {
           <label style={{ display: 'block', marginBottom: '0.5rem' }}>
             Senha:
           </label>
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            style={{ 
-              width: '100%', 
-              padding: '0.5rem',
-              border: '1px solid #ccc',
-              borderRadius: '0.25rem'
-            }}
-            required
-          />
+          <div style={{ position: 'relative' }}>
+            <input
+              type={showPassword ? 'text' : 'password'}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              style={{ 
+                width: '100%', 
+                padding: '0.5rem',
+                paddingRight: '2.5rem',
+                border: '1px solid #ccc',
+                borderRadius: '0.25rem'
+              }}
+              required
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword(!showPassword)}
+              style={{
+                position: 'absolute',
+                right: '0.75rem',
+                top: '50%',
+                transform: 'translateY(-50%)',
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                color: '#6b7280',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}
+            >
+              {showPassword ? (
+                <EyeOff style={{ width: '1.25rem', height: '1.25rem' }} />
+              ) : (
+                <Eye style={{ width: '1.25rem', height: '1.25rem' }} />
+              )}
+            </button>
+          </div>
         </div>
         
         <div style={{ marginBottom: '1rem' }}>
@@ -106,4 +134,4 @@ export function LoginPage() {
       </form>
     </div>
   );
-} 
+}

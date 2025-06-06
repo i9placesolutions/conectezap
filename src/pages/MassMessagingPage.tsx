@@ -1,4 +1,4 @@
-import { useState, ChangeEvent } from 'react';
+import { useState, ChangeEvent, useEffect } from 'react';
 import { 
   Send, 
   Image, 
@@ -23,18 +23,30 @@ import { toast } from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
 import { ContactSelectionModal } from '../components/mass/ContactSelectionModal';
 import { GroupSelectionModal } from '../components/mass/GroupSelectionModal';
+import { useAuth } from '../contexts/AuthContext';
 
 // Importando o serviço UAZAPI e seus tipos para garantir compatibilidade
 import { Group, Contact, uazapiService } from '../services/uazapiService';
 
+// Importando funções do Supabase
+import { 
+  uploadCampaignMedia, 
+  createMassCampaign, 
+  updateMassCampaign, 
+  MassCampaign 
+} from '../lib/supabase';
+
 export function MassMessagingPage() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   
   // Estado de controle do fluxo
   const [currentStep, setCurrentStep] = useState<'recipients' | 'message' | 'schedule' | 'confirm'>('recipients');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showContactModal, setShowContactModal] = useState(false);
   const [showGroupModal, setShowGroupModal] = useState(false);
+  const [uploadingMedia, setUploadingMedia] = useState(false);
+  const [currentCampaign, setCurrentCampaign] = useState<MassCampaign | null>(null);
   
   // Estado da mensagem
   const [messageType, setMessageType] = useState<'text' | 'media' | 'audio'>('text');
@@ -57,22 +69,54 @@ export function MassMessagingPage() {
   // Referência à API do WhatsApp
   const { selectedInstance, setShowInstanceModal } = useInstance();
   
+  // Exibir modal de seleção de instância automaticamente ao carregar a página
+  useEffect(() => {
+    if (!selectedInstance) {
+      setShowInstanceModal(true);
+    }
+  }, [selectedInstance, setShowInstanceModal]);
+  
   // Handler para upload de arquivo
-  const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      // Verificar tamanho do arquivo (2MB max)
-      if (file.size > 2 * 1024 * 1024) {
-        toast.error('Arquivo muito grande. Máximo permitido: 2MB');
+      // Verificar tamanho do arquivo (5MB max)
+      if (file.size > 5 * 1024 * 1024) {
+        toast.error('Arquivo muito grande. Máximo permitido: 5MB');
         return;
       }
       
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setMediaFile(file);
-        setMediaPreview(reader.result as string);
-      };
-      reader.readAsDataURL(file);
+      // Verificar se o usuário está autenticado
+      if (!user?.id) {
+        toast.error('Usuário não autenticado');
+        return;
+      }
+      
+      setUploadingMedia(true);
+      
+      try {
+        // Upload para o Supabase
+        const uploadResult = await uploadCampaignMedia(file, user.id);
+        
+        if (uploadResult) {
+          // Criar preview local
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            setMediaFile(file);
+            setMediaPreview(uploadResult.url); // Usar URL do Supabase
+          };
+          reader.readAsDataURL(file);
+          
+          toast.success('Mídia carregada com sucesso!');
+        } else {
+          toast.error('Erro ao fazer upload da mídia');
+        }
+      } catch (error) {
+        console.error('Erro no upload:', error);
+        toast.error('Erro ao fazer upload da mídia');
+      } finally {
+        setUploadingMedia(false);
+      }
     }
   };
   
@@ -89,10 +133,25 @@ export function MassMessagingPage() {
         toast.error('Digite um nome para a campanha');
         return;
       }
-      if (!messageText.trim()) {
+      
+      // Para mensagens de texto, o texto é obrigatório
+      if (messageType === 'text' && !messageText.trim()) {
         toast.error('Digite uma mensagem');
         return;
       }
+      
+      // Para mensagens de mídia, verificar se há arquivo ou texto
+      if (messageType === 'media' && !mediaFile && !messageText.trim()) {
+        toast.error('Selecione uma imagem ou digite uma mensagem');
+        return;
+      }
+      
+      // Para mensagens de áudio, implementar validação quando necessário
+      if (messageType === 'audio' && !messageText.trim()) {
+        toast.error('Grave um áudio ou digite uma mensagem');
+        return;
+      }
+      
       setCurrentStep('schedule');
     } else if (currentStep === 'schedule') {
       if (sendMode === 'schedule' && (!scheduleDate || !scheduleTime)) {
@@ -128,6 +187,12 @@ export function MassMessagingPage() {
         return;
       }
       
+      // Verificar se o usuário está autenticado
+      if (!user?.id) {
+        toast.error('Usuário não autenticado');
+        return;
+      }
+      
       // Preparar dados para o envio
       const numbers: string[] = [];
       
@@ -155,16 +220,43 @@ export function MassMessagingPage() {
         return;
       }
       
+      // Primeiro, salvar a campanha no Supabase
+      const campaignData: Partial<MassCampaign> = {
+        user_id: user.id,
+        campaign_name: campaignName,
+        message_text: messageText,
+        message_type: messageType,
+        media_url: messageType === 'media' && mediaPreview ? mediaPreview : undefined,
+        media_filename: messageType === 'media' && mediaFile ? mediaFile.name : undefined,
+        media_mimetype: messageType === 'media' && mediaFile ? mediaFile.type : undefined,
+        recipients_count: numbers.length,
+        sent_count: 0,
+        failed_count: 0,
+        status: sendMode === 'schedule' ? 'scheduled' : 'sending',
+        min_delay: minDelay * 1000,
+        max_delay: maxDelay * 1000,
+        scheduled_for: sendMode === 'schedule' && scheduleDate && scheduleTime
+          ? new Date(`${scheduleDate}T${scheduleTime}`).toISOString()
+          : undefined
+      };
+      
+      const savedCampaign = await createMassCampaign(campaignData);
+      
+      if (!savedCampaign) {
+        toast.error('Erro ao salvar campanha no banco de dados');
+        return;
+      }
+      
+      setCurrentCampaign(savedCampaign);
+      
       // Preparar dados da mídia se houver
       let mediaData = null;
-      if (messageType === 'media' && mediaFile && mediaPreview) {
-        // Remover o prefixo data:image/xxx;base64, se houver
-        const mediaBase64 = mediaPreview.split(',')[1] || mediaPreview;
-        
+      if (messageType === 'media' && mediaPreview) {
+        // Usar a URL do Supabase em vez de base64
         mediaData = {
-          mimetype: mediaFile.type,
-          data: mediaBase64,
-          filename: mediaFile.name
+          mimetype: mediaFile ? mediaFile.type : 'image/jpeg',
+          data: mediaPreview, // URL do Supabase
+          filename: mediaFile ? mediaFile.name : 'media'
         };
       }
       
@@ -178,11 +270,13 @@ export function MassMessagingPage() {
         media: mediaData,
         // Dados de agendamento, se aplicável
         scheduledFor: sendMode === 'schedule' && scheduleDate && scheduleTime
-          ? new Date(`${scheduleDate}T${scheduleTime}`).getTime() / 1000 // Converter para timestamp em segundos
+          ? new Date(`${scheduleDate}T${scheduleTime}`).getTime() // Timestamp em milissegundos
           : undefined
       };
       
       console.log('Enviando dados:', massMessageData);
+      console.log('Instância selecionada:', selectedInstance);
+      console.log('Campanha salva:', savedCampaign);
       
       // Chamar o serviço UAZAPI para enviar a mensagem em massa
       const result = await uazapiService.sendMassMessage(selectedInstance.token, massMessageData);
@@ -190,6 +284,12 @@ export function MassMessagingPage() {
       console.log('Resultado do envio:', result);
       
       if (result && result.success) {
+        // Atualizar status da campanha para completed
+        await updateMassCampaign(savedCampaign.id, {
+          status: 'completed',
+          sent_count: numbers.length
+        });
+        
         toast.success('Campanha enviada com sucesso!');
         
         // Resetar o formulário
@@ -203,14 +303,29 @@ export function MassMessagingPage() {
         setSendMode('now');
         setScheduleDate('');
         setScheduleTime('');
+        setCurrentCampaign(null);
         
         // Navegar para a página de relatórios para acompanhar a campanha
         navigate('/messages/campaigns');
       } else {
+        // Atualizar status da campanha para failed
+        await updateMassCampaign(savedCampaign.id, {
+          status: 'failed',
+          failed_count: numbers.length
+        });
+        
         toast.error('Erro ao enviar campanha. Verifique os dados e tente novamente.');
       }
     } catch (error) {
       console.error('Erro ao enviar campanha:', error);
+      
+      // Se temos uma campanha salva, atualizar status para failed
+      if (currentCampaign) {
+        await updateMassCampaign(currentCampaign.id, {
+          status: 'failed'
+        });
+      }
+      
       toast.error('Erro ao enviar campanha. Tente novamente.');
     } finally {
       setIsSubmitting(false);
@@ -520,40 +635,73 @@ export function MassMessagingPage() {
                 {messageType === 'media' && (
                   <div className="mb-6">
                     <label className="block text-sm font-medium text-gray-700 mb-3">
-                      Imagem
+                      Mídia
                     </label>
                     
                     {!mediaPreview ? (
                       <div className="flex items-center justify-center w-full">
-                        <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-gray-300 border-dashed rounded-lg cursor-pointer bg-gray-50 hover:bg-gray-100">
+                        <label className={cn(
+                          "flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-lg cursor-pointer transition-all",
+                          uploadingMedia 
+                            ? "border-primary-300 bg-primary-50" 
+                            : "border-gray-300 bg-gray-50 hover:bg-gray-100"
+                        )}>
                           <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                            <FileUp className="w-8 h-8 mb-3 text-gray-400" />
-                            <p className="mb-2 text-sm text-gray-500">
-                              <span className="font-medium">Clique para enviar</span> ou arraste e solte
-                            </p>
-                            <p className="text-xs text-gray-500">PNG, JPG ou GIF (MAX. 2MB)</p>
+                            {uploadingMedia ? (
+                              <>
+                                <Loader2 className="w-8 h-8 mb-3 text-primary-500 animate-spin" />
+                                <p className="mb-2 text-sm text-primary-600 font-medium">
+                                  Fazendo upload...
+                                </p>
+                              </>
+                            ) : (
+                              <>
+                                <FileUp className="w-8 h-8 mb-3 text-gray-400" />
+                                <p className="mb-2 text-sm text-gray-500">
+                                  <span className="font-medium">Clique para enviar</span> ou arraste e solte
+                                </p>
+                                <p className="text-xs text-gray-500">PNG, JPG, GIF, MP4, MP3, WAV (MAX. 5MB)</p>
+                              </>
+                            )}
                           </div>
                           <input 
                             type="file" 
                             className="hidden" 
-                            accept="image/*"
+                            accept="image/*,video/mp4,audio/*"
                             onChange={handleFileChange}
+                            disabled={uploadingMedia}
                           />
                         </label>
                       </div>
                     ) : (
                       <div className="relative w-full h-48 rounded-lg overflow-hidden border border-gray-200">
-                        <img 
-                          src={mediaPreview} 
-                          alt="Preview" 
-                          className="w-full h-full object-contain"
-                        />
+                        {mediaFile?.type.startsWith('image/') ? (
+                          <img 
+                            src={mediaPreview} 
+                            alt="Preview" 
+                            className="w-full h-full object-contain"
+                          />
+                        ) : mediaFile?.type.startsWith('video/') ? (
+                          <video 
+                            src={mediaPreview} 
+                            controls
+                            className="w-full h-full object-contain"
+                          />
+                        ) : (
+                          <div className="flex items-center justify-center w-full h-full bg-gray-100">
+                            <div className="text-center">
+                              <Mic className="w-12 h-12 mx-auto mb-2 text-gray-400" />
+                              <p className="text-sm text-gray-600">{mediaFile?.name}</p>
+                            </div>
+                          </div>
+                        )}
                         <button
                           onClick={() => {
                             setMediaFile(null);
                             setMediaPreview(null);
                           }}
                           className="absolute top-2 right-2 p-1 bg-red-500 text-white rounded-full hover:bg-red-600"
+                          disabled={uploadingMedia}
                         >
                           <X className="h-4 w-4" />
                         </button>
@@ -582,7 +730,12 @@ export function MassMessagingPage() {
                 </button>
                 <button
                   onClick={handleNextStep}
-                  disabled={!messageText.trim() || !campaignName.trim()}
+                  disabled={
+                    !campaignName.trim() || 
+                    (messageType === 'text' && !messageText.trim()) ||
+                    (messageType === 'media' && !mediaFile && !messageText.trim()) ||
+                    (messageType === 'audio' && !messageText.trim())
+                  }
                   className="flex items-center gap-2 px-6 py-2 bg-primary-600 text-white font-medium rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Próximo

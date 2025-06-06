@@ -5,7 +5,8 @@ import { useAuth } from '../contexts/AuthContext';
 import { Input } from '../components/ui/Input';
 import { WhatsAppInput } from '../components/ui/WhatsAppInput';
 import { Button } from '../components/ui/Button';
-import { dbService, storageService, authService } from '../lib/supabase';
+import { supabase } from '../lib/supabase';
+import { storageService } from '../lib/supabase-real';
 import { Calendar, Eye, EyeOff, Camera } from 'lucide-react';
 import { cn } from '../lib/utils';
 
@@ -41,8 +42,9 @@ export function ProfileSettingsPage() {
       if (!user) return;
 
       try {
-        const { data, error } = await dbService
+        const { data, error } = await supabase
           .from('profiles')
+          .select('*')
           .eq('id', user.id)
           .single();
 
@@ -88,7 +90,7 @@ export function ProfileSettingsPage() {
         .getPublicUrl(filePath);
 
       // Update profile
-      const { error: updateError } = await dbService
+      const { error: updateError } = await supabase
         .from('profiles')
         .update({
           avatar_url: publicUrl,
@@ -98,7 +100,7 @@ export function ProfileSettingsPage() {
 
       if (updateError) throw updateError;
 
-      setProfileData(prev => ({
+      setProfileData((prev: any) => ({
         ...prev,
         avatar_url: publicUrl
       }));
@@ -127,7 +129,7 @@ export function ProfileSettingsPage() {
       }
 
       // Update profile data
-      const { error: profileError } = await dbService
+      const { error: profileError } = await supabase
         .from('profiles')
         .update({
           full_name: data.fullName,
@@ -142,7 +144,7 @@ export function ProfileSettingsPage() {
 
       // Update password if provided
       if (data.currentPassword && data.newPassword) {
-        const { error: passwordError } = await authService.updateUser({
+        const { error: passwordError } = await supabase.auth.updateUser({
           password: data.newPassword
         });
 
@@ -151,7 +153,7 @@ export function ProfileSettingsPage() {
       }
 
       toast.success('Perfil atualizado com sucesso!');
-      setProfileData(prev => ({
+      setProfileData((prev: any) => ({
         ...prev,
         full_name: data.fullName,
         company_name: data.companyName,
@@ -200,7 +202,7 @@ export function ProfileSettingsPage() {
               <label
                 htmlFor="avatar-upload"
                 className={cn(
-                  "absolute bottom-0 right-0 rounded-full bg-primary-600 p-2 text-white shadow-lg hover:bg-primary-700 transition-colors cursor-pointer",
+                  "absolute -bottom-1 -right-1 rounded-full bg-primary-600 p-2 text-white shadow-lg hover:bg-primary-700 transition-colors cursor-pointer flex items-center justify-center",
                   isUploading && "opacity-50 cursor-not-allowed"
                 )}
               >
@@ -266,9 +268,6 @@ export function ProfileSettingsPage() {
                 </div>
 
                 <div>
-                  <label htmlFor="whatsapp" className="block text-sm font-medium text-gray-700 mb-1">
-                    WhatsApp
-                  </label>
                   <Controller
                     name="whatsapp"
                     control={control}

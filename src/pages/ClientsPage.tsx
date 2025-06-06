@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
-import { dbService } from '../lib/supabase';
+import { supabase, updateUserProfile, getUserStats, getUserAccessLogs, UserAccessLog } from '../lib/supabase';
 import { formatDateTime } from '../lib/utils';
-import { Search, Filter, Download, RefreshCw, Phone, Lock, Unlock } from 'lucide-react';
+import { Search, Filter, Download, RefreshCw, Phone, Users, UserCheck, UserX, Activity, X } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useNotification } from '../contexts/NotificationContext';
 import { toast } from 'react-hot-toast';
+import { useAuth } from '../contexts/AuthContext';
 
 interface Client {
   id: string;
@@ -13,6 +14,7 @@ interface Client {
   whatsapp: string;
   created_at: string;
   last_login: string | null;
+  avatar_url?: string;
   is_active: boolean;
 }
 
@@ -22,7 +24,12 @@ export function ClientsPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [stats, setStats] = useState<any>(null);
+  const [selectedClient, setSelectedClient] = useState<Client | null>(null);
+  const [showAccessLogs, setShowAccessLogs] = useState(false);
+  const [accessLogs, setAccessLogs] = useState<UserAccessLog[]>([]);
   const { sendNotification } = useNotification();
+  const { user } = useAuth();
 
   useEffect(() => {
     loadClients();
@@ -33,20 +40,42 @@ export function ClientsPage() {
       setIsRefreshing(true);
       setError(null);
       
-      const { data, error } = await dbService
+      // Buscar perfil do usuário atual para obter organization_id
+      const { data: currentProfile } = await supabase
         .from('profiles')
-        .select('*');
+        .select('organization_id')
+        .eq('id', user?.id)
+        .single();
+
+      if (!currentProfile?.organization_id) {
+        setError('Organização não encontrada.');
+        return;
+      }
+
+      // Buscar usuários da organização
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('organization_id', currentProfile.organization_id)
+        .order('created_at', { ascending: false });
 
       if (error) {
         console.error('Error fetching clients:', error);
-        setError('Erro ao carregar clientes. Por favor, tente novamente.');
+        setError('Erro ao carregar usuários. Por favor, tente novamente.');
         throw error;
       }
 
-      setClients(data || []);
+      // Processar dados mantendo o last_login do perfil
+      const processedClients = data || [];
+
+      setClients(processedClients);
+
+      // Carregar estatísticas
+      const statsData = await getUserStats(currentProfile.organization_id);
+      setStats(statsData);
     } catch (error) {
       console.error('Error loading clients:', error);
-      setError('Erro ao carregar clientes. Por favor, tente novamente.');
+      setError('Erro ao carregar usuários. Por favor, tente novamente.');
     } finally {
       setLoading(false);
       setIsRefreshing(false);
@@ -57,12 +86,13 @@ export function ClientsPage() {
     try {
       const newStatus = !client.is_active;
       
-      const { error } = await dbService
-        .from('profiles')
-        .update({ is_active: newStatus })
-        .eq('id', client.id);
+      const success = await updateUserProfile(client.id, {
+        is_active: newStatus
+      });
 
-      if (error) throw error;
+      if (!success) {
+        throw new Error('Erro ao atualizar status do usuário');
+      }
 
       // Send WhatsApp notification
       if (client.whatsapp) {
@@ -80,10 +110,10 @@ export function ClientsPage() {
         c.id === client.id ? { ...c, is_active: newStatus } : c
       ));
 
-      toast.success(`Cliente ${newStatus ? 'desbloqueado' : 'bloqueado'} com sucesso`);
+      toast.success(`Usuário ${newStatus ? 'desbloqueado' : 'bloqueado'} com sucesso`);
     } catch (error) {
       console.error('Error toggling client access:', error);
-      toast.error('Erro ao alterar acesso do cliente');
+      toast.error('Erro ao alterar acesso do usuário');
     }
   };
 
@@ -97,8 +127,86 @@ export function ClientsPage() {
     loadClients();
   };
 
+  const exportUsers = () => {
+    // TODO: Implement export functionality
+    toast.success('Funcionalidade de exportação será implementada em breve');
+  };
+
+  const viewAccessLogs = async (client: Client) => {
+    try {
+      setSelectedClient(client);
+      setShowAccessLogs(true);
+      
+      // Buscar logs de acesso do usuário
+      const logs = await getUserAccessLogs(client.id);
+      setAccessLogs(logs);
+    } catch (error) {
+      console.error('Erro ao carregar logs de acesso:', error);
+      toast.error('Erro ao carregar logs de acesso');
+    }
+  };
+
+  const closeAccessLogsModal = () => {
+    setShowAccessLogs(false);
+    setSelectedClient(null);
+    setAccessLogs([]);
+  };
+
   return (
     <div className="space-y-6">
+      {/* Statistics Cards */}
+      {stats && (
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <div className="flex items-center">
+              <div className="flex-shrink-0">
+                <Users className="h-8 w-8 text-blue-600" />
+              </div>
+              <div className="ml-4">
+                <p className="text-sm font-medium text-gray-500">Total de Usuários</p>
+                <p className="text-2xl font-semibold text-gray-900">{stats.totalUsers}</p>
+              </div>
+            </div>
+          </div>
+          
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <div className="flex items-center">
+              <div className="flex-shrink-0">
+                <UserCheck className="h-8 w-8 text-green-600" />
+              </div>
+              <div className="ml-4">
+                <p className="text-sm font-medium text-gray-500">Usuários Ativos</p>
+                <p className="text-2xl font-semibold text-gray-900">{stats.activeUsers}</p>
+              </div>
+            </div>
+          </div>
+          
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <div className="flex items-center">
+              <div className="flex-shrink-0">
+                <UserX className="h-8 w-8 text-red-600" />
+              </div>
+              <div className="ml-4">
+                <p className="text-sm font-medium text-gray-500">Usuários Inativos</p>
+                <p className="text-2xl font-semibold text-gray-900">{stats.inactiveUsers}</p>
+              </div>
+            </div>
+          </div>
+          
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <div className="flex items-center">
+              <div className="flex-shrink-0">
+                <Activity className="h-8 w-8 text-purple-600" />
+              </div>
+              <div className="ml-4">
+                <p className="text-sm font-medium text-gray-500">Acessos (30 dias)</p>
+                <p className="text-2xl font-semibold text-gray-900">{stats.recentLogins}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Search and Actions Bar */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         {/* Search Bar */}
@@ -133,6 +241,7 @@ export function ClientsPage() {
             <Filter className="h-5 w-5" />
           </button>
           <button 
+            onClick={exportUsers}
             className="p-2 text-gray-600 hover:text-primary-600 rounded-lg hover:bg-primary-50"
             title="Exportar"
           >
@@ -153,7 +262,7 @@ export function ClientsPage() {
         {loading ? (
           <div className="p-8 text-center">
             <div className="animate-spin h-8 w-8 border-4 border-primary-600 border-t-transparent rounded-full mx-auto" />
-            <p className="mt-4 text-gray-600">Carregando clientes...</p>
+            <p className="mt-4 text-gray-600">Carregando usuários...</p>
           </div>
         ) : filteredClients.length === 0 ? (
           <div className="p-8 text-center">
@@ -161,7 +270,7 @@ export function ClientsPage() {
               <Phone className="h-6 w-6 text-gray-400" />
             </div>
             <p className="text-gray-600">
-              {searchTerm ? 'Nenhum cliente encontrado para esta busca' : 'Nenhum cliente cadastrado'}
+              {searchTerm ? 'Nenhum usuário encontrado para esta busca' : 'Nenhum usuário cadastrado'}
             </p>
           </div>
         ) : (
@@ -198,7 +307,21 @@ export function ClientsPage() {
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center">
                         <div className="flex-shrink-0 h-10 w-10">
-                          <div className="h-10 w-10 rounded-full bg-primary-100 flex items-center justify-center">
+                          {client.avatar_url ? (
+                            <img
+                              src={client.avatar_url}
+                              alt={client.full_name || 'Avatar'}
+                              className="h-10 w-10 rounded-full object-cover"
+                              onError={(e) => {
+                                const target = e.target as HTMLImageElement;
+                                target.style.display = 'none';
+                                target.nextElementSibling?.classList.remove('hidden');
+                              }}
+                            />
+                          ) : null}
+                          <div className={`h-10 w-10 rounded-full bg-primary-100 flex items-center justify-center ${
+                            client.avatar_url ? 'hidden' : ''
+                          }`}>
                             <span className="text-primary-600 font-medium">
                               {client.full_name?.charAt(0).toUpperCase() || 'U'}
                             </span>
@@ -229,7 +352,34 @@ export function ClientsPage() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm text-gray-500">
-                        {client.last_login ? formatDateTime(client.last_login) : '-'}
+                        {client.last_login ? (
+                          <div className="flex flex-col">
+                            <span>{formatDateTime(client.last_login)}</span>
+                            <span className="text-xs text-gray-400">
+                              {(() => {
+                                const lastLogin = new Date(client.last_login);
+                                const now = new Date();
+                                const diffMs = now.getTime() - lastLogin.getTime();
+                                const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+                                const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+                                const diffMinutes = Math.floor(diffMs / (1000 * 60));
+                                
+                                if (diffDays > 0) {
+                                  return `há ${diffDays} dia${diffDays > 1 ? 's' : ''}`;
+                                } else if (diffHours > 0) {
+                                  return `há ${diffHours} hora${diffHours > 1 ? 's' : ''}`;
+                                } else if (diffMinutes > 0) {
+                                  return `há ${diffMinutes} minuto${diffMinutes > 1 ? 's' : ''}`;
+                                } else {
+                                  return 'agora mesmo';
+                                }
+                              })()
+                            }
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-gray-400">Nunca acessou</span>
+                        )}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
@@ -242,23 +392,36 @@ export function ClientsPage() {
                         {client.is_active ? 'Ativo' : 'Bloqueado'}
                       </span>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <button
-                        onClick={() => toggleClientAccess(client)}
-                        className={cn(
-                          "p-2 rounded-lg transition-colors",
-                          client.is_active
-                            ? "text-red-600 hover:bg-red-50"
-                            : "text-green-600 hover:bg-green-50"
-                        )}
-                        title={client.is_active ? 'Bloquear acesso' : 'Desbloquear acesso'}
-                      >
-                        {client.is_active ? (
-                          <Lock className="h-5 w-5" />
-                        ) : (
-                          <Unlock className="h-5 w-5" />
-                        )}
-                      </button>
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                      <div className="flex items-center justify-end space-x-2">
+                        <button
+                          onClick={() => viewAccessLogs(client)}
+                          className="inline-flex items-center px-3 py-2 border border-gray-300 text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                          title="Ver logs de acesso"
+                        >
+                          <Activity className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={() => toggleClientAccess(client)}
+                          className={`inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md ${
+                            client.is_active
+                              ? 'text-red-700 bg-red-100 hover:bg-red-200'
+                              : 'text-green-700 bg-green-100 hover:bg-green-200'
+                          } focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500`}
+                        >
+                          {client.is_active ? (
+                            <>
+                              <UserX className="h-4 w-4 mr-1" />
+                              Desativar
+                            </>
+                          ) : (
+                            <>
+                              <UserCheck className="h-4 w-4 mr-1" />
+                              Ativar
+                            </>
+                          )}
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -267,6 +430,103 @@ export function ClientsPage() {
           </div>
         )}
       </div>
+
+      {/* Modal de Logs de Acesso */}
+      {showAccessLogs && selectedClient && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+          <div className="relative top-20 mx-auto p-5 border w-11/12 md:w-3/4 lg:w-1/2 shadow-lg rounded-md bg-white">
+            <div className="mt-3">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-medium text-gray-900">
+                  Logs de Acesso - {selectedClient.full_name}
+                </h3>
+                <button
+                  onClick={closeAccessLogsModal}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <X className="h-6 w-6" />
+                </button>
+              </div>
+              
+              <div className="max-h-96 overflow-y-auto">
+                {accessLogs.length === 0 ? (
+                  <div className="text-center py-8">
+                    <Activity className="mx-auto h-12 w-12 text-gray-400" />
+                    <h3 className="mt-2 text-sm font-medium text-gray-900">Nenhum log encontrado</h3>
+                    <p className="mt-1 text-sm text-gray-500">
+                      Este usuário ainda não possui logs de acesso registrados.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {accessLogs.map((log, index) => (
+                      <div key={index} className="border border-gray-200 rounded-lg p-4">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center space-x-2">
+                            <Activity className="h-4 w-4 text-green-500" />
+                            <span className="text-sm font-medium text-gray-900">
+                              Login realizado
+                            </span>
+                          </div>
+                          <span className="text-xs text-gray-500">
+                            {formatDateTime(log.created_at)}
+                          </span>
+                        </div>
+                        
+                        <div className="mt-2 space-y-1">
+                          {log.ip_address && (
+                            <div className="flex items-center text-xs text-gray-600">
+                              <span className="font-medium mr-2">IP:</span>
+                              <span>{log.ip_address}</span>
+                            </div>
+                          )}
+                          
+                          {log.user_agent && (
+                            <div className="flex items-center text-xs text-gray-600">
+                              <span className="font-medium mr-2">Navegador:</span>
+                              <span className="truncate">{log.user_agent}</span>
+                            </div>
+                          )}
+                          
+                          {log.login_method && (
+                            <div className="flex items-center text-xs text-gray-600">
+                              <span className="font-medium mr-2">Método:</span>
+                              <span>{log.login_method}</span>
+                            </div>
+                          )}
+                          
+                          {log.session_duration && (
+                            <div className="flex items-center text-xs text-gray-600">
+                              <span className="font-medium mr-2">Duração:</span>
+                              <span>{Math.round(Number(log.session_duration) / 60)} minutos</span>
+                            </div>
+                          )}
+                          
+                          {log.logout_time && (
+                            <div className="flex items-center text-xs text-gray-600">
+                              <span className="font-medium mr-2">Logout:</span>
+                              <span>{formatDateTime(log.logout_time)}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              
+              <div className="mt-4 flex justify-end">
+                <button
+                  onClick={closeAccessLogsModal}
+                  className="px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-500"
+                >
+                  Fechar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

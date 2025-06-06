@@ -1,11 +1,10 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
-import { toast } from 'react-hot-toast';
 import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
-import { Eye, EyeOff, ArrowLeft } from 'lucide-react';
-import { authService } from '../../lib/supabase';
+import { ArrowLeft } from 'lucide-react';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface RecoverPasswordForm {
   email: string;
@@ -15,27 +14,20 @@ interface RecoverPasswordForm {
 
 export function RecoverPasswordPage() {
   const [isLoading, setIsLoading] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const navigate = useNavigate();
-  const { register, handleSubmit, watch, formState: { errors }, reset } = useForm<RecoverPasswordForm>();
-
-  const password = watch('password');
+  const { register, handleSubmit, formState: { errors } } = useForm<RecoverPasswordForm>();
+  const { sendPasswordResetCode } = useAuth();
 
   const onSubmit = async (data: RecoverPasswordForm) => {
     try {
       setIsLoading(true);
 
-      const { error } = await authService.resetPasswordForEmail(data.email);
+      await sendPasswordResetCode(data.email);
 
-      if (error) throw error;
-
-      toast.success('Link de recuperação enviado para seu e-mail');
-      navigate('/login');
+      // Redireciona para a página de inserir código
+      navigate('/reset-password', { state: { email: data.email } });
     } catch (error) {
       console.error('Error in password recovery:', error);
-      const message = error instanceof Error ? error.message : 'Erro ao enviar e-mail de recuperação';
-      toast.error(message);
     } finally {
       setIsLoading(false);
     }
