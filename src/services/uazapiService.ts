@@ -407,7 +407,7 @@ export const uazapiService = {
       
       // URLs não precisam de validação de tamanho como base64
       // O arquivo já está armazenado no Supabase
-      const limitedMessages = messages.map(msg => {
+      const limitedMessages = messages.map((msg: any) => {
         // Clonar o objeto para não modificar o original
         const newMsg = {...msg};
         return newMsg;
@@ -634,7 +634,7 @@ export const uazapiService = {
         } else {
           // Se foi enviado imediatamente, verificar o resultado da API
           const apiResponse = allResults;
-          const isSuccess = apiResponse && (apiResponse.success || apiResponse.status === 'success' || apiResponse.message);
+          const isSuccess = apiResponse && ((apiResponse as any).success || (apiResponse as any).status === 'success' || (apiResponse as any).message);
           
           if (isSuccess) {
             activeCampaigns[campaignId].status = 'completed';
@@ -650,7 +650,7 @@ export const uazapiService = {
         const numbersForResults = limitedMessages.map((msg: any) => msg.number);
         activeCampaigns[campaignId].results = numbersForResults.map((number: string) => ({
           number,
-          success: !isScheduled && allResults && (allResults.success || allResults.status === 'success'),
+          success: !isScheduled && allResults && ((allResults as any).success || (allResults as any).status === 'success'),
           data: allResults // Usar o resultado da API
         }));
         
