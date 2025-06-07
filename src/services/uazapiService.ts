@@ -470,9 +470,6 @@ export const uazapiService = {
           // Abordagem simplificada para envio em massa via /sender/advanced
           console.log(`Preparando ${requestData.messages.length} contatos para envio via /sender/advanced`);
           
-          // Extraímos informações do primeiro item para usar no envio em massa
-          const firstMessage = requestData.messages[0];
-          
           // Extraímos todos os números em um array
           const phones = requestData.messages.map((msg: any) => msg.number);
           
