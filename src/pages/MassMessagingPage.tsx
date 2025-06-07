@@ -14,7 +14,10 @@ import {
   FileUp, 
   X, 
   Loader2,
-  BarChart2
+  BarChart2,
+  Plus,
+  Trash2,
+  Copy
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { InstanceModal } from '../components/InstanceModal';
@@ -36,6 +39,16 @@ import {
   MassCampaign 
 } from '../lib/supabase';
 
+// Tipo para as mensagens múltiplas
+interface MessageOption {
+  id: string;
+  type: 'text' | 'media' | 'audio';
+  text: string;
+  mediaFile?: File | null;
+  mediaPreview?: string | null;
+  mediaUrl?: { url: string; path: string } | null;
+}
+
 export function MassMessagingPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -45,15 +58,20 @@ export function MassMessagingPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showContactModal, setShowContactModal] = useState(false);
   const [showGroupModal, setShowGroupModal] = useState(false);
-  const [uploadingMedia, setUploadingMedia] = useState(false);
+  const [uploadingMedia, setUploadingMedia] = useState<string | null>(null);
   const [currentCampaign, setCurrentCampaign] = useState<MassCampaign | null>(null);
   
-  // Estado da mensagem
-  const [messageType, setMessageType] = useState<'text' | 'media' | 'audio'>('text');
-  const [messageText, setMessageText] = useState('');
+  // Estado das mensagens múltiplas
+  const [messageOptions, setMessageOptions] = useState<MessageOption[]>([
+    {
+      id: '1',
+      type: 'text',
+      text: '',
+      mediaFile: null,
+      mediaPreview: null
+    }
+  ]);
   const [campaignName, setCampaignName] = useState('');
-  const [mediaFile, setMediaFile] = useState<File | null>(null);
-  const [mediaPreview, setMediaPreview] = useState<string | null>(null);
   
   // Estado de agendamento
   const [minDelay, setMinDelay] = useState(3); // Delay mínimo em segundos
@@ -81,8 +99,49 @@ export function MassMessagingPage() {
     }
   }, [selectedInstance, setShowInstanceModal]);
   
+  // Função para adicionar nova opção de mensagem
+  const addMessageOption = () => {
+    const newOption: MessageOption = {
+      id: Date.now().toString(),
+      type: 'text',
+      text: '',
+      mediaFile: null,
+      mediaPreview: null
+    };
+    setMessageOptions([...messageOptions, newOption]);
+  };
+  
+  // Função para remover opção de mensagem
+  const removeMessageOption = (id: string) => {
+    if (messageOptions.length > 1) {
+      setMessageOptions(messageOptions.filter(option => option.id !== id));
+    }
+  };
+  
+  // Função para duplicar opção de mensagem
+  const duplicateMessageOption = (id: string) => {
+    const optionToDuplicate = messageOptions.find(option => option.id === id);
+    if (optionToDuplicate) {
+      const newOption: MessageOption = {
+        ...optionToDuplicate,
+        id: Date.now().toString()
+      };
+      const index = messageOptions.findIndex(option => option.id === id);
+      const newOptions = [...messageOptions];
+      newOptions.splice(index + 1, 0, newOption);
+      setMessageOptions(newOptions);
+    }
+  };
+  
+  // Função para atualizar opção de mensagem
+  const updateMessageOption = (id: string, updates: Partial<MessageOption>) => {
+    setMessageOptions(messageOptions.map(option => 
+      option.id === id ? { ...option, ...updates } : option
+    ));
+  };
+  
   // Handler para upload de arquivo
-  const handleFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: ChangeEvent<HTMLInputElement>, optionId: string) => {
     const file = e.target.files?.[0];
     if (file) {
       // Verificar tamanho do arquivo (5MB max)
@@ -97,30 +156,28 @@ export function MassMessagingPage() {
         return;
       }
       
-      setUploadingMedia(true);
+      setUploadingMedia(optionId);
       
       try {
-        // Upload para o Supabase
-        const uploadResult = await uploadCampaignMedia(file, user.id);
+        // Fazer upload do arquivo para o Supabase
+        const mediaUrl = await uploadCampaignMedia(file, user.id);
         
-        if (uploadResult) {
-          // Criar preview local
-          const reader = new FileReader();
-          reader.onloadend = () => {
-            setMediaFile(file);
-            setMediaPreview(uploadResult.url); // Usar URL do Supabase
-          };
-          reader.readAsDataURL(file);
-          
-          toast.success('Mídia carregada com sucesso!');
-        } else {
-          toast.error('Erro ao fazer upload da mídia');
-        }
+        // Criar preview local
+        const preview = URL.createObjectURL(file);
+        
+        // Atualizar a opção de mensagem
+        updateMessageOption(optionId, {
+          mediaFile: file,
+          mediaPreview: preview,
+          mediaUrl: mediaUrl
+        });
+        
+        toast.success('Arquivo enviado com sucesso!');
       } catch (error) {
-        console.error('Erro no upload:', error);
-        toast.error('Erro ao fazer upload da mídia');
+        console.error('Erro ao fazer upload:', error);
+        toast.error('Erro ao fazer upload do arquivo');
       } finally {
-        setUploadingMedia(false);
+        setUploadingMedia(null);
       }
     }
   };
@@ -139,20 +196,19 @@ export function MassMessagingPage() {
         return;
       }
       
-      // Para mensagens de texto, o texto é obrigatório
-      if (messageType === 'text' && !messageText.trim()) {
-        toast.error('Digite uma mensagem');
-        return;
-      }
+      // Validar se pelo menos uma mensagem tem conteúdo
+      const hasValidMessage = messageOptions.some(option => 
+        option.text.trim() || option.mediaFile
+      );
       
-      // Para mensagens de mídia, verificar se há arquivo ou texto
-      if (messageType === 'media' && !mediaFile && !messageText.trim()) {
-        toast.error('Selecione uma imagem ou digite uma mensagem');
+      if (!hasValidMessage) {
+        toast.error('Adicione pelo menos uma mensagem com texto ou mídia');
         return;
       }
       
       // Para mensagens de áudio, implementar validação quando necessário
-      if (messageType === 'audio' && !messageText.trim()) {
+      const hasAudioMessage = messageOptions.some(option => option.type === 'audio');
+      if (hasAudioMessage && !messageOptions.some(option => option.text.trim())) {
         toast.error('Grave um áudio ou digite uma mensagem');
         return;
       }
@@ -226,14 +282,15 @@ export function MassMessagingPage() {
       }
       
       // Primeiro, salvar a campanha no Supabase
+      const firstMessage = messageOptions[0];
       const campaignData: Partial<MassCampaign> = {
         user_id: user.id,
         campaign_name: campaignName,
-        message_text: messageText,
-        message_type: messageType,
-        media_url: messageType === 'media' && mediaPreview ? mediaPreview : undefined,
-        media_filename: messageType === 'media' && mediaFile ? mediaFile.name : undefined,
-        media_mimetype: messageType === 'media' && mediaFile ? mediaFile.type : undefined,
+        message_text: firstMessage?.text || '',
+        message_type: firstMessage?.type || 'text',
+        media_url: firstMessage?.type === 'media' && firstMessage?.mediaPreview ? firstMessage.mediaPreview : undefined,
+        media_filename: firstMessage?.type === 'media' && firstMessage?.mediaFile ? firstMessage.mediaFile.name : undefined,
+        media_mimetype: firstMessage?.type === 'media' && firstMessage?.mediaFile ? firstMessage.mediaFile.type : undefined,
         recipients_count: numbers.length,
         sent_count: 0,
         failed_count: 0,
@@ -256,19 +313,19 @@ export function MassMessagingPage() {
       
       // Preparar dados da mídia se houver
       let mediaData = null;
-      if (messageType === 'media' && mediaPreview) {
+      if (firstMessage?.type === 'media' && firstMessage?.mediaPreview) {
         // Usar a URL do Supabase em vez de base64
         mediaData = {
-          mimetype: mediaFile ? mediaFile.type : 'image/jpeg',
-          data: mediaPreview, // URL do Supabase
-          filename: mediaFile ? mediaFile.name : 'media'
+          mimetype: firstMessage?.mediaFile ? firstMessage.mediaFile.type : 'image/jpeg',
+          data: firstMessage.mediaPreview, // URL do Supabase
+          filename: firstMessage?.mediaFile ? firstMessage.mediaFile.name : 'media'
         };
       }
       
       // Construir objeto de dados para envio
       const massMessageData = {
         campaignName: campaignName,
-        message: messageText,
+        message: messageOptions[0]?.text || '',
         numbers: numbers,
         minDelay: minDelay * 1000, // Converter para milissegundos
         maxDelay: maxDelay * 1000, // Converter para milissegundos
@@ -290,10 +347,8 @@ export function MassMessagingPage() {
       setCurrentStep('recipients');
       setSelectedContacts([]);
       setSelectedGroups([]);
-      setMessageText('');
+      setMessageOptions([{ id: '1', text: '', type: 'text', mediaFile: null, mediaPreview: null, mediaUrl: null }]);
       setCampaignName('');
-      setMediaFile(null);
-      setMediaPreview(null);
       setSendMode('now');
       setScheduleDate('');
       setScheduleTime('');
@@ -334,7 +389,7 @@ export function MassMessagingPage() {
                   numbers: block
                 };
                 
-                const blockResult = await uazapiService.sendMassMessage(selectedInstance.token, blockData);
+                const blockResult = await uazapiService.sendMassMessage(selectedInstance.token!, blockData);
                 
                 if (blockResult && blockResult.success) {
                   totalSent += block.length;
@@ -373,7 +428,7 @@ export function MassMessagingPage() {
             
           } else {
             // Envio normal (sem blocos)
-            const result = await uazapiService.sendMassMessage(selectedInstance.token, massMessageData);
+            const result = await uazapiService.sendMassMessage(selectedInstance.token!, massMessageData);
             
             console.log('Resultado do envio:', result);
             
@@ -637,11 +692,20 @@ export function MassMessagingPage() {
             </div>
           )}
           
-          {/* Etapa 2: Composição da mensagem */}
+          {/* Etapa 2: Composição das mensagens */}
           {currentStep === 'message' && (
             <div className="bg-white rounded-lg shadow-sm border border-gray-200">
               <div className="p-6">
-                <h2 className="text-xl font-semibold text-gray-900 mb-6">Componha sua Mensagem</h2>
+                <div className="flex items-center justify-between mb-6">
+                  <h2 className="text-xl font-semibold text-gray-900">Configure suas Mensagens</h2>
+                  <button
+                    onClick={addMessageOption}
+                    className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Adicionar Mensagem
+                  </button>
+                </div>
                 
                 {/* Nome da campanha */}
                 <div className="mb-6">
@@ -658,161 +722,181 @@ export function MassMessagingPage() {
                   />
                 </div>
                 
-                {/* Tipo de mensagem */}
-                <div className="mb-6">
-                  <label className="block text-sm font-medium text-gray-700 mb-3">
-                    Tipo de Mensagem
-                  </label>
-                  <div className="grid grid-cols-3 gap-4">
-                    <button
-                      className={cn(
-                        "flex flex-col items-center gap-3 p-6 rounded-lg border transition-all",
-                        messageType === 'text'
-                          ? "border-primary-600 bg-primary-50 text-primary-700"
-                          : "border-gray-200 hover:bg-gray-50"
-                      )}
-                      onClick={() => setMessageType('text')}
-                    >
-                      <Send className="h-8 w-8" />
-                      <span className="font-medium">Texto</span>
-                    </button>
-                    <button
-                      className={cn(
-                        "flex flex-col items-center gap-3 p-6 rounded-lg border transition-all",
-                        messageType === 'media'
-                          ? "border-primary-600 bg-primary-50 text-primary-700"
-                          : "border-gray-200 hover:bg-gray-50"
-                      )}
-                      onClick={() => setMessageType('media')}
-                    >
-                      <Image className="h-8 w-8" />
-                      <span className="font-medium">Mídia</span>
-                    </button>
-                    <button
-                      className={cn(
-                        "flex flex-col items-center gap-3 p-6 rounded-lg border transition-all",
-                        messageType === 'audio'
-                          ? "border-primary-600 bg-primary-50 text-primary-700"
-                          : "border-gray-200 hover:bg-gray-50"
-                      )}
-                      onClick={() => setMessageType('audio')}
-                    >
-                      <Mic className="h-8 w-8" />
-                      <span className="font-medium">Áudio</span>
-                    </button>
-                  </div>
-                </div>
-                
-                {/* Conteúdo da mensagem */}
-                <div className="mb-6">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Mensagem
-                  </label>
-                  <div className="relative">
-                    <textarea
-                      rows={6}
-                      placeholder="Digite sua mensagem..."
-                      value={messageText}
-                      onChange={(e) => setMessageText(e.target.value)}
-                      className="w-full px-4 py-3 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none"
-                    />
-                    <button
-                      className="absolute right-3 bottom-3 p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
-                      title="Adicionar emoji"
-                    >
-                      <Smile className="h-5 w-5" />
-                    </button>
-                  </div>
-                </div>
-                
-                {/* Upload de mídia */}
-                {messageType === 'media' && (
-                  <div className="mb-6">
-                    <label className="block text-sm font-medium text-gray-700 mb-3">
-                      Mídia
-                    </label>
-                    
-                    {!mediaPreview ? (
-                      <div className="flex items-center justify-center w-full">
-                        <label className={cn(
-                          "flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-lg cursor-pointer transition-all",
-                          uploadingMedia 
-                            ? "border-primary-300 bg-primary-50" 
-                            : "border-gray-300 bg-gray-50 hover:bg-gray-100"
-                        )}>
-                          <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                            {uploadingMedia ? (
-                              <>
-                                <Loader2 className="w-8 h-8 mb-3 text-primary-500 animate-spin" />
-                                <p className="mb-2 text-sm text-primary-600 font-medium">
-                                  Fazendo upload...
-                                </p>
-                              </>
-                            ) : (
-                              <>
-                                <FileUp className="w-8 h-8 mb-3 text-gray-400" />
-                                <p className="mb-2 text-sm text-gray-500">
-                                  <span className="font-medium">Clique para enviar</span> ou arraste e solte
-                                </p>
-                                <p className="text-xs text-gray-500">PNG, JPG, GIF, MP4, MP3, WAV (MAX. 5MB)</p>
-                              </>
-                            )}
-                          </div>
-                          <input 
-                            type="file" 
-                            className="hidden" 
-                            accept="image/*,video/mp4,audio/*"
-                            onChange={handleFileChange}
-                            disabled={uploadingMedia}
-                          />
+                {/* Lista de opções de mensagem */}
+                <div className="space-y-6">
+                  {messageOptions.map((option, index) => (
+                    <div key={option.id} className="border border-gray-200 rounded-lg p-4">
+                      <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-lg font-medium text-gray-900">Mensagem {index + 1}</h3>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => duplicateMessageOption(option.id)}
+                            className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
+                            title="Duplicar mensagem"
+                          >
+                            <Copy className="h-4 w-4" />
+                          </button>
+                          {messageOptions.length > 1 && (
+                            <button
+                              onClick={() => removeMessageOption(option.id)}
+                              className="p-2 text-red-400 hover:text-red-600 rounded-lg hover:bg-red-50"
+                              title="Remover mensagem"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                      
+                      {/* Tipo de mensagem */}
+                      <div className="mb-4">
+                        <label className="block text-sm font-medium text-gray-700 mb-3">
+                          Tipo de Mensagem
                         </label>
+                        <div className="grid grid-cols-3 gap-4">
+                          <button
+                            className={cn(
+                              "flex flex-col items-center gap-2 p-4 rounded-lg border transition-all",
+                              option.type === 'text'
+                                ? "border-primary-600 bg-primary-50 text-primary-700"
+                                : "border-gray-200 hover:bg-gray-50"
+                            )}
+                            onClick={() => updateMessageOption(option.id, { type: 'text' })}
+                          >
+                            <Send className="h-6 w-6" />
+                            <span className="text-sm font-medium">Texto</span>
+                          </button>
+                          <button
+                            className={cn(
+                              "flex flex-col items-center gap-2 p-4 rounded-lg border transition-all",
+                              option.type === 'media'
+                                ? "border-primary-600 bg-primary-50 text-primary-700"
+                                : "border-gray-200 hover:bg-gray-50"
+                            )}
+                            onClick={() => updateMessageOption(option.id, { type: 'media' })}
+                          >
+                            <Image className="h-6 w-6" />
+                            <span className="text-sm font-medium">Mídia</span>
+                          </button>
+                          <button
+                            className={cn(
+                              "flex flex-col items-center gap-2 p-4 rounded-lg border transition-all",
+                              option.type === 'audio'
+                                ? "border-primary-600 bg-primary-50 text-primary-700"
+                                : "border-gray-200 hover:bg-gray-50"
+                            )}
+                            onClick={() => updateMessageOption(option.id, { type: 'audio' })}
+                          >
+                            <Mic className="h-6 w-6" />
+                            <span className="text-sm font-medium">Áudio</span>
+                          </button>
+                        </div>
                       </div>
-                    ) : (
-                      <div className="relative w-full h-48 rounded-lg overflow-hidden border border-gray-200">
-                        {mediaFile?.type.startsWith('image/') ? (
-                          <img 
-                            src={mediaPreview} 
-                            alt="Preview" 
-                            className="w-full h-full object-contain"
+                      
+                      {/* Conteúdo da mensagem */}
+                      <div className="mb-4">
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Texto da Mensagem
+                        </label>
+                        <div className="relative">
+                          <textarea
+                            rows={4}
+                            placeholder="Digite sua mensagem..."
+                            value={option.text}
+                            onChange={(e) => updateMessageOption(option.id, { text: e.target.value })}
+                            className="w-full px-4 py-3 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none"
                           />
-                        ) : mediaFile?.type.startsWith('video/') ? (
-                          <video 
-                            src={mediaPreview} 
-                            controls
-                            className="w-full h-full object-contain"
-                          />
-                        ) : (
-                          <div className="flex items-center justify-center w-full h-full bg-gray-100">
-                            <div className="text-center">
-                              <Mic className="w-12 h-12 mx-auto mb-2 text-gray-400" />
-                              <p className="text-sm text-gray-600">{mediaFile?.name}</p>
+                          <button
+                            className="absolute right-3 bottom-3 p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
+                            title="Adicionar emoji"
+                          >
+                            <Smile className="h-5 w-5" />
+                          </button>
+                        </div>
+                      </div>
+                      
+                      {/* Upload de mídia */}
+                      {option.type === 'media' && (
+                        <div className="mb-4">
+                          <label className="block text-sm font-medium text-gray-700 mb-3">
+                            Mídia
+                          </label>
+                          
+                          {!option.mediaPreview ? (
+                            <div className="flex items-center justify-center w-full">
+                              <label className={cn(
+                                "flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-lg cursor-pointer transition-all",
+                                uploadingMedia === option.id
+                                  ? "border-primary-300 bg-primary-50" 
+                                  : "border-gray-300 bg-gray-50 hover:bg-gray-100"
+                              )}>
+                                <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                                  {uploadingMedia === option.id ? (
+                                    <>
+                                      <Loader2 className="w-8 h-8 mb-3 text-primary-500 animate-spin" />
+                                      <p className="mb-2 text-sm text-primary-600 font-medium">
+                                        Fazendo upload...
+                                      </p>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <FileUp className="w-8 h-8 mb-3 text-gray-400" />
+                                      <p className="mb-2 text-sm text-gray-500">
+                                        <span className="font-medium">Clique para enviar</span> ou arraste e solte
+                                      </p>
+                                      <p className="text-xs text-gray-500">PNG, JPG, GIF, MP4, MP3, WAV (MAX. 5MB)</p>
+                                    </>
+                                  )}
+                                </div>
+                                <input 
+                                  type="file" 
+                                  className="hidden" 
+                                  accept="image/*,video/mp4,audio/*"
+                                  onChange={(e) => handleFileChange(e, option.id)}
+                                  disabled={uploadingMedia === option.id}
+                                />
+                              </label>
                             </div>
-                          </div>
-                        )}
-                        <button
-                          onClick={() => {
-                            setMediaFile(null);
-                            setMediaPreview(null);
-                          }}
-                          className="absolute top-2 right-2 p-1 bg-red-500 text-white rounded-full hover:bg-red-600"
-                          disabled={uploadingMedia}
-                        >
-                          <X className="h-4 w-4" />
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                )}
-                
-                {/* Gravação de áudio */}
-                {messageType === 'audio' && (
-                  <div className="mb-6 flex items-center justify-center">
-                    <button className="flex items-center gap-2 px-6 py-3 bg-primary-100 text-primary-700 rounded-lg hover:bg-primary-200">
-                      <Mic className="h-5 w-5" />
-                      <span className="font-medium">Gravar Áudio</span>
-                    </button>
-                  </div>
-                )}
+                          ) : (
+                            <div className="relative w-full h-48 rounded-lg overflow-hidden border border-gray-200">
+                              {option.mediaFile?.type.startsWith('image/') ? (
+                                <img 
+                                  src={option.mediaPreview} 
+                                  alt="Preview" 
+                                  className="w-full h-full object-contain"
+                                />
+                              ) : option.mediaFile?.type.startsWith('video/') ? (
+                                <video 
+                                  src={option.mediaPreview} 
+                                  controls
+                                  className="w-full h-full object-contain"
+                                />
+                              ) : (
+                                <div className="flex items-center justify-center w-full h-full bg-gray-100">
+                                  <div className="text-center">
+                                    <Mic className="w-12 h-12 mx-auto mb-2 text-gray-400" />
+                                    <p className="text-sm text-gray-600">{option.mediaFile?.name}</p>
+                                  </div>
+                                </div>
+                              )}
+                              <button
+                                onClick={() => updateMessageOption(option.id, { 
+                                  mediaFile: null, 
+                                  mediaPreview: null, 
+                                  mediaUrl: undefined 
+                                })}
+                                className="absolute top-2 right-2 p-1 bg-red-500 text-white rounded-full hover:bg-red-600"
+                                disabled={uploadingMedia === option.id}
+                              >
+                                <X className="h-4 w-4" />
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
               </div>
               
               <div className="flex justify-between p-4 border-t border-gray-200">
@@ -824,12 +908,7 @@ export function MassMessagingPage() {
                 </button>
                 <button
                   onClick={handleNextStep}
-                  disabled={
-                    !campaignName.trim() || 
-                    (messageType === 'text' && !messageText.trim()) ||
-                    (messageType === 'media' && !mediaFile && !messageText.trim()) ||
-                    (messageType === 'audio' && !messageText.trim())
-                  }
+                  disabled={!campaignName.trim() || !messageOptions.some(option => option.text.trim() || option.mediaFile)}
                   className="flex items-center gap-2 px-6 py-2 bg-primary-600 text-white font-medium rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Próximo
@@ -1115,7 +1194,7 @@ export function MassMessagingPage() {
                       <div className="flex justify-between">
                         <span className="text-gray-600">Tipo de Mensagem:</span>
                         <span className="font-medium">
-                          {messageType === 'text' ? 'Texto' : messageType === 'media' ? 'Imagem' : 'Áudio'}
+                          {messageOptions[0]?.type === 'text' ? 'Texto' : messageOptions[0]?.type === 'media' ? 'Imagem' : 'Áudio'}
                         </span>
                       </div>
                       
@@ -1183,17 +1262,17 @@ export function MassMessagingPage() {
                     <h3 className="text-lg font-medium mb-4">Prévia da Mensagem</h3>
                     
                     <div className="bg-white rounded-lg p-4 border border-gray-200">
-                      {messageType === 'media' && mediaPreview && (
+                      {messageOptions[0]?.type === 'media' && messageOptions[0]?.mediaPreview && (
                         <div className="mb-3">
                           <img 
-                            src={mediaPreview} 
+                            src={messageOptions[0].mediaPreview} 
                             alt="Preview" 
                             className="max-h-48 rounded-lg mx-auto"
                           />
                         </div>
                       )}
                       
-                      <div className="whitespace-pre-wrap">{messageText}</div>
+                      <div className="whitespace-pre-wrap">{messageOptions[0]?.text}</div>
                     </div>
                   </div>
                   
