@@ -10,6 +10,7 @@ import {
   Phone, 
   Users, 
   ChevronRight, 
+  ChevronLeft,
   Info, 
   FileUp, 
   X, 
@@ -745,7 +746,7 @@ export function MassMessagingPage() {
                       </button>
                     </div>
                     <div className="flex justify-between text-xs text-gray-500 mt-1">
-                      <span>Use variáveis como {{nome}} para personalizar</span>
+                      <span>Use variáveis como {'{nome}'} para personalizar</span>
                       <span>{messageData.text.length}/1000</span>
                     </div>
                   </div>

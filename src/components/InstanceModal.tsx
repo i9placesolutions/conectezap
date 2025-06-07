@@ -1,6 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useInstance } from '../contexts/InstanceContext';
-import { cn } from '../lib/utils';
 import { getInstances } from '../lib/wapi/api';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
