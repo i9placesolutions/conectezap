@@ -116,7 +116,7 @@ export function ReportsPage() {
   const { selectedInstance, setSelectedInstance } = useInstance();
 
   // Função para buscar campanhas da instância selecionada
-  const fetchCampaigns = async () => {
+  const fetchCampaigns = async (isAutoRefresh = false) => {
     if (!selectedInstance?.token) {
       console.log('Nenhuma instância selecionada');
       return;
@@ -124,13 +124,50 @@ export function ReportsPage() {
 
     setLoadingCampaigns(true);
     try {
-      console.log('Buscando campanhas para instância:', selectedInstance.name);
+      const timestamp = new Date().toLocaleTimeString();
+      console.log(`[${timestamp}] ${isAutoRefresh ? 'Auto-refresh' : 'Manual'} - Buscando campanhas para instância:`, {
+        name: selectedInstance.name,
+        id: selectedInstance.id,
+        token: selectedInstance.token.substring(0, 10) + '...'
+      });
+      
       const campaignsData = await uazapiService.getCampaigns(selectedInstance.token);
+      
+      console.log(`[${timestamp}] Campanhas recebidas:`, {
+        count: campaignsData.length,
+        campaigns: campaignsData.map(c => ({
+          id: c.id,
+          name: c.name || c.info,
+          status: c.status,
+          total: c.log_total || c.totalRecipients,
+          success: c.log_sucess || c.successCount,
+          failed: c.log_failed || c.errorCount
+        }))
+      });
+      
       setCampaigns(campaignsData);
-      toast.success(`Campanhas carregadas para ${selectedInstance.name}`);
-    } catch (error) {
+      
+      if (!isAutoRefresh) {
+        toast.success(`Campanhas carregadas para ${selectedInstance.name}`);
+      }
+    } catch (error: any) {
       console.error('Erro ao buscar campanhas:', error);
-      toast.error('Erro ao carregar campanhas da instância');
+      if (!isAutoRefresh) {
+        // Fornecer feedback específico baseado no tipo de erro
+        if (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND') {
+          toast.error('Erro de conectividade: Não foi possível conectar à API UAZAPI');
+        } else if (error.response?.status === 401) {
+          toast.error('Token de instância inválido ou expirado');
+        } else if (error.response?.status === 403) {
+          toast.error('Sem permissão para acessar as campanhas desta instância');
+        } else if (error.response?.status === 404) {
+          toast.error('Endpoint de campanhas não encontrado na API');
+        } else if (error.response?.status >= 500) {
+          toast.error('Erro interno da API UAZAPI');
+        } else {
+          toast.error('Erro ao carregar campanhas da instância');
+        }
+      }
     } finally {
       setLoadingCampaigns(false);
     }
@@ -144,6 +181,25 @@ export function ReportsPage() {
       setCampaigns([]);
     }
   }, [selectedInstance]);
+
+  // Atualização automática a cada 5 segundos se houver campanhas ativas
+  useEffect(() => {
+    if (!selectedInstance?.token) return;
+
+    const interval = setInterval(() => {
+       // Verificar se há campanhas ativas (running, ativo, scheduled)
+       const hasActiveCampaigns = campaigns.some(campaign => 
+         ['running', 'ativo', 'scheduled'].includes(campaign.status)
+       );
+       
+       if (hasActiveCampaigns) {
+         console.log('Atualizando campanhas automaticamente...');
+         fetchCampaigns(true); // true indica que é auto-refresh
+       }
+     }, 5000); // Atualizar a cada 5 segundos
+
+    return () => clearInterval(interval);
+  }, [selectedInstance?.token, campaigns]);
 
   // Converter campanhas para formato de relatórios
   const reports: Report[] = campaigns.map(campaign => {
@@ -197,7 +253,7 @@ export function ReportsPage() {
   const handleRefresh = () => {
     setIsRefreshing(true);
     if (selectedInstance?.token) {
-      fetchCampaigns().finally(() => {
+      fetchCampaigns(false).finally(() => {
         setIsRefreshing(false);
       });
     } else {
@@ -370,121 +426,160 @@ export function ReportsPage() {
   const avgResponseRate = reports.reduce((sum, report) => sum + report.responseRate, 0) / reports.length;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 lg:space-y-8">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 sm:mb-6 gap-3">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Relatórios</h1>
-          <p className="text-sm sm:text-base text-gray-600">
-            {selectedInstance ? 
-              `Campanhas da instância: ${selectedInstance.name}` : 
-              'Selecione uma instância para visualizar os relatórios'
-            }
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between mb-6 lg:mb-8 gap-4">
+        <div className="flex-1">
+          <h1 className="text-xl lg:text-2xl font-bold text-gray-900 mb-1">Relatórios</h1>
+          <p className="text-sm lg:text-base text-gray-600">
+            {selectedInstance ? (
+              <span className="flex items-center gap-2">
+                <span className={`inline-block w-2 h-2 rounded-full ${
+                  selectedInstance.status === 'connected' ? 'bg-green-500' : 'bg-red-500'
+                }`}></span>
+                {selectedInstance.name}
+                {loadingCampaigns && (
+                  <span className="text-xs text-blue-600 ml-2">Carregando...</span>
+                )}
+              </span>
+            ) : (
+              <span className="flex items-center gap-2">
+                <span className="inline-block w-2 h-2 rounded-full bg-gray-400"></span>
+                Selecione uma instância
+              </span>
+            )}
           </p>
         </div>
-        <div className="flex items-center gap-2 sm:gap-3">
+        <div className="flex items-center gap-3 lg:gap-4 flex-shrink-0">
           <button
             onClick={handleRefresh}
             disabled={isRefreshing || loadingCampaigns}
-            className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-3 sm:px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 text-sm"
+            className="flex items-center justify-center gap-2 px-4 lg:px-6 py-2.5 lg:py-3 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 text-sm lg:text-base font-medium transition-colors"
           >
-            <RefreshCw className={cn("h-4 w-4", (isRefreshing || loadingCampaigns) && "animate-spin")} />
-            <span className="sm:hidden">{loadingCampaigns ? 'Carregando...' : 'Atualizar'}</span>
+            <RefreshCw className={cn("h-4 w-4 lg:h-5 lg:w-5", (isRefreshing || loadingCampaigns) && "animate-spin")} />
             <span className="hidden sm:inline">{loadingCampaigns ? 'Carregando...' : 'Atualizar'}</span>
+          </button>
+          
+          {/* Botão de debug - remover em produção */}
+          <button
+            onClick={() => {
+              console.log('=== DEBUG INFO ===');
+              console.log('Instância selecionada:', selectedInstance);
+              console.log('Campanhas atuais:', campaigns);
+              console.log('Campanhas ativas:', campaigns.filter(c => ['running', 'ativo', 'scheduled'].includes(c.status)));
+              fetchCampaigns(false);
+            }}
+            className="flex items-center justify-center gap-2 px-3 lg:px-4 py-2.5 lg:py-3 bg-red-50 border border-red-300 rounded-lg hover:bg-red-100 text-red-700 text-sm lg:text-base font-medium transition-colors"
+          >
+            🐛
           </button>
           <button
             onClick={() => generatePDF(reports, dateRange)}
             disabled={reports.length === 0}
-            className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-3 sm:px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+            className="flex items-center justify-center gap-2 px-4 lg:px-6 py-2.5 lg:py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm lg:text-base font-medium transition-colors"
           >
-            <Download className="h-4 w-4" />
-            <span className="sm:hidden">PDF</span>
-            <span className="hidden sm:inline">Exportar PDF</span>
+            <Download className="h-4 w-4 lg:h-5 lg:w-5" />
+            <span className="hidden sm:inline">PDF</span>
           </button>
         </div>
       </div>
 
       {/* Search and Actions Bar */}
-      <div className="flex flex-col gap-3 sm:gap-4 lg:flex-row lg:items-center lg:justify-between">
-        <div className="relative flex-1 max-w-full lg:max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-          <input
-            type="text"
-            placeholder="Buscar campanhas..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-10 pr-3 sm:pr-4 py-2 w-full rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm sm:text-base"
-          />
-        </div>
-
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3">
-          {/* Status Filter */}
-          <select
-            value={selectedStatus}
-            onChange={(e) => setSelectedStatus(e.target.value as typeof selectedStatus)}
-            className="px-3 py-2 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm min-w-0"
-          >
-            <option value="all">Todos os status</option>
-            <option value="completed">Concluídos</option>
-            <option value="running">Em andamento</option>
-            <option value="failed">Falhou</option>
-          </select>
-
-          {/* Date Range Filter */}
-          <div className="flex flex-col xs:flex-row items-stretch xs:items-center gap-2">
-            <div className="relative flex-1 xs:flex-none">
-              <input
-                type="date"
-                value={dateRange[0]}
-                onChange={(e) => setDateRange([e.target.value, dateRange[1]])}
-                className="pl-8 pr-2 py-2 w-full rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm"
-              />
-              <Calendar className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-400" />
-            </div>
-            <span className="text-gray-500 text-xs xs:text-sm self-center hidden xs:block">até</span>
-            <div className="relative flex-1 xs:flex-none">
-              <input
-                type="date"
-                value={dateRange[1]}
-                onChange={(e) => setDateRange([dateRange[0], e.target.value])}
-                className="pl-8 pr-2 py-2 w-full rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm"
-              />
-              <Calendar className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-400" />
-            </div>
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 lg:p-6">
+        <div className="flex flex-col lg:flex-row lg:items-center gap-4 lg:gap-6">
+          {/* Search Input */}
+          <div className="relative flex-1 lg:max-w-md">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Buscar..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-10 pr-4 py-3 w-full rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent text-base transition-colors"
+            />
           </div>
 
-          <button
-            onClick={handleOpenInstanceModal}
-            className="p-2 text-gray-600 hover:text-primary-600 rounded-lg hover:bg-primary-50 self-center"
-            title="Selecionar Instância"
-          >
-            <Smartphone className="h-4 w-4 sm:h-5 sm:w-5" />
-          </button>
+          {/* Filters */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 lg:gap-4">
+            {/* Status Filter */}
+            <div className="flex flex-col gap-1">
+              <label className="text-sm font-medium text-gray-700 hidden lg:block">Status</label>
+              <select
+                value={selectedStatus}
+                onChange={(e) => setSelectedStatus(e.target.value as typeof selectedStatus)}
+                className="px-3 py-3 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent text-base min-w-[140px] lg:min-w-[160px] transition-colors"
+              >
+                <option value="all">Todos</option>
+                <option value="completed">Concluídos</option>
+                <option value="running">Ativo</option>
+                <option value="failed">Falhou</option>
+              </select>
+            </div>
+
+            {/* Date Range Filter */}
+            <div className="flex flex-col gap-1">
+              <label className="text-sm font-medium text-gray-700 hidden lg:block">Período</label>
+              <div className="flex items-center gap-2 lg:gap-3">
+                <div className="relative">
+                  <input
+                    type="date"
+                    value={dateRange[0]}
+                    onChange={(e) => setDateRange([e.target.value, dateRange[1]])}
+                    className="pl-10 pr-3 py-3 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent text-base transition-colors"
+                  />
+                  <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                </div>
+                <span className="text-gray-500 text-sm font-medium">até</span>
+                <div className="relative">
+                  <input
+                    type="date"
+                    value={dateRange[1]}
+                    onChange={(e) => setDateRange([dateRange[0], e.target.value])}
+                    className="pl-10 pr-3 py-3 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent text-base transition-colors"
+                  />
+                  <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                </div>
+              </div>
+            </div>
+
+            {/* Instance Selector */}
+            <div className="flex flex-col gap-1">
+              <label className="text-sm font-medium text-gray-700 hidden lg:block">Instância</label>
+              <button
+                onClick={handleOpenInstanceModal}
+                className="flex items-center justify-center gap-2 px-4 py-3 text-gray-600 hover:text-primary-600 border border-gray-200 rounded-lg hover:bg-primary-50 hover:border-primary-200 transition-colors"
+                title="Selecionar Instância"
+              >
+                <Smartphone className="h-5 w-5" />
+                <span className="hidden lg:inline text-sm">Trocar</span>
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 xs:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6">
         <StatCard
-          title="Total de Mensagens"
+          title="Total"
           value={totalMessages.toLocaleString()}
           icon={MessageSquare}
           trend={{ value: 12, isPositive: true }}
         />
         <StatCard
-          title="Mensagens Entregues"
+          title="Entregues"
           value={totalDelivered.toLocaleString()}
           icon={Mail}
           trend={{ value: 8, isPositive: true }}
         />
         <StatCard
-          title="Mensagens Lidas"
+          title="Lidas"
           value={totalRead.toLocaleString()}
           icon={Users}
           trend={{ value: 15, isPositive: true }}
         />
         <StatCard
-          title="Taxa de Resposta Média"
+          title="Taxa Resposta"
           value={`${avgResponseRate.toFixed(1)}%`}
           icon={BarChart3}
           trend={{ value: 5, isPositive: false }}
@@ -493,112 +588,128 @@ export function ReportsPage() {
 
       {/* Reports Table */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-          <div className="p-4 sm:p-6 border-b border-gray-200">
-            <h2 className="text-lg font-semibold text-gray-900">Relatórios de Campanhas</h2>
+          <div className="p-6 lg:p-8 border-b border-gray-200">
+            <h2 className="text-lg lg:text-xl font-semibold text-gray-900">Campanhas</h2>
             {loadingCampaigns && (
-              <p className="text-sm text-gray-500 mt-1">Carregando campanhas...</p>
+              <p className="text-sm text-gray-500 mt-1">Carregando...</p>
             )}
           </div>
         
         {!selectedInstance ? (
           <div className="p-12 text-center">
             <Smartphone className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">Nenhuma instância selecionada</h3>
-            <p className="text-gray-500 mb-4">Selecione uma instância para visualizar os relatórios de campanhas</p>
+            <h3 className="text-base font-medium text-gray-900 mb-2">Nenhuma instância</h3>
+            <p className="text-sm text-gray-500 mb-4">Selecione uma instância</p>
             <button
               onClick={handleOpenInstanceModal}
               className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
             >
               <Smartphone className="h-4 w-4" />
-              Selecionar Instância
+              Selecionar
             </button>
           </div>
         ) : loadingCampaigns ? (
           <div className="p-12 text-center">
             <RefreshCw className="h-12 w-12 text-gray-400 mx-auto mb-4 animate-spin" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">Carregando campanhas...</h3>
-            <p className="text-gray-500">Buscando dados da instância {selectedInstance.name}</p>
+            <h3 className="text-base font-medium text-gray-900 mb-2">Carregando...</h3>
+            <p className="text-sm text-gray-500">{selectedInstance.name}</p>
           </div>
         ) : filteredReports.length === 0 ? (
           <div className="p-12 text-center">
             <BarChart3 className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">Nenhuma campanha encontrada</h3>
-            <p className="text-gray-500 mb-4">
+            <h3 className="text-base font-medium text-gray-900 mb-2">Nenhuma campanha encontrada</h3>
+            <p className="text-sm text-gray-500 mb-4">
               {reports.length === 0 
-                ? 'Não há campanhas registradas para esta instância'
+                ? selectedInstance?.status === 'connected' 
+                  ? 'Nenhuma campanha foi criada ainda nesta instância'
+                  : 'Instância desconectada ou sem campanhas registradas'
                 : 'Nenhuma campanha corresponde aos filtros aplicados'
               }
             </p>
             {reports.length === 0 && (
-              <button
-                onClick={() => window.location.href = '/messages/mass'}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
-              >
-                <MessageSquare className="h-4 w-4" />
-                Criar Primeira Campanha
-              </button>
+              <div className="space-y-3">
+                {selectedInstance?.status !== 'connected' && (
+                  <div className="text-sm text-amber-600 bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4">
+                    ⚠️ Verifique se a instância está conectada e se a API está funcionando corretamente
+                  </div>
+                )}
+                <button
+                  onClick={() => window.location.href = '/messages/mass'}
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
+                >
+                  <MessageSquare className="h-4 w-4" />
+                  Criar Nova Campanha
+                </button>
+                <button
+                  onClick={() => fetchCampaigns(false)}
+                  className="inline-flex items-center gap-2 px-4 py-2 ml-3 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
+                >
+                  <RefreshCw className="h-4 w-4" />
+                  Recarregar
+                </button>
+              </div>
             )}
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[800px]">
+            <table className="w-full min-w-[1200px]">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-2 sm:px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20">
+                  <th className="px-4 lg:px-6 py-4 lg:py-5 text-left text-xs lg:text-sm font-semibold text-gray-600 uppercase tracking-wider w-24">
                     ID
                   </th>
-                  <th className="px-2 sm:px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-48">
-                    Campanha/Info
+                  <th className="px-4 lg:px-6 py-4 lg:py-5 text-left text-xs lg:text-sm font-semibold text-gray-600 uppercase tracking-wider w-64">
+                    Campanha
                   </th>
-                  <th className="px-2 sm:px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24">
+                  <th className="px-4 lg:px-6 py-4 lg:py-5 text-left text-xs lg:text-sm font-semibold text-gray-600 uppercase tracking-wider w-32">
                     Status
                   </th>
-                  <th className="px-2 sm:px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-16">
+                  <th className="px-4 lg:px-6 py-4 lg:py-5 text-left text-xs lg:text-sm font-semibold text-gray-600 uppercase tracking-wider w-24">
                     Total
                   </th>
-                  <th className="px-2 sm:px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20">
+                  <th className="px-4 lg:px-6 py-4 lg:py-5 text-left text-xs lg:text-sm font-semibold text-gray-600 uppercase tracking-wider w-28">
                     Sucesso
                   </th>
-                  <th className="px-2 sm:px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20">
+                  <th className="px-4 lg:px-6 py-4 lg:py-5 text-left text-xs lg:text-sm font-semibold text-gray-600 uppercase tracking-wider w-28">
                     Entregues
                   </th>
-                  <th className="px-2 sm:px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-16">
+                  <th className="px-4 lg:px-6 py-4 lg:py-5 text-left text-xs lg:text-sm font-semibold text-gray-600 uppercase tracking-wider w-24">
                     Lidas
                   </th>
-                  <th className="px-2 sm:px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20">
-                    Falhadas
+                  <th className="px-4 lg:px-6 py-4 lg:py-5 text-left text-xs lg:text-sm font-semibold text-gray-600 uppercase tracking-wider w-28">
+                    Falhas
                   </th>
-                  <th className="px-2 sm:px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24">
-                    Criado
+                  <th className="px-4 lg:px-6 py-4 lg:py-5 text-left text-xs lg:text-sm font-semibold text-gray-600 uppercase tracking-wider w-32">
+                    Data
                   </th>
-                  <th className="px-2 sm:px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24">
+                  <th className="px-4 lg:px-6 py-4 lg:py-5 text-left text-xs lg:text-sm font-semibold text-gray-600 uppercase tracking-wider w-32">
                     Ações
                   </th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {paginatedReports.map((report) => (
-                  <tr key={report.id} className="hover:bg-gray-50">
-                    <td className="px-2 sm:px-3 py-4 whitespace-nowrap">
-                      <div className="text-xs font-mono text-gray-600 truncate" title={report.id}>
+                  <tr key={report.id} className="hover:bg-gray-50 transition-colors">
+                    <td className="px-4 lg:px-6 py-5 lg:py-6 whitespace-nowrap">
+                      <div className="text-sm lg:text-base font-mono text-gray-600 truncate" title={report.id}>
                         {report.id}
                       </div>
                     </td>
-                    <td className="px-2 sm:px-3 py-4 w-48">
-                      <div className="max-w-[180px]">
-                        <div className="text-sm font-medium text-gray-900 truncate" title={report.campaign}>
+                    <td className="px-4 lg:px-6 py-5 lg:py-6 w-64">
+                      <div className="max-w-[240px]">
+                        <div className="text-sm lg:text-base font-semibold text-gray-900 truncate" title={report.campaign}>
                           {report.campaign}
                         </div>
                         {report.info && (
-                          <div className="text-xs text-gray-500 mt-1 truncate" title={report.info}>
+                          <div className="text-sm text-gray-500 mt-1 truncate" title={report.info}>
                             {report.info}
                           </div>
                         )}
                       </div>
                     </td>
-                    <td className="px-2 sm:px-3 py-4 whitespace-nowrap">
+                    <td className="px-4 lg:px-6 py-5 lg:py-6 whitespace-nowrap">
                       <span className={cn(
-                        "px-1.5 sm:px-2 py-1 text-xs font-medium rounded-full",
+                        "px-3 py-1.5 text-sm lg:text-base font-semibold rounded-full",
                         report.status === 'completed' || report.status === 'ativo' ? 'bg-green-100 text-green-800' :
                         report.status === 'running' ? 'bg-blue-100 text-blue-800' :
                         report.status === 'scheduled' ? 'bg-yellow-100 text-yellow-800' :
@@ -615,87 +726,87 @@ export function ReportsPage() {
                          report.status === 'ativo' ? 'Ativo' : 'Desconhecido'}
                       </span>
                     </td>
-                    <td className="px-2 sm:px-3 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">{(report.log_total || report.total || 0).toLocaleString()}</div>
+                    <td className="px-4 lg:px-6 py-5 lg:py-6 whitespace-nowrap">
+                      <div className="text-sm lg:text-base font-semibold text-gray-900">{(report.log_total || report.total || 0).toLocaleString()}</div>
                     </td>
-                    <td className="px-2 sm:px-3 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">
+                    <td className="px-4 lg:px-6 py-5 lg:py-6 whitespace-nowrap">
+                      <div className="text-sm lg:text-base font-semibold text-gray-900">
                         {(report.log_sucess || report.successCount || 0).toLocaleString()}
                         {(report.log_total || report.total) > 0 && (
-                          <div className="text-xs text-gray-500">
+                          <div className="text-sm text-gray-500 mt-1">
                             ({(((report.log_sucess || report.successCount || 0) / (report.log_total || report.total || 1)) * 100).toFixed(1)}%)
                           </div>
                         )}
                       </div>
                     </td>
-                    <td className="px-2 sm:px-3 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">
+                    <td className="px-4 lg:px-6 py-5 lg:py-6 whitespace-nowrap">
+                      <div className="text-sm lg:text-base font-semibold text-gray-900">
                         {(report.log_delivered || report.delivered || 0).toLocaleString()}
                         {(report.log_total || report.total) > 0 && (
-                          <div className="text-xs text-gray-500">
+                          <div className="text-sm text-gray-500 mt-1">
                             ({(((report.log_delivered || report.delivered || 0) / (report.log_total || report.total || 1)) * 100).toFixed(1)}%)
                           </div>
                         )}
                       </div>
                     </td>
-                    <td className="px-2 sm:px-3 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">
+                    <td className="px-4 lg:px-6 py-5 lg:py-6 whitespace-nowrap">
+                      <div className="text-sm lg:text-base font-semibold text-gray-900">
                         {(report.log_read || report.read || 0).toLocaleString()}
                         {(report.log_total || report.total) > 0 && (
-                          <div className="text-xs text-gray-500">
+                          <div className="text-sm text-gray-500 mt-1">
                             ({(((report.log_read || report.read || 0) / (report.log_total || report.total || 1)) * 100).toFixed(1)}%)
                           </div>
                         )}
                       </div>
                     </td>
-                    <td className="px-2 sm:px-3 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">
+                    <td className="px-4 lg:px-6 py-5 lg:py-6 whitespace-nowrap">
+                      <div className="text-sm lg:text-base font-semibold text-gray-900">
                         {(report.log_failed || report.failed || report.errorCount || 0).toLocaleString()}
                         {(report.log_total || report.total) > 0 && (
-                          <div className="text-xs text-gray-500">
+                          <div className="text-sm text-gray-500 mt-1">
                             ({(((report.log_failed || report.failed || report.errorCount || 0) / (report.log_total || report.total || 1)) * 100).toFixed(1)}%)
                           </div>
                         )}
                       </div>
                     </td>
-                    <td className="px-2 sm:px-3 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">
+                    <td className="px-4 lg:px-6 py-5 lg:py-6 whitespace-nowrap">
+                      <div className="text-sm lg:text-base text-gray-900">
                         {report.created ? (
                           <div>
-                            <div>{format(new Date(report.created), 'dd/MM/yyyy', { locale: ptBR })}</div>
-                            <div className="text-xs text-gray-500">
+                            <div className="font-semibold">{format(new Date(report.created), 'dd/MM/yyyy', { locale: ptBR })}</div>
+                            <div className="text-sm text-gray-500">
                               {format(new Date(report.created), 'HH:mm:ss', { locale: ptBR })}
                             </div>
                           </div>
                         ) : report.createdAt ? (
                           <div>
-                            <div>{format(new Date(report.createdAt), 'dd/MM/yyyy', { locale: ptBR })}</div>
-                            <div className="text-xs text-gray-500">
+                            <div className="font-semibold">{format(new Date(report.createdAt), 'dd/MM/yyyy', { locale: ptBR })}</div>
+                            <div className="text-sm text-gray-500">
                               {format(new Date(report.createdAt), 'HH:mm:ss', { locale: ptBR })}
                             </div>
                           </div>
                         ) : (
-                          <span className="text-xs text-gray-400">-</span>
+                          <span className="text-sm text-gray-400">-</span>
                         )}
                       </div>
                     </td>
-                    <td className="px-2 sm:px-3 py-4 whitespace-nowrap">
-                      <div className="flex items-center gap-1">
+                    <td className="px-4 lg:px-6 py-5 lg:py-6 whitespace-nowrap">
+                      <div className="flex items-center gap-2 lg:gap-3">
                         {(report.status === 'running' || report.status === 'ativo') && (
                           <>
                             <button
                               onClick={() => handleStopCampaign(report.id)}
-                              className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-red-700 bg-red-100 rounded hover:bg-red-200 transition-colors"
+                              className="p-2 lg:p-3 text-yellow-600 hover:text-yellow-800 hover:bg-yellow-50 rounded-lg transition-colors"
                               title="Parar campanha"
                             >
-                              <Pause className="h-3 w-3" />
+                              <Pause className="h-4 w-4 lg:h-5 lg:w-5" />
                             </button>
                             <button
                               onClick={() => handleDeleteCampaign(report.id)}
-                              className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-red-700 bg-red-100 rounded hover:bg-red-200 transition-colors"
+                              className="p-2 lg:p-3 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg transition-colors"
                               title="Deletar campanha"
                             >
-                              <Trash2 className="h-3 w-3" />
+                              <Trash2 className="h-4 w-4 lg:h-5 lg:w-5" />
                             </button>
                           </>
                         )}
@@ -703,36 +814,36 @@ export function ReportsPage() {
                           <>
                             <button
                               onClick={() => handleContinueCampaign(report.id)}
-                              className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-green-700 bg-green-100 rounded hover:bg-green-200 transition-colors"
+                              className="p-2 lg:p-3 text-green-600 hover:text-green-800 hover:bg-green-50 rounded-lg transition-colors"
                               title="Continuar campanha"
                             >
-                              <Play className="h-3 w-3" />
+                              <Play className="h-4 w-4 lg:h-5 lg:w-5" />
                             </button>
                             <button
                               onClick={() => handleDeleteCampaign(report.id)}
-                              className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-red-700 bg-red-100 rounded hover:bg-red-200 transition-colors"
+                              className="p-2 lg:p-3 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg transition-colors"
                               title="Deletar campanha"
                             >
-                              <Trash2 className="h-3 w-3" />
+                              <Trash2 className="h-4 w-4 lg:h-5 lg:w-5" />
                             </button>
                           </>
                         )}
                         {(report.status === 'completed' || report.status === 'failed' || report.status === 'cancelled') && (
                           <button
                             onClick={() => handleDeleteCampaign(report.id)}
-                            className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-red-700 bg-red-100 rounded hover:bg-red-200 transition-colors"
+                            className="p-2 lg:p-3 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg transition-colors"
                             title="Deletar campanha"
                           >
-                            <Trash2 className="h-3 w-3" />
+                            <Trash2 className="h-4 w-4 lg:h-5 lg:w-5" />
                           </button>
                         )}
                         {report.status === 'scheduled' && (
                           <button
                             onClick={() => handleDeleteCampaign(report.id)}
-                            className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-red-700 bg-red-100 rounded hover:bg-red-200 transition-colors"
+                            className="p-2 lg:p-3 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg transition-colors"
                             title="Deletar campanha"
                           >
-                            <Trash2 className="h-3 w-3" />
+                            <Trash2 className="h-4 w-4 lg:h-5 lg:w-5" />
                           </button>
                         )}
                       </div>
@@ -746,17 +857,17 @@ export function ReportsPage() {
         
         {/* Controles de Paginação */}
         {totalPages > 1 && (
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between px-4 sm:px-6 py-3 bg-white border-t border-gray-200 gap-3">
-            <div className="flex items-center text-xs sm:text-sm text-gray-700">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between px-4 lg:px-8 py-4 lg:py-6 bg-white border-t border-gray-200 gap-3">
+            <div className="flex items-center text-xs sm:text-sm lg:text-base text-gray-700">
               <span>
-                Mostrando {startIndex + 1} a {Math.min(endIndex, filteredReports.length)} de {filteredReports.length} resultados
+                {startIndex + 1}-{Math.min(endIndex, filteredReports.length)} de {filteredReports.length}
               </span>
             </div>
             <div className="flex items-center gap-1 sm:gap-2 justify-center sm:justify-end">
               <button
                 onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
                 disabled={currentPage === 1}
-                className="px-2 sm:px-3 py-1 text-xs sm:text-sm font-medium text-gray-500 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-3 lg:px-4 py-2 lg:py-3 text-xs sm:text-sm lg:text-base font-medium text-gray-500 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Anterior
               </button>
@@ -777,7 +888,7 @@ export function ReportsPage() {
                     <button
                       key={page}
                       onClick={() => setCurrentPage(page)}
-                      className={`px-2 sm:px-3 py-1 text-xs sm:text-sm font-medium rounded-md min-w-[28px] sm:min-w-[32px] ${
+                      className={`px-3 lg:px-4 py-2 lg:py-3 text-xs sm:text-sm lg:text-base font-medium rounded-lg min-w-[32px] lg:min-w-[40px] ${
                         currentPage === page
                           ? 'bg-blue-600 text-white'
                           : 'text-gray-500 bg-white border border-gray-300 hover:bg-gray-50'
@@ -792,7 +903,7 @@ export function ReportsPage() {
               <button
                 onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
                 disabled={currentPage === totalPages}
-                className="px-2 sm:px-3 py-1 text-xs sm:text-sm font-medium text-gray-500 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-3 lg:px-4 py-2 lg:py-3 text-xs sm:text-sm lg:text-base font-medium text-gray-500 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Próximo
               </button>
@@ -804,58 +915,60 @@ export function ReportsPage() {
       {/* Modal de Seleção de Instâncias */}
       {showInstanceModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-40 p-4">
-          <div className="bg-white rounded-lg p-4 sm:p-6 max-w-md w-full max-h-[90vh] overflow-y-auto z-50 relative">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg sm:text-xl font-semibold">Selecione uma Instância</h2>
+          <div className="bg-white rounded-xl p-4 sm:p-6 lg:p-8 max-w-md lg:max-w-lg w-full max-h-[90vh] overflow-y-auto z-50 relative">
+            <div className="flex items-center justify-between mb-4 lg:mb-6">
+              <h2 className="text-lg sm:text-xl lg:text-2xl font-semibold">Instâncias</h2>
               <button
                 onClick={() => setShowInstanceModal(false)}
                 className="text-gray-400 hover:text-gray-600 p-1"
               >
-                <X className="h-4 w-4 sm:h-5 sm:w-5" />
+                <X className="h-4 w-4 sm:h-5 sm:w-5 lg:h-6 lg:w-6" />
               </button>
             </div>
             
             {loading ? (
-              <div className="flex items-center justify-center py-8">
-                <div className="animate-spin rounded-full h-8 w-8 border-2 border-primary-500 border-t-transparent" />
-                <span className="ml-2 text-gray-600">Carregando instâncias...</span>
+              <div className="flex items-center justify-center py-8 lg:py-12">
+                <div className="animate-spin rounded-full h-8 w-8 lg:h-10 lg:w-10 border-2 border-primary-500 border-t-transparent" />
+                <span className="ml-2 text-gray-600 text-sm lg:text-base">Carregando...</span>
               </div>
             ) : apiInstances.length === 0 ? (
-              <div className="text-center py-8">
-                <div className="text-gray-500 mb-4">
-                  Nenhuma instância conectada encontrada
+              <div className="text-center py-8 lg:py-12">
+                <div className="text-gray-500 mb-4 text-sm lg:text-base">
+                  Nenhuma instância conectada
                 </div>
-                <p className="text-sm text-gray-400">
-                  Conecte uma instância primeiro para visualizar relatórios
+                <p className="text-sm lg:text-base text-gray-400">
+                  Conecte uma instância primeiro
                 </p>
               </div>
             ) : (
-              <div className="space-y-2">
-                <p className="text-sm text-gray-600 mb-4">
-                  Escolha uma instância conectada para continuar:
+              <div className="space-y-3 lg:space-y-4">
+                <p className="text-sm lg:text-base text-gray-600 mb-4">
+                  Escolha uma instância:
                 </p>
-                {apiInstances.map(instance => (
-                  <button
-                    key={instance.id}
-                    onClick={() => handleSelectInstance(instance)}
-                    className="w-full p-4 rounded-lg border border-green-200 bg-green-50 hover:bg-green-100 text-left transition-colors"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <div className="font-medium">{instance.name}</div>
-                        {instance.profileName && (
-                          <div className="text-sm text-gray-600">{instance.profileName}</div>
-                        )}
-                        {instance.phoneConnected && (
-                          <div className="text-xs text-gray-500">{instance.phoneConnected}</div>
-                        )}
+                <div className="max-h-60 lg:max-h-80 overflow-y-auto space-y-2 lg:space-y-3">
+                  {apiInstances.map(instance => (
+                    <button
+                      key={instance.id}
+                      onClick={() => handleSelectInstance(instance)}
+                      className="w-full p-3 lg:p-4 rounded-lg border border-green-200 bg-green-50 hover:bg-green-100 text-left transition-colors"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div className="font-medium text-sm lg:text-base">{instance.name}</div>
+                          {instance.profileName && (
+                            <div className="text-sm lg:text-base text-gray-600">{instance.profileName}</div>
+                          )}
+                          {instance.phoneConnected && (
+                            <div className="text-xs lg:text-sm text-gray-500">{instance.phoneConnected}</div>
+                          )}
+                        </div>
+                        <span className="px-2 py-1 rounded-full text-xs lg:text-sm bg-green-200 text-green-800">
+                          Conectado
+                        </span>
                       </div>
-                      <span className="px-2 py-1 rounded-full text-xs bg-green-200 text-green-800">
-                        Conectado
-                      </span>
-                    </div>
-                  </button>
-                ))}
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
           </div>

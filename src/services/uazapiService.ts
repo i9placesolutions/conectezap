@@ -793,7 +793,8 @@ export const uazapiService = {
   // Método para buscar campanhas da API UAZAPI
   async getCampaignsFromAPI(instanceToken: string, status?: string): Promise<Campaign[]> {
     try {
-      console.log(`Buscando logs de campanhas com token: ${instanceToken}`);
+      const timestamp = new Date().toLocaleTimeString();
+      console.log(`[${timestamp}] Buscando logs de campanhas com token: ${instanceToken.substring(0, 10)}...`);
       
       // Construir URL com parâmetros de query se status for fornecido
       let url = '/sender/listfolders';
@@ -807,34 +808,150 @@ export const uazapiService = {
         url += `?${params.toString()}`;
       }
       
+      console.log(`[${timestamp}] Fazendo requisição para: ${url}`);
+      
       // Implementação real com a API UAZAPI
       const response = await api.get(url, {
         headers: {
           'Accept': 'application/json',
-          'token': instanceToken
+          'token': instanceToken,
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache'
         }
       });
       
-      console.log('Resposta da API:', response.data);
+      console.log(`[${timestamp}] Resposta da API recebida:`, {
+        status: response.status,
+        dataLength: Array.isArray(response.data) ? response.data.length : 'não é array',
+        data: response.data
+      });
       
       // Transformar os dados da API para o formato da nossa interface
-      return response.data.map((campaign: any) => {
+      const campaigns = await Promise.all(response.data.map(async (campaign: any) => {
         const total = campaign.log_total || 0;
         const processed = (campaign.log_sucess || 0) + (campaign.log_failed || 0);
         const progress = this.calculateProgress(campaign);
         
+        // Buscar dados detalhados das mensagens se necessário
+        let detailedLogs = {
+          log_delivered: campaign.log_delivered || 0,
+          log_read: campaign.log_read || 0,
+          log_failed: campaign.log_failed || 0,
+          log_sucess: campaign.log_sucess || 0
+        };
+        
+        // Sempre tentar buscar dados detalhados para campanhas concluídas ou com total > 0
+         if (total > 0) {
+           try {
+             console.log(`🔍 Buscando dados detalhados para campanha ${campaign.id}...`);
+             const messages = await this.getCampaignMessages(instanceToken, campaign.id);
+             console.log(`📊 Encontradas ${messages.length} mensagens para campanha ${campaign.id}`);
+             
+             if (messages.length > 0) {
+               // Log de exemplo das primeiras mensagens para debug
+               console.log('Exemplo de mensagens retornadas:', messages.slice(0, 3));
+               
+               // Contar status das mensagens
+               const statusCounts = messages.reduce((acc: any, msg: any) => {
+                 // Tentar diferentes campos de status
+                 const status = msg.status || msg.messageStatus || msg.deliveryStatus || msg.state;
+                 if (status) {
+                   acc[status] = (acc[status] || 0) + 1;
+                 }
+                 // Log para debug
+                 if (!status) {
+                   console.log('Mensagem sem status definido:', msg);
+                 }
+                 return acc;
+               }, {});
+               
+               console.log(`📈 Status das mensagens da campanha ${campaign.id}:`, statusCounts);
+               
+               // Mapear status para nossos campos (mais abrangente)
+               detailedLogs = {
+                 log_delivered: (
+                   statusCounts['Delivered'] || 
+                   statusCounts['delivered'] || 
+                   statusCounts['DELIVERED'] ||
+                   statusCounts['Entregue'] ||
+                   statusCounts['entregue'] || 0
+                 ),
+                 log_read: (
+                   statusCounts['Read'] || 
+                   statusCounts['read'] || 
+                   statusCounts['READ'] ||
+                   statusCounts['Lida'] ||
+                   statusCounts['lida'] || 0
+                 ),
+                 log_failed: (
+                   statusCounts['Failed'] || 
+                   statusCounts['failed'] || 
+                   statusCounts['FAILED'] ||
+                   statusCounts['Error'] ||
+                   statusCounts['error'] ||
+                   statusCounts['Falhou'] ||
+                   statusCounts['falhou'] || 0
+                 ),
+                 log_sucess: (
+                   statusCounts['Success'] || 
+                   statusCounts['success'] || 
+                   statusCounts['SUCCESS'] ||
+                   statusCounts['Sent'] ||
+                   statusCounts['sent'] ||
+                   statusCounts['Enviado'] ||
+                   statusCounts['enviado'] || 0
+                 )
+               };
+               
+               console.log(`✅ Logs detalhados calculados para campanha ${campaign.id}:`, detailedLogs);
+             } else {
+               console.log(`⚠️ Nenhuma mensagem encontrada para campanha ${campaign.id}`);
+             }
+           } catch (error) {
+             console.error(`❌ Erro ao buscar detalhes das mensagens para campanha ${campaign.id}:`, error);
+           }
+         }
+        
+        // Log detalhado para debug
+        console.log(`\n=== DEBUG CAMPANHA ${campaign.id} ===`);
+        console.log('Dados brutos da API:', {
+          id: campaign.id,
+          status: campaign.status,
+          log_total: campaign.log_total,
+          log_sucess: campaign.log_sucess,
+          log_failed: campaign.log_failed,
+          log_delivered: campaign.log_delivered,
+          log_read: campaign.log_read,
+          info: campaign.info,
+          created: campaign.created,
+          updated: campaign.updated
+        });
+        console.log('Logs detalhados:', detailedLogs);
+        console.log('Cálculos:', {
+          total,
+          processed,
+          progress: progress + '%',
+          'processed >= total': processed >= total,
+          'progress >= 100': progress >= 100
+        });
+        
         // Determinar o status real baseado no progresso
         let realStatus = this.mapApiStatus(campaign.status);
+        console.log('Status inicial mapeado:', realStatus);
         
         // Se o progresso é 100% ou todas as mensagens foram processadas, marcar como concluída
         if (total > 0 && processed >= total && progress >= 100) {
           realStatus = 'completed';
-          console.log(`Campanha ${campaign.id} marcada como concluída: ${processed}/${total} mensagens processadas`);
+          console.log(`✅ Campanha ${campaign.id} marcada como CONCLUÍDA: ${processed}/${total} mensagens processadas`);
         }
         // Se há mensagens processadas mas não todas, e status não é 'paused' ou 'cancelled', marcar como ativo
         else if (total > 0 && processed > 0 && processed < total && !['paused', 'cancelled', 'failed'].includes(realStatus)) {
           realStatus = 'ativo';
+          console.log(`🔄 Campanha ${campaign.id} marcada como ATIVA: ${processed}/${total} mensagens processadas`);
         }
+        
+        console.log('Status final determinado:', realStatus);
+        console.log('=== FIM DEBUG ===\n');
         
         return {
           id: campaign.id,
@@ -845,26 +962,51 @@ export const uazapiService = {
           scheduledAt: campaign.scheduled_for ? new Date(campaign.scheduled_for).toISOString() : undefined,
           scheduledFor: campaign.scheduled_for,
           totalRecipients: total,
-          successCount: campaign.log_sucess || 0,
-          errorCount: campaign.log_failed || 0,
+          successCount: detailedLogs.log_sucess,
+          errorCount: detailedLogs.log_failed,
           pendingCount: Math.max(0, total - processed),
           progress: progress,
           messageType: 'text',
           delayMax: campaign.delayMax,
           delayMin: campaign.delayMin,
-          log_delivered: campaign.log_delivered,
-          log_failed: campaign.log_failed,
+          log_delivered: detailedLogs.log_delivered,
+          log_failed: detailedLogs.log_failed,
           log_played: campaign.log_played,
-          log_read: campaign.log_read,
-          log_sucess: campaign.log_sucess,
+          log_read: detailedLogs.log_read,
+          log_sucess: detailedLogs.log_sucess,
           log_total: campaign.log_total,
           owner: campaign.owner,
           created: campaign.created,
           updated: campaign.updated
         };
+      }));
+      
+      return campaigns;
+    } catch (error: any) {
+      const timestamp = new Date().toLocaleTimeString();
+      console.error(`[${timestamp}] ❌ Erro ao buscar campanhas da API:`, {
+        message: error.message,
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data,
+        url: error.config?.url,
+        headers: error.config?.headers,
+        instanceToken: instanceToken.substring(0, 10) + '...'
       });
-    } catch (error) {
-      console.error('Erro ao buscar campanhas da API:', error);
+      
+      // Verificar tipos específicos de erro
+      if (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND') {
+        console.error('🌐 Erro de conectividade: Não foi possível conectar à API UAZAPI');
+      } else if (error.response?.status === 401) {
+        console.error('🔐 Erro de autenticação: Token de instância inválido ou expirado');
+      } else if (error.response?.status === 403) {
+        console.error('🚫 Erro de autorização: Sem permissão para acessar este recurso');
+      } else if (error.response?.status === 404) {
+        console.error('📂 Recurso não encontrado: Endpoint /sender/listfolders não existe');
+      } else if (error.response?.status >= 500) {
+        console.error('🔥 Erro do servidor: API UAZAPI está com problemas internos');
+      }
+      
       return [];
     }
   },
@@ -1519,6 +1661,26 @@ export const uazapiService = {
     } catch (error) {
       console.error('Erro ao enviar presença:', error);
       return false;
+    }
+  },
+
+  // Método para buscar detalhes das mensagens de uma campanha
+  async getCampaignMessages(instanceToken: string, folderId: string): Promise<any[]> {
+    try {
+      const response = await api.post('/sender/listmessages', {
+        folder_id: folderId
+      }, {
+        headers: {
+          'Accept': 'application/json',
+          'token': instanceToken
+        }
+      });
+      
+      console.log(`Mensagens da campanha ${folderId}:`, response.data);
+      return response.data || [];
+    } catch (error) {
+      console.error(`Erro ao buscar mensagens da campanha ${folderId}:`, error);
+      return [];
     }
   }
 };

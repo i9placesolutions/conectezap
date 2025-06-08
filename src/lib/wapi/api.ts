@@ -1,8 +1,15 @@
 // Configuração da API UAZAPI
 
 // Variáveis de ambiente
-export const API_URL = 'https://i9place1.uazapi.com';
+export const API_URL = import.meta.env.VITE_API_URL || 'https://i9place1.uazapi.com';
 export const ADMIN_TOKEN = import.meta.env.VITE_ADMIN_TOKEN || 'u1OUnI3tgoQwGII9Fw46XhFWeInWAAVNSO12x3sHwWuI5AkaH2';
+
+// Log das configurações para debug
+console.log('🔧 Configurações da API UAZAPI:', {
+  API_URL,
+  ADMIN_TOKEN: ADMIN_TOKEN.substring(0, 10) + '...',
+  hasAdminToken: !!ADMIN_TOKEN
+});
 
 import axios, { AxiosInstance } from 'axios';
 
@@ -102,8 +109,32 @@ export const getInstances = async (): Promise<Instance[]> => {
           }
         }))
       : [];
-  } catch (error) {
-    console.error('Erro ao obter instâncias:', error);
+  } catch (error: any) {
+    const timestamp = new Date().toLocaleTimeString();
+    console.error(`[${timestamp}] ❌ Erro ao obter instâncias:`, {
+      message: error.message,
+      status: error.response?.status,
+      statusText: error.response?.statusText,
+      data: error.response?.data,
+      url: error.config?.url,
+      adminToken: ADMIN_TOKEN.substring(0, 10) + '...'
+    });
+    
+    // Verificar tipos específicos de erro
+    if (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND') {
+      console.error('🌐 Erro de conectividade: Não foi possível conectar à API UAZAPI');
+      console.error('💡 Verifique se a URL da API está correta:', API_URL);
+    } else if (error.response?.status === 401) {
+      console.error('🔐 Erro de autenticação: ADMIN_TOKEN inválido ou expirado');
+      console.error('💡 Verifique o ADMIN_TOKEN no arquivo .env');
+    } else if (error.response?.status === 403) {
+      console.error('🚫 Erro de autorização: Sem permissão para acessar instâncias');
+    } else if (error.response?.status === 404) {
+      console.error('📂 Recurso não encontrado: Endpoint /instance/all não existe');
+    } else if (error.response?.status >= 500) {
+      console.error('🔥 Erro do servidor: API UAZAPI está com problemas internos');
+    }
+    
     throw error;
   }
 };
