@@ -832,85 +832,13 @@ export const uazapiService = {
         const processed = (campaign.log_sucess || 0) + (campaign.log_failed || 0);
         const progress = this.calculateProgress(campaign);
         
-        // Buscar dados detalhados das mensagens se necessário
-        let detailedLogs = {
+        // Usar dados da API diretamente conforme documentação
+        const detailedLogs = {
           log_delivered: campaign.log_delivered || 0,
           log_read: campaign.log_read || 0,
           log_failed: campaign.log_failed || 0,
           log_sucess: campaign.log_sucess || 0
         };
-        
-        // Sempre tentar buscar dados detalhados para campanhas concluídas ou com total > 0
-         if (total > 0) {
-           try {
-             console.log(`🔍 Buscando dados detalhados para campanha ${campaign.id}...`);
-             const messages = await this.getCampaignMessages(instanceToken, campaign.id);
-             console.log(`📊 Encontradas ${messages.length} mensagens para campanha ${campaign.id}`);
-             
-             if (messages.length > 0) {
-               // Log de exemplo das primeiras mensagens para debug
-               console.log('Exemplo de mensagens retornadas:', messages.slice(0, 3));
-               
-               // Contar status das mensagens
-               const statusCounts = messages.reduce((acc: any, msg: any) => {
-                 // Tentar diferentes campos de status
-                 const status = msg.status || msg.messageStatus || msg.deliveryStatus || msg.state;
-                 if (status) {
-                   acc[status] = (acc[status] || 0) + 1;
-                 }
-                 // Log para debug
-                 if (!status) {
-                   console.log('Mensagem sem status definido:', msg);
-                 }
-                 return acc;
-               }, {});
-               
-               console.log(`📈 Status das mensagens da campanha ${campaign.id}:`, statusCounts);
-               
-               // Mapear status para nossos campos (mais abrangente)
-               detailedLogs = {
-                 log_delivered: (
-                   statusCounts['Delivered'] || 
-                   statusCounts['delivered'] || 
-                   statusCounts['DELIVERED'] ||
-                   statusCounts['Entregue'] ||
-                   statusCounts['entregue'] || 0
-                 ),
-                 log_read: (
-                   statusCounts['Read'] || 
-                   statusCounts['read'] || 
-                   statusCounts['READ'] ||
-                   statusCounts['Lida'] ||
-                   statusCounts['lida'] || 0
-                 ),
-                 log_failed: (
-                   statusCounts['Failed'] || 
-                   statusCounts['failed'] || 
-                   statusCounts['FAILED'] ||
-                   statusCounts['Error'] ||
-                   statusCounts['error'] ||
-                   statusCounts['Falhou'] ||
-                   statusCounts['falhou'] || 0
-                 ),
-                 log_sucess: (
-                   statusCounts['Success'] || 
-                   statusCounts['success'] || 
-                   statusCounts['SUCCESS'] ||
-                   statusCounts['Sent'] ||
-                   statusCounts['sent'] ||
-                   statusCounts['Enviado'] ||
-                   statusCounts['enviado'] || 0
-                 )
-               };
-               
-               console.log(`✅ Logs detalhados calculados para campanha ${campaign.id}:`, detailedLogs);
-             } else {
-               console.log(`⚠️ Nenhuma mensagem encontrada para campanha ${campaign.id}`);
-             }
-           } catch (error) {
-             console.error(`❌ Erro ao buscar detalhes das mensagens para campanha ${campaign.id}:`, error);
-           }
-         }
         
         // Log detalhado para debug
         console.log(`\n=== DEBUG CAMPANHA ${campaign.id} ===`);
@@ -1667,19 +1595,63 @@ export const uazapiService = {
   // Método para buscar detalhes das mensagens de uma campanha
   async getCampaignMessages(instanceToken: string, folderId: string): Promise<any[]> {
     try {
+      console.log(`🔍 Buscando mensagens detalhadas para campanha ${folderId}`);
+      
       const response = await api.post('/sender/listmessages', {
         folder_id: folderId
       }, {
         headers: {
           'Accept': 'application/json',
-          'token': instanceToken
-        }
+          'token': instanceToken,
+          'Content-Type': 'application/json'
+        },
+        timeout: 30000 // 30 segundos de timeout
       });
       
-      console.log(`Mensagens da campanha ${folderId}:`, response.data);
+      console.log(`📊 Resposta da API para campanha ${folderId}:`, {
+        status: response.status,
+        dataType: typeof response.data,
+        isArray: Array.isArray(response.data),
+        length: Array.isArray(response.data) ? response.data.length : 'N/A',
+        firstItem: Array.isArray(response.data) && response.data.length > 0 ? response.data[0] : null
+      });
+      
+      // Verificar se a resposta é um array
+      if (!Array.isArray(response.data)) {
+        console.warn(`⚠️ Resposta não é um array para campanha ${folderId}:`, response.data);
+        return [];
+      }
+      
+      // Log detalhado das mensagens para debug
+      if (response.data.length > 0) {
+        console.log(`📋 Estrutura das mensagens da campanha ${folderId}:`);
+        response.data.slice(0, 3).forEach((msg: any, index: number) => {
+          console.log(`Mensagem ${index + 1}:`, {
+            id: msg.id || 'sem id',
+            number: msg.number ? msg.number.substring(0, 5) + '***' : 'sem número',
+            status: msg.status || 'sem status',
+            messageStatus: msg.messageStatus || 'sem messageStatus',
+            deliveryStatus: msg.deliveryStatus || 'sem deliveryStatus',
+            state: msg.state || 'sem state',
+            sent: msg.sent || 'sem sent',
+            delivered: msg.delivered || 'sem delivered',
+            read: msg.read || 'sem read',
+            failed: msg.failed || 'sem failed',
+            error: msg.error || 'sem error',
+            timestamp: msg.timestamp || msg.created_at || msg.date || 'sem timestamp',
+            allKeys: Object.keys(msg)
+          });
+        });
+      }
+      
       return response.data || [];
-    } catch (error) {
-      console.error(`Erro ao buscar mensagens da campanha ${folderId}:`, error);
+    } catch (error: any) {
+      console.error(`❌ Erro ao buscar mensagens da campanha ${folderId}:`, {
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data,
+        message: error.message
+      });
       return [];
     }
   }

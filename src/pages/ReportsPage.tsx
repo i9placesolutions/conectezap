@@ -182,7 +182,7 @@ export function ReportsPage() {
     }
   }, [selectedInstance]);
 
-  // Atualização automática a cada 5 segundos se houver campanhas ativas
+  // Atualização automática a cada 2 minutos se houver campanhas ativas
   useEffect(() => {
     if (!selectedInstance?.token) return;
 
@@ -196,7 +196,7 @@ export function ReportsPage() {
          console.log('Atualizando campanhas automaticamente...');
          fetchCampaigns(true); // true indica que é auto-refresh
        }
-     }, 5000); // Atualizar a cada 5 segundos
+     }, 120000); // Atualizar a cada 2 minutos
 
     return () => clearInterval(interval);
   }, [selectedInstance?.token, campaigns]);
