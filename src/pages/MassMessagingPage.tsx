@@ -37,53 +37,53 @@ import {
   MassCampaign 
 } from '../lib/supabase';
 
-// Tipo para a mensagem
+// Tipo para os dados da mensagem da campanha
 interface MessageData {
-  type: 'text' | 'media' | 'audio';
-  text: string;
-  mediaFile?: File | null;
-  mediaPreview?: string | null;
-  mediaUrl?: { url: string; path: string } | null;
+  type: 'text' | 'media' | 'audio'; // Tipo da mensagem: texto, mídia ou áudio
+  text: string; // Conteúdo de texto da mensagem
+  mediaFile?: File | null; // Arquivo de mídia selecionado pelo usuário
+  mediaPreview?: string | null; // URL de preview da mídia para exibição
+  mediaUrl?: { url: string; path: string } | null; // URL final da mídia após upload
 }
 
 export function MassMessagingPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
   
-  // Estado de controle do fluxo
-  const [currentStep, setCurrentStep] = useState<'recipients' | 'message' | 'schedule' | 'confirm'>('recipients');
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [showContactModal, setShowContactModal] = useState(false);
-  const [showGroupModal, setShowGroupModal] = useState(false);
-  const [uploadingMedia, setUploadingMedia] = useState<string | null>(null);
-  const [currentCampaign, setCurrentCampaign] = useState<MassCampaign | null>(null);
+  // Estado de controle do fluxo da campanha
+  const [currentStep, setCurrentStep] = useState<'recipients' | 'message' | 'schedule' | 'confirm'>('recipients'); // Etapa atual do assistente de criação
+  const [isSubmitting, setIsSubmitting] = useState(false); // Indica se está enviando a campanha
+  const [showContactModal, setShowContactModal] = useState(false); // Controla exibição do modal de seleção de contatos
+  const [showGroupModal, setShowGroupModal] = useState(false); // Controla exibição do modal de seleção de grupos
+  const [uploadingMedia, setUploadingMedia] = useState<string | null>(null); // Estado do upload de mídia
+  const [currentCampaign, setCurrentCampaign] = useState<MassCampaign | null>(null); // Dados da campanha atual
   
-  // Estado da mensagem
+  // Estado dos dados da mensagem
   const [messageData, setMessageData] = useState<MessageData>({
-    type: 'text',
-    text: '',
-    mediaFile: null,
-    mediaPreview: null
+    type: 'text', // Tipo padrão: mensagem de texto
+    text: '', // Conteúdo da mensagem
+    mediaFile: null, // Arquivo de mídia
+    mediaPreview: null // Preview da mídia
   });
-  const [campaignName, setCampaignName] = useState('');
+  const [campaignName, setCampaignName] = useState(''); // Nome identificador da campanha
   
-  // Estado de agendamento
-  const [minDelay, setMinDelay] = useState(3); // Delay mínimo em segundos
-  const [maxDelay, setMaxDelay] = useState(7); // Delay máximo em segundos
-  const [sendMode, setSendMode] = useState<'now' | 'schedule'>('now');
-  const [scheduleDate, setScheduleDate] = useState('');
-  const [scheduleTime, setScheduleTime] = useState('');
+  // Estado de configuração de agendamento e timing
+  const [minDelay, setMinDelay] = useState(3); // Delay mínimo entre mensagens em segundos
+  const [maxDelay, setMaxDelay] = useState(7); // Delay máximo entre mensagens em segundos
+  const [sendMode, setSendMode] = useState<'now' | 'schedule'>('now'); // Modo de envio: imediato ou agendado
+  const [scheduleDate, setScheduleDate] = useState(''); // Data agendada para envio da campanha
+  const [scheduleTime, setScheduleTime] = useState(''); // Horário agendado para envio da campanha
   
-  // Estado dos blocos
-  const [useBlocks, setUseBlocks] = useState(false);
-  const [blockSize, setBlockSize] = useState(50); // Quantidade de contatos por bloco
-  const [delayBetweenBlocks, setDelayBetweenBlocks] = useState(300); // Delay entre blocos em segundos (5 minutos)
+  // Estado de configuração de envio em blocos
+  const [useBlocks, setUseBlocks] = useState(false); // Habilita envio em blocos para campanhas grandes
+  const [blockSize, setBlockSize] = useState(50); // Quantidade de contatos por bloco de envio
+  const [delayBetweenBlocks, setDelayBetweenBlocks] = useState(300); // Delay entre blocos em segundos (5 minutos padrão)
   
-  // Estado dos destinatários
-  const [selectedContacts, setSelectedContacts] = useState<Contact[]>([]);
-  const [selectedGroups, setSelectedGroups] = useState<Group[]>([]);
+  // Estado de seleção de destinatários
+  const [selectedContacts, setSelectedContacts] = useState<Contact[]>([]); // Lista de contatos individuais selecionados
+  const [selectedGroups, setSelectedGroups] = useState<Group[]>([]); // Lista de grupos selecionados
   
-  // Referência à API do WhatsApp
+  // Referência à instância do WhatsApp selecionada
   const { selectedInstance, setShowInstanceModal } = useInstance();
   
   // Exibir modal de seleção de instância automaticamente ao carregar a página
@@ -93,12 +93,12 @@ export function MassMessagingPage() {
     }
   }, [selectedInstance, setShowInstanceModal]);
   
-  // Função para atualizar dados da mensagem
+  // Função para atualizar dados da mensagem de forma incremental
   const updateMessageData = (updates: Partial<MessageData>) => {
     setMessageData(prev => ({ ...prev, ...updates }));
   };
   
-  // Handler para upload de arquivo
+  // Manipulador para upload de arquivo de mídia
   const handleFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -140,7 +140,7 @@ export function MassMessagingPage() {
     }
   };
   
-  // Navegação entre etapas
+  // Função para navegar para a próxima etapa do fluxo de campanha
   const handleNextStep = () => {
     if (currentStep === 'recipients') {
       if (getTotalRecipients() === 0) {
@@ -176,6 +176,7 @@ export function MassMessagingPage() {
     }
   };
   
+  // Função para navegar para a etapa anterior do fluxo de campanha
   const handlePreviousStep = () => {
     if (currentStep === 'message') {
       setCurrentStep('recipients');
@@ -186,11 +187,12 @@ export function MassMessagingPage() {
     }
   };
   
-  // Cálculo do total de destinatários
+  // Função para calcular o total de destinatários selecionados
   const getTotalRecipients = (): number => {
     return selectedContacts.length + selectedGroups.length;
   };
-  // Envio da mensagem
+  
+  // Função principal para envio da campanha de mensagens
   const handleSubmit = async () => {
     try {
       setIsSubmitting(true);
@@ -433,20 +435,19 @@ export function MassMessagingPage() {
     }
   };
 
-  // Funções para selecionar contatos e grupos
-
-
+  // Funções para gerenciar seleção de destinatários
+  
+  // Função para limpar todos os contatos selecionados
   const handleClearContacts = () => {
     setSelectedContacts([]);
   };
 
+  // Função para limpar todos os grupos selecionados
   const handleClearGroups = () => {
     setSelectedGroups([]);
   };
 
-
-
-  // Função para navegar para a página de histórico
+  // Função para navegar para a página de relatórios de campanhas
   const goToHistory = () => {
     navigate('/messages/reports');
   };
