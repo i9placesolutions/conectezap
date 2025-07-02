@@ -353,29 +353,52 @@ export function MassMessagingPage() {
     try {
       toast.loading('Validando números no WhatsApp...', { id: 'validating' });
       
-      for (const number of numbers) {
+      // Processar números em lotes de 20 para não sobrecarregar a API
+      const batchSize = 20;
+      const batches = [];
+      
+      for (let i = 0; i < numbers.length; i += batchSize) {
+        batches.push(numbers.slice(i, i + batchSize));
+      }
+      
+      let processedCount = 0;
+      
+      for (const batch of batches) {
         try {
-          const result = await uazapiService.checkNumber(selectedInstance.token, number);
-          if (result?.exists) {
-            validNumbers.push(number);
-          } else {
-            invalidNums.push(number);
-            // Adicionar número inválido à blacklist se configurado
-            if (antiSpamConfig.autoBlacklist && selectedInstance?.id) {
-              addToBlacklist(number, 'invalid', selectedInstance.id);
+          console.log(`Validando lote de ${batch.length} números...`);
+          const results = await uazapiService.checkNumbers(selectedInstance.token, batch);
+          
+          for (const result of results) {
+            if (result.exists) {
+              validNumbers.push(result.number);
+            } else {
+              invalidNums.push(result.number);
+              // Adicionar número inválido à blacklist se configurado
+              if (antiSpamConfig.autoBlacklist && selectedInstance?.id) {
+                addToBlacklist(result.number, 'invalid', selectedInstance.id);
+              }
             }
           }
           
-          // Delay entre validações para não sobrecarregar
-          await new Promise(resolve => setTimeout(resolve, 1000));
-        } catch (error) {
-          console.warn(`Erro ao validar número ${number}:`, error);
-          // Em caso de erro de validação, adicionar à blacklist se muitos erros
-          if (antiSpamConfig.autoBlacklist && selectedInstance?.id) {
-            addToBlacklist(number, 'error', selectedInstance.id);
+          processedCount += batch.length;
+          
+          // Atualizar progresso
+          toast.loading(`Validando números... ${processedCount}/${numbers.length}`, { id: 'validating' });
+          
+          // Delay entre lotes para não sobrecarregar
+          if (batches.length > 1) {
+            await new Promise(resolve => setTimeout(resolve, 2000));
           }
-          // Incluir o número para não bloquear o envio
-          validNumbers.push(number);
+          
+        } catch (error) {
+          console.warn(`Erro ao validar lote de números:`, error);
+          // Em caso de erro, incluir todos os números do lote para não bloquear o envio
+          for (const number of batch) {
+            if (antiSpamConfig.autoBlacklist && selectedInstance?.id) {
+              addToBlacklist(number, 'error', selectedInstance.id);
+            }
+            validNumbers.push(number);
+          }
         }
       }
 

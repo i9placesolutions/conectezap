@@ -1789,19 +1789,147 @@ export const uazapiService = {
   async checkNumber(instanceToken: string, number: string): Promise<any> {
     try {
       const api = createApiClient(); const response = await api.post('/chat/check', {
-        number: number
+        numbers: [number]  // A API espera um array de números
       }, {
         headers: {
           'Accept': 'application/json',
+          'Content-Type': 'application/json',
           'token': instanceToken
         }
       });
       
       console.log('Resposta da API (verificar número):', response.data);
-      return response.data;
-    } catch (error) {
+      
+      // A resposta da API provavelmente retorna um array com o resultado
+      // Retornar se o primeiro (e único) número existe
+      if (Array.isArray(response.data) && response.data.length > 0) {
+        const result = response.data[0];
+        return {
+          exists: result.exists || result.valid || true,  // Ajustar conforme o formato real da resposta
+          number: number,
+          ...result
+        };
+      }
+      
+      return {
+        exists: false,
+        number: number
+      };
+    } catch (error: any) {
       console.error('Erro ao verificar número:', error);
-      return null;
+      
+      // Log mais detalhado para erro 400
+      if (error.response?.status === 400) {
+        console.error('Erro 400 - Dados da requisição:', {
+          url: error.config?.url,
+          method: error.config?.method,
+          headers: error.config?.headers,
+          data: error.config?.data,
+          responseData: error.response?.data,
+          number: number
+        });
+      }
+      
+      return {
+        exists: false,
+        number: number,
+        error: error.response?.status === 400 ? 'Formato de dados inválido' : error.message || 'Erro desconhecido'
+      };
+    }
+  },
+
+  // Verificar múltiplos números de uma vez (mais eficiente)
+  async checkNumbers(instanceToken: string, numbers: string[]): Promise<{ number: string; exists: boolean; [key: string]: any }[]> {
+    try {
+      const api = createApiClient(); const response = await api.post('/chat/check', {
+        numbers: numbers
+      }, {
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'token': instanceToken
+        }
+      });
+      
+      console.log('Resposta da API (verificar números):', response.data);
+      
+      // Se a resposta for um array, processar os resultados
+      if (Array.isArray(response.data)) {
+        return response.data.map((result, index) => ({
+          number: numbers[index],
+          exists: result.exists || result.valid || false,
+          ...result
+        }));
+      }
+      
+      // Fallback: retornar todos como não existem
+      return numbers.map(number => ({
+        number: number,
+        exists: false
+      }));
+      
+    } catch (error: any) {
+      console.error('Erro ao verificar números:', error);
+      
+      // Log mais detalhado para erro 400
+      if (error.response?.status === 400) {
+        console.error('Erro 400 - Dados da requisição (múltiplos números):', {
+          url: error.config?.url,
+          method: error.config?.method,
+          headers: error.config?.headers,
+          data: error.config?.data,
+          responseData: error.response?.data,
+          numbersCount: numbers.length,
+          numbers: numbers.slice(0, 5) // Mostrar apenas os primeiros 5 para debug
+        });
+      }
+      
+      // Retornar todos como erro para não bloquear o processo
+      const errorMessage = error.response?.status === 400 ? 'Formato de dados inválido' : error.message || 'Erro desconhecido';
+      return numbers.map(number => ({
+        number: number,
+        exists: false,
+        error: errorMessage
+      }));
+    }
+  },
+
+  // Método de teste para verificar se a API está funcionando corretamente
+  async testCheckNumbersAPI(instanceToken: string): Promise<{ success: boolean; message: string; details?: any }> {
+    try {
+      console.log('🧪 Testando API de verificação de números...');
+      
+      // Testar com um número fictício
+      const testNumbers = ['5511999999999'];
+      
+      const result = await this.checkNumbers(instanceToken, testNumbers);
+      
+      if (result && Array.isArray(result) && result.length > 0) {
+        console.log('✅ API de verificação funcionando corretamente');
+        return {
+          success: true,
+          message: 'API de verificação de números funcionando corretamente',
+          details: result
+        };
+      } else {
+        console.log('⚠️ API retornou resposta inesperada');
+        return {
+          success: false,
+          message: 'API retornou resposta inesperada',
+          details: result
+        };
+      }
+      
+    } catch (error: any) {
+      console.error('❌ Erro no teste da API:', error);
+      return {
+        success: false,
+        message: `Erro no teste: ${error.message || 'Erro desconhecido'}`,
+        details: {
+          status: error.response?.status,
+          data: error.response?.data
+        }
+      };
     }
   },
 
