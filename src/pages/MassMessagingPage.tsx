@@ -15,7 +15,8 @@ import {
   FileUp, 
   X, 
   Loader2,
-  BarChart2
+  BarChart2,
+  Settings
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { InstanceModal } from '../components/InstanceModal';
@@ -116,11 +117,11 @@ export function MassMessagingPage() {
   
   // Configurações anti-spam avançadas
   const [antiSpamConfig, setAntiSpamConfig] = useState<AntiSpamConfig>({
-    validateNumbers: true,
+    validateNumbers: false, // TEMPORARIAMENTE DESABILITADO - estava marcando todos como inválidos
     enableWarmup: false,
     monitorDelivery: true,
-    autoBlacklist: true,
-    smartDelays: true,
+    autoBlacklist: false, // TEMPORARIAMENTE DESABILITADO - estava removendo todos os números
+    smartDelays: false, // DESABILITADO - não deve sobrescrever configurações do usuário
     maxDailyMessages: 1000,
     deliveryThreshold: 80
   });
@@ -343,6 +344,7 @@ export function MassMessagingPage() {
   // Função para validar números antes do envio
   const validateNumbers = async (numbers: string[]): Promise<string[]> => {
     if (!antiSpamConfig.validateNumbers || !selectedInstance?.token) {
+      console.log('⏭️ Validação desabilitada ou sem instância selecionada');
       return numbers;
     }
 
@@ -353,26 +355,60 @@ export function MassMessagingPage() {
     try {
       toast.loading('Validando números no WhatsApp...', { id: 'validating' });
       
-      // Processar números em lotes de 20 para não sobrecarregar a API
-      const batchSize = 20;
+      // DEBUG: Testar a API primeiro
+      console.log('🔬 Executando diagnóstico da API antes da validação...');
+      const debugResult = await uazapiService.debugNumberValidation(selectedInstance.token, numbers.slice(0, 2));
+      console.log('📊 Resultado do diagnóstico:', debugResult);
+      
+      // Processar números em lotes de 10 para não sobrecarregar a API
+      const batchSize = 10;
       const batches = [];
       
       for (let i = 0; i < numbers.length; i += batchSize) {
         batches.push(numbers.slice(i, i + batchSize));
       }
       
+      console.log(`📦 Dividindo ${numbers.length} números em ${batches.length} lotes de até ${batchSize} números`);
+      
       let processedCount = 0;
       
-      for (const batch of batches) {
+      for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
+        const batch = batches[batchIndex];
+        
         try {
-          console.log(`Validando lote de ${batch.length} números...`);
+          console.log(`🔍 Validando lote ${batchIndex + 1}/${batches.length} com ${batch.length} números...`);
+          
           const results = await uazapiService.checkNumbers(selectedInstance.token, batch);
           
+          console.log(`📋 Resultados do lote ${batchIndex + 1}:`, results);
+          
+          if (!results || !Array.isArray(results)) {
+            console.error('❌ Resultado inválido da API para o lote', batchIndex + 1);
+            // Adicionar todos do lote como válidos para não bloquear
+            validNumbers.push(...batch);
+            processedCount += batch.length;
+            continue;
+          }
+          
+          let batchValidCount = 0;
+          let batchInvalidCount = 0;
+          
           for (const result of results) {
+            console.log(`🔎 Analisando resultado:`, {
+              number: result.number,
+              exists: result.exists,
+              originalResponse: result.originalResponse
+            });
+            
             if (result.exists) {
               validNumbers.push(result.number);
+              batchValidCount++;
+              console.log(`✅ ${result.number} - VÁLIDO`);
             } else {
               invalidNums.push(result.number);
+              batchInvalidCount++;
+              console.log(`❌ ${result.number} - INVÁLIDO`);
+              
               // Adicionar número inválido à blacklist se configurado
               if (antiSpamConfig.autoBlacklist && selectedInstance?.id) {
                 addToBlacklist(result.number, 'invalid', selectedInstance.id);
@@ -380,18 +416,21 @@ export function MassMessagingPage() {
             }
           }
           
+          console.log(`📊 Lote ${batchIndex + 1} concluído: ${batchValidCount} válidos, ${batchInvalidCount} inválidos`);
+          
           processedCount += batch.length;
           
           // Atualizar progresso
-          toast.loading(`Validando números... ${processedCount}/${numbers.length}`, { id: 'validating' });
+          toast.loading(`Validando números... ${processedCount}/${numbers.length} (${validNumbers.length} válidos, ${invalidNums.length} inválidos)`, { id: 'validating' });
           
           // Delay entre lotes para não sobrecarregar
-          if (batches.length > 1) {
+          if (batchIndex < batches.length - 1) {
+            console.log('⏳ Aguardando 2s antes do próximo lote...');
             await new Promise(resolve => setTimeout(resolve, 2000));
           }
           
         } catch (error) {
-          console.warn(`Erro ao validar lote de números:`, error);
+          console.error(`❌ Erro ao validar lote ${batchIndex + 1}:`, error);
           // Em caso de erro, incluir todos os números do lote para não bloquear o envio
           for (const number of batch) {
             if (antiSpamConfig.autoBlacklist && selectedInstance?.id) {
@@ -399,10 +438,13 @@ export function MassMessagingPage() {
             }
             validNumbers.push(number);
           }
+          processedCount += batch.length;
         }
       }
 
       setInvalidNumbers(invalidNums);
+      
+      console.log(`✅ Validação concluída: ${validNumbers.length} válidos, ${invalidNums.length} inválidos`);
       
       if (invalidNums.length > 0) {
         toast.dismiss('validating');
@@ -416,7 +458,7 @@ export function MassMessagingPage() {
       }
       
     } catch (error) {
-      console.error('Erro na validação:', error);
+      console.error('❌ Erro crítico na validação:', error);
       toast.dismiss('validating');
       toast.error('Erro na validação. Continuando sem validar.');
       return numbers; // Retorna todos os números em caso de erro
@@ -530,14 +572,18 @@ export function MassMessagingPage() {
         return;
       }
 
-      // 2. Aplicar configurações inteligentes baseadas no volume
-      if (antiSpamConfig.smartDelays) {
-        applySmartSettings(numbers.length);
-        toast(`Configurações otimizadas aplicadas para ${numbers.length} contatos`, {
-          icon: '🎯',
-          duration: 3000
-        });
-      }
+      // 2. NÃO aplicar configurações inteligentes automaticamente
+      // O usuário deve manter suas configurações personalizadas
+      console.log('⚙️ Mantendo configurações definidas pelo usuário:', {
+        minDelay,
+        maxDelay,
+        useBlocks,
+        blockSize,
+        delayBetweenBlocks,
+        useAutoPause,
+        pauseAfterCount,
+        pauseDurationMinutes
+      });
 
       // 3. Filtrar números blacklisted
       if (antiSpamConfig.autoBlacklist && selectedInstance?.id) {
@@ -1017,6 +1063,35 @@ export function MassMessagingPage() {
     navigate('/messages/reports');
   };
 
+  // Função de debug temporária para testar a API
+  const debugValidationAPI = async () => {
+    if (!selectedInstance?.token) {
+      toast.error('Selecione uma instância primeiro');
+      return;
+    }
+
+    try {
+      toast.loading('Executando diagnóstico da API...', { id: 'debug' });
+      
+      const result = await uazapiService.debugNumberValidation(selectedInstance.token);
+      
+      toast.dismiss('debug');
+      
+      if (result.success) {
+        toast.success('Diagnóstico concluído! Verifique o console para detalhes.');
+        console.log('🎯 RESULTADO COMPLETO DO DIAGNÓSTICO:', result);
+      } else {
+        toast.error('Erro no diagnóstico. Verifique o console.');
+        console.error('❌ ERRO NO DIAGNÓSTICO:', result);
+      }
+      
+    } catch (error) {
+      toast.dismiss('debug');
+      toast.error('Erro ao executar diagnóstico');
+      console.error('❌ ERRO CRÍTICO NO DIAGNÓSTICO:', error);
+    }
+  };
+
   return (
     <div className="space-y-4 sm:space-y-6">
       <InstanceModal />
@@ -1045,14 +1120,25 @@ export function MassMessagingPage() {
             <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Disparo em Massa</h1>
             <p className="text-sm sm:text-base text-gray-600 mt-1">Envie mensagens para múltiplos contatos</p>
           </div>
-          <button
-            onClick={goToHistory}
-            className="flex items-center justify-center gap-2 px-3 sm:px-4 py-2 bg-primary-100 hover:bg-primary-200 text-primary-700 rounded-lg transition-colors text-sm sm:text-base"
-          >
-            <BarChart2 className="h-4 w-4" />
-            <span className="hidden sm:inline">Ver Histórico de Campanhas</span>
-            <span className="sm:hidden">Histórico</span>
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={debugValidationAPI}
+              className="flex items-center justify-center gap-2 px-3 sm:px-4 py-2 bg-orange-100 hover:bg-orange-200 text-orange-700 rounded-lg transition-colors text-sm sm:text-base"
+              title="Testar API de validação"
+            >
+              <Settings className="h-4 w-4" />
+              <span className="hidden sm:inline">Debug API</span>
+              <span className="sm:hidden">Debug</span>
+            </button>
+            <button
+              onClick={goToHistory}
+              className="flex items-center justify-center gap-2 px-3 sm:px-4 py-2 bg-primary-100 hover:bg-primary-200 text-primary-700 rounded-lg transition-colors text-sm sm:text-base"
+            >
+              <BarChart2 className="h-4 w-4" />
+              <span className="hidden sm:inline">Ver Histórico de Campanhas</span>
+              <span className="sm:hidden">Histórico</span>
+            </button>
+          </div>
         </div>
       )}
 

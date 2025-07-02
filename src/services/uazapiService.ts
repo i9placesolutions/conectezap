@@ -1788,52 +1788,26 @@ export const uazapiService = {
   // Verificar se número existe no WhatsApp
   async checkNumber(instanceToken: string, number: string): Promise<any> {
     try {
-      const api = createApiClient(); const response = await api.post('/chat/check', {
-        numbers: [number]  // A API espera um array de números
-      }, {
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-          'token': instanceToken
-        }
-      });
+      // Usar a função checkNumbers que já tem toda a lógica robusta
+      const results = await this.checkNumbers(instanceToken, [number]);
       
-      console.log('Resposta da API (verificar número):', response.data);
-      
-      // A resposta da API provavelmente retorna um array com o resultado
-      // Retornar se o primeiro (e único) número existe
-      if (Array.isArray(response.data) && response.data.length > 0) {
-        const result = response.data[0];
-        return {
-          exists: result.exists || result.valid || true,  // Ajustar conforme o formato real da resposta
-          number: number,
-          ...result
-        };
-      }
-      
-      return {
-        exists: false,
-        number: number
-      };
-    } catch (error: any) {
-      console.error('Erro ao verificar número:', error);
-      
-      // Log mais detalhado para erro 400
-      if (error.response?.status === 400) {
-        console.error('Erro 400 - Dados da requisição:', {
-          url: error.config?.url,
-          method: error.config?.method,
-          headers: error.config?.headers,
-          data: error.config?.data,
-          responseData: error.response?.data,
-          number: number
-        });
+      if (results && results.length > 0) {
+        return results[0];
       }
       
       return {
         exists: false,
         number: number,
-        error: error.response?.status === 400 ? 'Formato de dados inválido' : error.message || 'Erro desconhecido'
+        error: 'Nenhum resultado retornado'
+      };
+      
+    } catch (error: any) {
+      console.error('Erro ao verificar número (função individual):', error);
+      
+      return {
+        exists: false,
+        number: number,
+        error: error.message || 'Erro desconhecido'
       };
     }
   },
@@ -1851,21 +1825,83 @@ export const uazapiService = {
         }
       });
       
-      console.log('Resposta da API (verificar números):', response.data);
+      console.log('🔍 DEBUG RESPOSTA DA API /chat/check:');
+      console.log('- Status:', response.status);
+      console.log('- Tipo da resposta:', typeof response.data);
+      console.log('- É array?:', Array.isArray(response.data));
+      console.log('- Dados completos:', JSON.stringify(response.data, null, 2));
       
-      // Se a resposta for um array, processar os resultados
+      // Se a resposta for um array
       if (Array.isArray(response.data)) {
-        return response.data.map((result, index) => ({
-          number: numbers[index],
-          exists: result.exists || result.valid || false,
-          ...result
-        }));
+        console.log(`📋 Processando ${response.data.length} resultados da API...`);
+        
+        return response.data.map((result, index) => {
+          console.log(`Resultado ${index + 1}:`, result);
+          console.log(`- Campos disponíveis:`, Object.keys(result || {}));
+          
+          // Tentar diferentes campos que podem indicar se o número existe
+          const exists = !!(
+            result.exists || 
+            result.valid || 
+            result.status === 'valid' || 
+            result.status === 'exists' ||
+            result.whatsapp ||
+            result.registered ||
+            (result.status && result.status !== 'invalid' && result.status !== 'not_found')
+          );
+          
+          console.log(`- Número ${numbers[index]} existe? ${exists}`);
+          console.log(`- Campos verificados: exists=${result.exists}, valid=${result.valid}, status=${result.status}, whatsapp=${result.whatsapp}, registered=${result.registered}`);
+          
+          return {
+            number: numbers[index],
+            exists: exists,
+            originalResponse: result,
+            ...result
+          };
+        });
       }
+      
+      // Se a resposta for um objeto com propriedade results ou similar
+      if (response.data && typeof response.data === 'object') {
+        console.log('📦 Resposta é um objeto, procurando array de resultados...');
+        
+        // Tentar diferentes propriedades que podem conter os resultados
+        const possibleArrays = ['results', 'data', 'numbers', 'contacts'];
+        
+        for (const prop of possibleArrays) {
+          if (response.data[prop] && Array.isArray(response.data[prop])) {
+            console.log(`✅ Encontrado array em '${prop}' com ${response.data[prop].length} items`);
+            
+            return response.data[prop].map((result: any, index: number) => {
+              const exists = !!(
+                result.exists || 
+                result.valid || 
+                result.status === 'valid' || 
+                result.status === 'exists' ||
+                result.whatsapp ||
+                result.registered ||
+                (result.status && result.status !== 'invalid' && result.status !== 'not_found')
+              );
+              
+              return {
+                number: numbers[index] || result.number || 'unknown',
+                exists: exists,
+                originalResponse: result,
+                ...result
+              };
+            });
+          }
+        }
+      }
+      
+      console.log('⚠️ Formato de resposta não reconhecido, retornando todos como inválidos');
       
       // Fallback: retornar todos como não existem
       return numbers.map(number => ({
         number: number,
-        exists: false
+        exists: false,
+        error: 'Formato de resposta não reconhecido'
       }));
       
     } catch (error: any) {
@@ -1925,6 +1961,101 @@ export const uazapiService = {
       return {
         success: false,
         message: `Erro no teste: ${error.message || 'Erro desconhecido'}`,
+        details: {
+          status: error.response?.status,
+          data: error.response?.data
+        }
+      };
+    }
+  },
+
+  // Função de debug para diagnosticar problemas de validação
+  async debugNumberValidation(instanceToken: string, testNumbers: string[] = ['5511999999999', '551199999999']): Promise<any> {
+    console.log('🔬 DIAGNÓSTICO COMPLETO DA VALIDAÇÃO DE NÚMEROS');
+    console.log('================================================');
+    
+    try {
+      console.log(`🎯 Testando com números: ${testNumbers.join(', ')}`);
+      
+      const api = createApiClient();
+      
+      console.log('📤 Fazendo requisição direta para /chat/check...');
+      const response = await api.post('/chat/check', {
+        numbers: testNumbers
+      }, {
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'token': instanceToken
+        }
+      });
+      
+      console.log('📥 RESPOSTA BRUTA DA API:');
+      console.log('- Status HTTP:', response.status);
+      console.log('- Headers:', response.headers);
+      console.log('- Tipo de dados:', typeof response.data);
+      console.log('- É array?:', Array.isArray(response.data));
+      console.log('- Tamanho (se array):', Array.isArray(response.data) ? response.data.length : 'N/A');
+      console.log('- JSON completo:', JSON.stringify(response.data, null, 2));
+      
+      if (Array.isArray(response.data)) {
+        console.log('\n📋 ANÁLISE DETALHADA DE CADA RESULTADO:');
+        response.data.forEach((item, index) => {
+          console.log(`\n[${index + 1}] Resultado para ${testNumbers[index]}:`);
+          console.log('   - Tipo:', typeof item);
+          console.log('   - Todas as propriedades:', Object.keys(item || {}));
+          console.log('   - Valores:', JSON.stringify(item, null, 4));
+          
+          // Testar diferentes propriedades
+          const possibleValidFlags = ['exists', 'valid', 'whatsapp', 'registered', 'status'];
+          console.log('   - Análise de flags de validação:');
+          possibleValidFlags.forEach(flag => {
+            if (item && item.hasOwnProperty(flag)) {
+              console.log(`     ✓ ${flag}: ${item[flag]} (${typeof item[flag]})`);
+            } else {
+              console.log(`     ✗ ${flag}: não presente`);
+            }
+          });
+        });
+      } else if (response.data && typeof response.data === 'object') {
+        console.log('\n📦 RESPOSTA É UM OBJETO - Analisando propriedades:');
+        console.log('   - Propriedades do objeto:', Object.keys(response.data));
+        
+        Object.keys(response.data).forEach(key => {
+          const value = response.data[key];
+          console.log(`   - ${key}: ${typeof value} ${Array.isArray(value) ? `(array com ${value.length} items)` : ''}`);
+          
+          if (Array.isArray(value)) {
+            console.log(`     └─ Primeiro item do array:`, JSON.stringify(value[0], null, 6));
+          }
+        });
+      }
+      
+      console.log('\n🧩 TESTANDO FUNÇÃO checkNumbers:');
+      const processedResult = await this.checkNumbers(instanceToken, testNumbers);
+      console.log('   - Resultado processado:', JSON.stringify(processedResult, null, 2));
+      
+      return {
+        success: true,
+        rawResponse: response.data,
+        processedResponse: processedResult,
+        analysis: {
+          statusCode: response.status,
+          dataType: typeof response.data,
+          isArray: Array.isArray(response.data),
+          itemCount: Array.isArray(response.data) ? response.data.length : 'N/A'
+        }
+      };
+      
+    } catch (error: any) {
+      console.error('❌ ERRO NO DIAGNÓSTICO:', error);
+      console.log('   - Status:', error.response?.status);
+      console.log('   - Dados do erro:', error.response?.data);
+      console.log('   - Mensagem:', error.message);
+      
+      return {
+        success: false,
+        error: error.message,
         details: {
           status: error.response?.status,
           data: error.response?.data
