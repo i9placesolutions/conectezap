@@ -52,6 +52,53 @@ export function ChatPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messageInputRef = useRef<HTMLTextAreaElement>(null);
 
+  // Função para analisar se uma mensagem pode ser uma resposta baseado em padrões
+  const analyzeIfCouldBeReply = (msg: any, content: string | null, chatMessages: any[]) => {
+    if (!content) return { isLikely: false };
+    
+    const contentLower = content.toLowerCase().trim();
+    
+    // Padrões que indicam resposta
+    const replyPatterns = [
+      'sim', 'não', 'ok', 'top', 'legal', 'show', 'as', 'certo', 'perfeito',
+      'obrigado', 'vlw', 'tá bom', 'entendi', 'ótimo', 'blz', 'massa'
+    ];
+    
+    // Verificar se o conteúdo é tipicamente uma resposta
+    const isReplyLikeContent = replyPatterns.includes(contentLower) || 
+                              contentLower.length <= 5 && /^[a-záéíóúâêîôûãõç]+$/.test(contentLower);
+    
+    if (isReplyLikeContent && chatMessages.length > 0) {
+      // Pegar a mensagem anterior que não seja do mesmo autor
+      const msgAuthor = msg.fromMe ? 'Você' : (msg.pushName || msg.author || 'Contato');
+      const previousMessage = chatMessages
+        .slice()
+        .reverse()
+        .find(m => m.author !== msgAuthor);
+      
+      if (previousMessage) {
+        // Verificar se há proximidade temporal (último 5 minutos)
+        const timeDiff = (msg.timestamp || Date.now()) - (previousMessage.timestamp || 0);
+        const isRecent = timeDiff < 5 * 60 * 1000; // 5 minutos
+        
+        if (isRecent) {
+          return {
+            isLikely: true,
+            quotedMessage: {
+              body: previousMessage.content || 'Mensagem anterior',
+              type: previousMessage.type || 'text',
+              pushName: previousMessage.author || 'Contato',
+              id: previousMessage.id || 'inferred_' + Date.now(),
+              timestamp: previousMessage.timestamp || (msg.timestamp - 60000)
+            }
+          };
+        }
+      }
+    }
+    
+    return { isLikely: false };
+  };
+
   // Sistema de tempo real
   const { isConnected: realtimeConnected } = useRealTimeChat({
     instanceToken: selectedInstance?.token,
@@ -371,7 +418,7 @@ export function ChatPage() {
         // Verificar todos os campos possíveis onde mensagens citadas podem estar
         const msgAny = msg as any; // Cast para evitar erros TypeScript
         
-        // Expandir busca para capturar diferentes estruturas da API UAZAPI
+        // Expandir busca MÁXIMA para capturar QUALQUER estrutura da API UAZAPI
         const quotedSource = msg.quotedMsg || 
                            msgAny.quoted || 
                            msgAny.quotedMessage || 
@@ -379,12 +426,93 @@ export function ChatPage() {
                            msgAny.message?.extendedTextMessage?.contextInfo?.quotedMessage ||
                            msgAny.message?.conversation?.contextInfo?.quotedMessage ||
                            msgAny.key?.contextInfo?.quotedMessage ||
-                           msgAny.quotedStanzaId || // ID da mensagem citada
-                           msgAny.quotedParticipant || // Participante citado
-                           msgAny.quotedStanza || // Stanza citada
+                           msgAny.quotedStanzaId || 
+                           msgAny.quotedParticipant || 
+                           msgAny.quotedStanza || 
                            msgAny.extendedTextMessage?.contextInfo?.quotedMessage ||
-                           // Verificar em estruturas aninhadas
-                           (msgAny.body && typeof msgAny.body === 'object' && msgAny.body.quotedMessage);
+                           // Estruturas aninhadas
+                           (msgAny.body && typeof msgAny.body === 'object' && msgAny.body.quotedMessage) ||
+                           // Campos alternativos que podem existir
+                           msgAny.replyTo ||
+                           msgAny.repliedTo ||
+                           msgAny.inReplyTo ||
+                           msgAny.quotedContent ||
+                           msgAny.quotedText ||
+                           msgAny.quotedBody ||
+                           msgAny.reference ||
+                           msgAny.messageRef ||
+                           msgAny.quotedMessageId ||
+                           msgAny.originalMessage ||
+                           msgAny.parentMessage ||
+                           // Verificar em níveis mais profundos
+                           msgAny.message?.quotedMessage ||
+                           msgAny.message?.quoted ||
+                           msgAny.message?.contextInfo ||
+                           // Campos específicos do protocolo WhatsApp
+                           msgAny.stanzaId ||
+                           msgAny.participant ||
+                           msgAny.quotedStanzaId ||
+                           // Estruturas complexas
+                           (msgAny.key && msgAny.key.participant && msgAny.key.id) ||
+                           // Busca em qualquer objeto que tenha 'quoted' no nome
+                           Object.keys(msgAny).find(key => 
+                             key.toLowerCase().includes('quot') && 
+                             msgAny[key] && 
+                             typeof msgAny[key] === 'object'
+                           ) && msgAny[Object.keys(msgAny).find(key => 
+                             key.toLowerCase().includes('quot') && 
+                             msgAny[key] && 
+                             typeof msgAny[key] === 'object'
+                           )!];
+        
+        // Log ULTRA DETALHADO para mensagens suspeitas de serem respostas
+        if (content && (
+          content.toLowerCase().trim() === 'top' ||
+          content.toLowerCase().trim() === 'ok' ||
+          content.toLowerCase().trim() === 'as' ||
+          content.toLowerCase().trim() === 'sim' ||
+          content.toLowerCase().trim() === 'não'
+        )) {
+          console.log('🔍 ===== ANÁLISE COMPLETA DE POSSÍVEL RESPOSTA =====');
+          console.log('📋 MENSAGEM ORIGINAL COMPLETA:', JSON.stringify(msg, null, 2));
+          console.log('🔍 TODOS OS CAMPOS RAIZ:', Object.keys(msgAny));
+          console.log('🔍 ESTRUTURA NIVEL 1:', msgAny);
+          
+          // Análise profunda de estruturas que podem conter citações
+          if (msgAny.message) {
+            console.log('🔍 ESTRUTURA msg.message:', Object.keys(msgAny.message));
+            console.log('🔍 CONTEÚDO msg.message:', msgAny.message);
+          }
+          
+          if (msgAny.contextInfo) {
+            console.log('🔍 ESTRUTURA msg.contextInfo:', Object.keys(msgAny.contextInfo));
+            console.log('🔍 CONTEÚDO msg.contextInfo:', msgAny.contextInfo);
+          }
+          
+          if (msgAny.body && typeof msgAny.body === 'object') {
+            console.log('🔍 ESTRUTURA msg.body (object):', Object.keys(msgAny.body));
+            console.log('🔍 CONTEÚDO msg.body (object):', msgAny.body);
+          }
+          
+          // Buscar QUALQUER campo que contenha 'quot', 'reply', 'ref', 'parent'
+          const suspiciousFields = Object.keys(msgAny).filter(key => {
+            const lowerKey = key.toLowerCase();
+            return lowerKey.includes('quot') || 
+                   lowerKey.includes('reply') || 
+                   lowerKey.includes('ref') || 
+                   lowerKey.includes('parent') ||
+                   lowerKey.includes('context');
+          });
+          
+          if (suspiciousFields.length > 0) {
+            console.log('🕵️ CAMPOS SUSPEITOS ENCONTRADOS:', suspiciousFields);
+            suspiciousFields.forEach(field => {
+              console.log(`🔍 ${field}:`, msgAny[field]);
+            });
+          }
+          
+          console.log('====================================================');
+        }
         
         // Log mais detalhado para debug
         console.log('🔍 DEBUG MENSAGEM CITADA - Verificando campos expandidos:', {
@@ -447,20 +575,31 @@ export function ChatPage() {
             });
           }
           
+          // DETECÇÃO ALTERNATIVA: Tentar inferir se é uma resposta baseado em padrões
+          const couldBeReply = analyzeIfCouldBeReply(msg, content, chatMessages);
+          if (couldBeReply.isLikely) {
+            console.log('🕵️ DETECTADA possível resposta por análise de padrões:', couldBeReply);
+            processedQuotedMsg = couldBeReply.quotedMessage;
+          }
+          
           // Adicionar simulação realista para demonstração (TEMPORÁRIO)
-          if (process.env.NODE_ENV === 'development') {
+          if (!processedQuotedMsg && process.env.NODE_ENV === 'development') {
             // Simular mensagem citada em algumas mensagens para demonstração
             const shouldSimulate = content && [
               'ok', 'sim', 'não', 'obrigado', 'vlw', 'tá bom', 'entendi',
-              'certo', 'perfeito', 'ótimo', 'legal', 'show', 'as'
+              'certo', 'perfeito', 'ótimo', 'legal', 'show', 'as', 'top'
             ].includes(content.toLowerCase().trim());
             
             if (shouldSimulate) {
               console.log('🧪 SIMULANDO mensagem citada para demonstração');
+              const previousMessage = chatMessages.length > 0 ? 
+                chatMessages[chatMessages.length - 1] : 
+                { content: 'ola', author: 'i9Place' };
+              
               processedQuotedMsg = {
-                body: messages.length > 0 ? messages[messages.length - 1]?.content || 'Mensagem anterior' : 'Oi',
+                body: previousMessage.content || 'Mensagem anterior',
                 type: 'text',
-                pushName: 'Rafael Mendes',
+                pushName: previousMessage.author || 'Contato',
                 id: 'simulated_' + Date.now(),
                 timestamp: msg.timestamp - 60000
               };
