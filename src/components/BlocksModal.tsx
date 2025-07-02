@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Search, UserPlus, Shield, AlertTriangle } from 'lucide-react';
 import { toast } from 'react-hot-toast';
+import { Avatar } from './ui/Avatar';
 
 interface BlockedContact {
   id: string;
@@ -100,18 +101,13 @@ export function BlocksModal({
               {filteredContacts.map((contact) => (
                 <div key={contact.id} className="p-4 flex items-center justify-between hover:bg-gray-50">
                   <div className="flex items-center space-x-3">
-                    <div className="h-10 w-10 rounded-full bg-gray-300 flex items-center justify-center overflow-hidden relative">
-                      {contact.profileImage ? (
-                        <img
-                          src={contact.profileImage}
+                    <div className="relative">
+                      <Avatar
+                        src={contact.profileImage?.includes('pps.whatsapp.net') ? undefined : contact.profileImage}
                           alt={contact.name}
-                          className="h-full w-full object-cover"
+                        name={contact.name}
+                        size="lg"
                         />
-                      ) : (
-                        <span className="text-gray-600 font-medium">
-                          {contact.name.charAt(0).toUpperCase()}
-                        </span>
-                      )}
                       <div className="absolute -bottom-1 -right-1 bg-red-500 rounded-full p-1">
                         <Shield className="h-3 w-3 text-white" />
                       </div>

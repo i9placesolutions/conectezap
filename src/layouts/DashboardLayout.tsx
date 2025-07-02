@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { supabase } from '../lib/supabase';
+import { ServerSelector } from '../components/ServerSelector';
 
 interface MenuItem {
   icon: React.ElementType;
@@ -79,9 +80,7 @@ export function DashboardLayout() {
       case '/messages':
         setPageTitle('WhatsApp');
         break;
-      case '/messages/chatzap':
-        setPageTitle('ChatZap');
-        break;
+      
       case '/messages/multi':
         setPageTitle('Multiatendimento');
         break;
@@ -135,7 +134,7 @@ export function DashboardLayout() {
       path: '/messages',
       submenu: [
         { label: 'Instâncias', path: '/messages/instances' },
-        { label: 'ChatZap', path: '/messages/chatzap' },
+        
         { label: 'Multiatendimento', path: '/messages/multi' },
         { label: 'Lead', path: '/messages/campaigns' },
         { label: 'Disparo em Massa', path: '/messages/mass' },
@@ -368,6 +367,9 @@ export function DashboardLayout() {
 
             {/* Right side actions */}
             <div className="flex items-center gap-2 sm:gap-3">
+              {/* Seletor de servidor compacto */}
+              <ServerSelector compact />
+              
               {/* Notification bell */}
               <button
                 className="relative rounded-full p-1.5 text-gray-500 hover:bg-gray-100 hover:text-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"

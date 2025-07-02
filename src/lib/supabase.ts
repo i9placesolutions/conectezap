@@ -73,6 +73,8 @@ export interface MassCampaign {
   min_delay: number;
   max_delay: number;
   scheduled_for?: string;
+  folder_id?: string; // ID da campanha na API UAZAPI para controle
+  folder_ids?: string; // IDs dos blocos quando enviado em blocos (separados por vírgula)
   created_at: string;
   updated_at: string;
 }

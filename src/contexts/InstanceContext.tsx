@@ -58,7 +58,7 @@ export function InstanceProvider({ children }: { children: React.ReactNode }) {
     // Reset selected instance and show modal when navigating to specific pages
     if (location.pathname !== '/messages/multi') {
       const shouldShowModal = [
-        '/messages/chatzap',
+    
         '/messages/mass',
         '/messages/campaigns',
         '/messages/instances'

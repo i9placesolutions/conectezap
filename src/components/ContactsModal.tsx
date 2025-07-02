@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Search, UserPlus, UserMinus, Phone, Mail } from 'lucide-react';
 import { toast } from 'react-hot-toast';
+import { Avatar } from './ui/Avatar';
 
 interface Contact {
   id: string;
@@ -97,19 +98,12 @@ export function ContactsModal({
               {filteredContacts.map((contact) => (
                 <div key={contact.id} className="p-4 flex items-center justify-between hover:bg-gray-50">
                   <div className="flex items-center space-x-3">
-                    <div className="h-10 w-10 rounded-full bg-gray-300 flex items-center justify-center overflow-hidden">
-                      {contact.profileImage ? (
-                        <img
-                          src={contact.profileImage}
+                    <Avatar
+                      src={contact.profileImage?.includes('pps.whatsapp.net') ? undefined : contact.profileImage}
                           alt={contact.name}
-                          className="h-full w-full object-cover"
-                        />
-                      ) : (
-                        <span className="text-gray-600 font-medium">
-                          {contact.name.charAt(0).toUpperCase()}
-                        </span>
-                      )}
-                    </div>
+                      name={contact.name}
+                      size="lg"
+                    />
                     <div>
                       <h3 className="font-medium text-gray-900">{contact.name}</h3>
                       <p className="text-sm text-gray-500">{contact.phone}</p>

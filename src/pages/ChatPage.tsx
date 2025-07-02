@@ -1,68 +1,1064 @@
-import { useState } from 'react';
-import { Search, Filter, Plus, MessageSquare, Phone } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Search, Plus, MessageSquare, Phone, Send, Paperclip, MoreVertical, Clock, Check, CheckCheck, Smartphone, RefreshCw, Archive, Pin, Volume2, VolumeX, Trash2, User, Wifi, WifiOff, FileText } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { uazapiService, Chat as UazapiChat, Message } from '../services/uazapiService';
+import { getCurrentServerConfig } from '../services/api';
+import { useInstance } from '../contexts/InstanceContext';
+import { toast } from 'react-hot-toast';
+import { SelectInstanceModal } from '../components/instance/SelectInstanceModal';
+import { useRealTimeChat } from '../hooks/useRealTimeChat';
+import { TemplatesModal } from '../components/TemplatesModal';
+import { NotesPanel } from '../components/NotesPanel';
+import { AssignAgentModal } from '../components/AssignAgentModal';
+import { MediaUploadModal } from '../components/MediaUploadModal';
+import { MediaRenderer } from '../components/MediaRenderer';
 
-interface Chat {
+interface ChatMessage {
   id: string;
-  name: string;
-  message: string;
-  time: string;
-  unread: boolean;
-  hasAudio?: boolean;
-  hasImage?: boolean;
-  isGroup?: boolean;
+  chatId: string;
+  content: string;
+  timestamp: number;
+  fromMe: boolean;
+  type: 'text' | 'image' | 'video' | 'audio' | 'ptt' | 'document';
+  status?: 'sending' | 'sent' | 'delivered' | 'read';
+  author?: string;
+  mediaUrl?: string;
+  quotedMsg?: any;
+}
+
+interface ExtendedChat extends Omit<UazapiChat, 'lastMessage'> {
+  lastMessage?: ChatMessage;
+  agent?: string;
+  status: 'unassigned' | 'assigned' | 'closed';
 }
 
 export function ChatPage() {
+  const { selectedInstance, setSelectedInstance } = useInstance();
+  const [chats, setChats] = useState<ExtendedChat[]>([]);
+  const [selectedChat, setSelectedChat] = useState<ExtendedChat | null>(null);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [newMessage, setNewMessage] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedFilter, setSelectedFilter] = useState<'all' | 'mine' | 'unassigned'>('all');
+  const [loading, setLoading] = useState(false);
+  const [loadingMessages, setLoadingMessages] = useState(false);
+  const [sendingMessage, setSendingMessage] = useState(false);
+  const [showInstanceModal, setShowInstanceModal] = useState(false);
+  const [showTemplatesModal, setShowTemplatesModal] = useState(false);
+  const [showNotesPanel, setShowNotesPanel] = useState(false);
+  const [showAssignModal, setShowAssignModal] = useState(false);
+  const [showMediaModal, setShowMediaModal] = useState(false);
+  
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messageInputRef = useRef<HTMLTextAreaElement>(null);
 
-  const chats: Chat[] = [
-    {
-      id: '1',
-      name: 'Mateus',
-      message: 'Áudio',
-      time: '1h',
-      unread: true,
-      hasAudio: true
+  // Sistema de tempo real
+  const { isConnected: realtimeConnected } = useRealTimeChat({
+    instanceToken: selectedInstance?.token,
+    instanceId: selectedInstance?.id,
+    onNewMessage: (message) => {
+      console.log('📩 Nova mensagem em tempo real:', message);
+      
+      // Se a mensagem for do chat atualmente selecionado, adicionar às mensagens
+      if (selectedChat && message.chatId === selectedChat.id) {
+        const newMessage: ChatMessage = {
+          id: message.id || Date.now().toString(),
+          chatId: message.chatId,
+          content: message.body || message.content || '',
+          timestamp: message.timestamp || Date.now(),
+          fromMe: message.fromMe || false,
+          type: message.type || 'text',
+          author: message.author || message.pushName,
+          mediaUrl: message.mediaUrl,
+          quotedMsg: message.quotedMsg
+        };
+        
+        setMessages(prev => {
+          // Evitar duplicatas
+          if (prev.some(m => m.id === newMessage.id)) {
+            return prev;
+          }
+          return [...prev, newMessage];
+        });
+        
+        toast.success('Nova mensagem recebida!');
+      }
+      
+      // Atualizar lista de chats com a nova mensagem
+      setChats(prev => prev.map(chat => {
+        if (chat.id === message.chatId) {
+          return {
+            ...chat,
+            lastMessage: {
+              id: message.id || Date.now().toString(),
+              chatId: message.chatId,
+              content: message.body || message.content || '',
+              timestamp: message.timestamp || Date.now(),
+              fromMe: message.fromMe || false,
+              type: 'text'
+            },
+            unreadCount: selectedChat?.id === chat.id ? 0 : (chat.unreadCount || 0) + 1,
+            lastMessageTimestamp: message.timestamp || Date.now()
+          };
+        }
+        return chat;
+      }));
     },
-    {
-      id: '2',
-      name: 'Ana Costa',
-      message: 'Oi, Leonardo! Aqui é a Ana, como va',
-      time: '22h',
-      unread: true
+    onChatUpdate: (chatUpdate) => {
+      console.log('💬 Atualização de chat:', chatUpdate);
+      // Recarregar chats se necessário
+      if (selectedInstance?.token) {
+        loadChats();
+      }
     },
-    {
-      id: '3',
-      name: 'Luiza',
-      message: 'Imagem',
-      time: '22h',
-      unread: false,
-      hasImage: true
+    onPresenceUpdate: (presence) => {
+      console.log('👤 Atualização de presença:', presence);
+      // Atualizar status online/offline dos contatos
     },
-    {
-      id: '4',
-      name: 'Larissa',
-      message: 'Imagem',
-      time: '23h',
-      unread: false,
-      hasImage: true
+    onTyping: (typing) => {
+      console.log('⌨️ Digitando:', typing);
+      // Mostrar indicador de "digitando"
     }
-  ];
+  });
 
-  const filteredChats = chats.filter(chat => 
-    chat.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    chat.message.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  // Auto-scroll para última mensagem
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
+
+  // Abrir modal de instância automaticamente se não houver instância selecionada
+  useEffect(() => {
+    if (!selectedInstance) {
+      setShowInstanceModal(true);
+    }
+  }, [selectedInstance]);
+
+  // Carregar chats quando instância for selecionada
+  useEffect(() => {
+    if (selectedInstance?.token) {
+      loadChats();
+      // Configurar atualização automática a cada 30 segundos
+      const interval = setInterval(loadChats, 30000);
+      return () => clearInterval(interval);
+    }
+  }, [selectedInstance]);
+
+  const loadChats = async () => {
+    if (!selectedInstance?.token) return;
+
+    try {
+      setLoading(true);
+      console.log('🔍 CARREGANDO CHATS - DIAGNÓSTICO COMPLETO');
+      console.log('🔍 Instância selecionada:', selectedInstance.name);
+      const instanceToken = selectedInstance.token;
+      console.log('🔍 Token:', instanceToken.substring(0, 10) + '...');
+      
+      // Diagnóstico da URL base
+      const currentServer = getCurrentServerConfig();
+      console.log('🔍 Servidor atual configurado:', {
+        url: currentServer?.url,
+        isDefault: currentServer?.url === 'https://uazapi.dev'
+      });
+      
+      // Buscar conversas reais da API
+      const apiChats = await uazapiService.searchChats(instanceToken, {
+        limit: 50,
+        includeLastMessage: true
+      });
+
+      console.log('📱 Chats carregados da API:', apiChats.length);
+
+      if (apiChats.length === 0) {
+        console.log('⚠️ Nenhuma conversa encontrada na API');
+        setChats([]);
+        return;
+      }
+
+      // Usar dados REAIS da API, não fictícios
+      const extendedChats: ExtendedChat[] = apiChats.map(chat => {
+        // Determinar status baseado em dados reais ou padrão
+        let status: 'unassigned' | 'assigned' | 'closed' = 'unassigned';
+        if (chat.unreadCount > 0) {
+          status = 'unassigned'; // Se tem mensagens não lidas, não está atribuído
+        } else {
+          status = 'assigned'; // Se não tem mensagens pendentes, pode estar atribuído
+        }
+
+        return {
+          ...chat,
+          status,
+          agent: undefined, // Sem agente atribuído por padrão
+          // Se a API não retornou lastMessage, criar uma baseada no timestamp
+          lastMessage: chat.lastMessage ? {
+            id: chat.lastMessage.id,
+            chatId: chat.lastMessage.chatId,
+            content: chat.lastMessage.body || chat.lastMessage.type || '[Mídia]',
+            timestamp: chat.lastMessage.timestamp,
+            fromMe: chat.lastMessage.fromMe,
+            type: chat.lastMessage.type as 'text' | 'image' | 'audio' | 'document',
+            status: chat.lastMessage.fromMe ? 'delivered' : undefined,
+            author: chat.lastMessage.author || chat.lastMessage.pushName,
+            mediaUrl: chat.lastMessage.mediaUrl,
+            quotedMsg: chat.lastMessage.quotedMsg
+          } : {
+            id: `${chat.id}_last`,
+            chatId: chat.id,
+            content: 'Sem mensagens recentes',
+            timestamp: chat.lastMessageTimestamp || Date.now(),
+            fromMe: false,
+            type: 'text' as const,
+            status: undefined
+          }
+        };
+      });
+
+      // Ordenar por timestamp da última mensagem (mais recentes primeiro)
+      extendedChats.sort((a, b) => {
+        const timestampA = a.lastMessage?.timestamp || a.lastMessageTimestamp || 0;
+        const timestampB = b.lastMessage?.timestamp || b.lastMessageTimestamp || 0;
+        return timestampB - timestampA;
+      });
+
+      console.log('✅ Chats processados e ordenados:', extendedChats.length);
+      if (extendedChats.length > 0) {
+        console.log('📨 Primeiro chat (exemplo):', {
+          name: extendedChats[0].name,
+          id: extendedChats[0].id.substring(0, 10) + '...',
+          lastMessage: extendedChats[0].lastMessage?.content?.substring(0, 50) + '...',
+          timestamp: new Date(extendedChats[0].lastMessage?.timestamp || 0).toLocaleString()
+        });
+      }
+
+      setChats(extendedChats);
+      
+      // Se não há chat selecionado e temos chats, selecionar o primeiro
+      if (!selectedChat && extendedChats.length > 0) {
+        handleSelectChat(extendedChats[0]);
+      }
+      
+    } catch (error) {
+      console.error('❌ Erro ao carregar chats:', error);
+      setChats([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadMessages = async (chat: ExtendedChat) => {
+    if (!selectedInstance?.token) return;
+
+    try {
+      setLoadingMessages(true);
+      console.log('💬 Carregando mensagens do chat:', chat.name, 'ID:', chat.id);
+
+      // Buscar mensagens reais da API
+      const instanceToken = selectedInstance.token;
+      const apiMessages = await uazapiService.searchMessages(instanceToken, {
+        chatid: chat.id,
+        limit: 50
+      });
+
+      console.log('📨 Mensagens carregadas da API:', apiMessages.length);
+
+      if (apiMessages.length === 0) {
+        console.log('⚠️ Nenhuma mensagem encontrada para o chat:', chat.name);
+        // Mostrar mensagem explicativa se não houver mensagens
+        const placeholderMessage: ChatMessage = {
+          id: 'placeholder_' + Date.now(),
+          chatId: chat.id,
+          content: 'Esta conversa ainda não possui mensagens ou as mensagens não puderam ser carregadas.',
+          timestamp: Date.now(),
+          fromMe: false,
+          type: 'text',
+          author: 'Sistema'
+        };
+        setMessages([placeholderMessage]);
+        return;
+      }
+
+      // Mapear mensagens da API para formato local
+      const chatMessages: ChatMessage[] = apiMessages.map(msg => {
+        console.log('🔄 Processando mensagem da API:', {
+          id: msg.id,
+          type: msg.type,
+          bodyType: typeof msg.body,
+          hasMediaUrl: !!msg.mediaUrl,
+          body: msg.body
+        });
+        
+        // Tratar msg.body de forma segura e determinar o tipo correto
+        let content = '';
+        let messageType = msg.type || 'text';
+        let mediaUrl = msg.mediaUrl;
+        
+        if (typeof msg.body === 'string') {
+          // Mensagem de texto normal
+          content = msg.body;
+          messageType = 'text';
+        } else if (typeof msg.body === 'object' && msg.body !== null) {
+          // Mensagem de mídia - msg.body contém metadados da mídia
+          const mediaObj = msg.body as any;
+          
+          console.log('📎 Processando mídia:', {
+            messageId: msg.id,
+            mediaObj: mediaObj,
+            originalType: msg.type,
+            hasCaption: !!mediaObj.caption,
+            hasFileName: !!mediaObj.fileName,
+            hasMimetype: !!mediaObj.mimetype
+          });
+          
+          // Determinar tipo baseado no mimetype se disponível
+          if (mediaObj.mimetype) {
+            const mimetype = String(mediaObj.mimetype);
+            if (mimetype.startsWith('image/')) {
+              messageType = 'image';
+            } else if (mimetype.startsWith('video/')) {
+              messageType = 'video';
+            } else if (mimetype.startsWith('audio/')) {
+              // Verificar se é PTT (push-to-talk) ou áudio normal
+              messageType = mediaObj.isPtt || msg.type === 'ptt' ? 'ptt' : 'audio';
+            } else {
+              messageType = 'document';
+            }
+          } else if (msg.type) {
+            // Usar o tipo original se não há mimetype
+            messageType = msg.type;
+          }
+          
+          // Definir conteúdo baseado no que está disponível
+          if (mediaObj.caption) {
+            content = String(mediaObj.caption);
+          } else if (mediaObj.fileName) {
+            content = String(mediaObj.fileName);
+          } else {
+            // Conteúdo padrão baseado no tipo
+            switch (messageType) {
+              case 'image': content = 'Imagem'; break;
+              case 'video': content = 'Vídeo'; break;
+              case 'audio': content = 'Áudio'; break;
+              case 'ptt': content = 'Mensagem de voz'; break;
+              case 'document': content = 'Documento'; break;
+              default: content = 'Mídia';
+            }
+          }
+          
+          // Garantir que temos mediaUrl para mídias
+          if (!mediaUrl && mediaObj.url) {
+            mediaUrl = mediaObj.url;
+          }
+          
+        } else {
+          // Fallback para outros casos
+          content = msg.type || 'Mensagem';
+          messageType = msg.type || 'text';
+        }
+
+        console.log('✅ Mensagem processada:', {
+          id: msg.id,
+          finalType: messageType,
+          finalContent: content.substring(0, 50) + '...',
+          hasMediaUrl: !!mediaUrl
+        });
+
+        // Processar mensagem citada se existir - verificar diferentes campos
+        let processedQuotedMsg = null;
+        
+        // Verificar todos os campos possíveis onde mensagens citadas podem estar
+        const msgAny = msg as any; // Cast para evitar erros TypeScript
+        const quotedSource = msg.quotedMsg || 
+                           msgAny.quoted || 
+                           msgAny.quotedMessage || 
+                           msgAny.contextInfo?.quotedMessage ||
+                           msgAny.message?.extendedTextMessage?.contextInfo?.quotedMessage ||
+                           msgAny.key?.contextInfo?.quotedMessage;
+        
+        console.log('🔍 DEBUG MENSAGEM CITADA - Verificando campos:', {
+          msgId: msg.id,
+          hasQuotedMsg: !!msg.quotedMsg,
+          hasQuoted: !!msgAny.quoted,
+          hasQuotedMessage: !!msgAny.quotedMessage,
+          hasContextInfo: !!msgAny.contextInfo,
+          contextInfoKeys: msgAny.contextInfo ? Object.keys(msgAny.contextInfo) : null,
+          quotedInContextInfo: !!(msgAny.contextInfo?.quotedMessage),
+          fullMsg: msg // Log completo para debug
+        });
+        
+        if (quotedSource) {
+          console.log('📋 ENCONTROU mensagem citada! Processando:', quotedSource);
+          
+          // A mensagem citada pode estar em diferentes estruturas
+          const quotedData = quotedSource.quotedMessage || quotedSource;
+          
+          processedQuotedMsg = {
+            ...quotedData,
+            // Garantir que temos os campos básicos
+            body: quotedData.body || quotedData.text || quotedData.conversation,
+            type: quotedData.type || 'text',
+            pushName: quotedData.pushName || quotedData.participant || quotedData.author,
+            // Preservar outros campos importantes
+            id: quotedData.id || quotedData.messageId,
+            timestamp: quotedData.timestamp || quotedData.messageTimestamp
+          };
+          
+          console.log('✅ Mensagem citada processada:', processedQuotedMsg);
+        } else {
+          console.log('❌ Nenhuma mensagem citada encontrada para:', msg.id);
+          
+          // Verificar se há estrutura de mensagem citada enterrada no objeto
+          if (Object.keys(msgAny).length > 5) {
+            console.log('🔍 Mensagem com muitos campos - pode ter citação enterrada:', Object.keys(msgAny));
+          }
+        }
+
+        return {
+          id: msg.id,
+          chatId: msg.chatId,
+          content,
+          timestamp: msg.timestamp,
+          fromMe: msg.fromMe,
+          type: messageType as 'text' | 'image' | 'video' | 'audio' | 'ptt' | 'document',
+          status: msg.fromMe ? 'delivered' : undefined,
+          author: msg.author || msg.pushName || (msg.fromMe ? 'Você' : chat.name),
+          mediaUrl: mediaUrl,
+          quotedMsg: processedQuotedMsg
+        };
+      });
+
+      // Ordenar mensagens por timestamp
+      chatMessages.sort((a, b) => a.timestamp - b.timestamp);
+
+      console.log('✅ Mensagens processadas:', chatMessages.length);
+      
+      // Debug de mensagens citadas
+      const quotedMessagesCount = chatMessages.filter(msg => msg.quotedMsg).length;
+      console.log('💬 TOTAL de mensagens com citações encontradas:', quotedMessagesCount);
+      
+      if (quotedMessagesCount > 0) {
+        const quotedMessages = chatMessages.filter(msg => msg.quotedMsg);
+        console.log('📋 Exemplos de mensagens citadas:', quotedMessages.slice(0, 2));
+        console.log('🎨 Essas mensagens deverão mostrar o visual de resposta na interface!');
+      } else {
+        console.log('⚠️ Nenhuma mensagem com citação encontrada - verifique se a API está enviando quotedMsg');
+      }
+      
+      setMessages(chatMessages);
+      
+    } catch (error) {
+      console.error('❌ Erro ao carregar mensagens:', error);
+      toast.error('Erro ao carregar mensagens da conversa');
+      
+      // Mostrar mensagem de erro
+      const errorMessage: ChatMessage = {
+        id: 'error_' + Date.now(),
+        chatId: chat.id,
+        content: 'Erro ao carregar mensagens desta conversa. Tente novamente mais tarde.',
+        timestamp: Date.now(),
+        fromMe: false,
+        type: 'text',
+        author: 'Sistema'
+      };
+      setMessages([errorMessage]);
+    } finally {
+      setLoadingMessages(false);
+    }
+  };
+
+  const handleSelectChat = async (chat: ExtendedChat) => {
+    console.log('🎯 CHAT SELECIONADO:', chat.name);
+    setSelectedChat(chat);
+    
+    // Marcar chat como lido ao selecionar (funcionalidade opcional)
+    if (selectedInstance && selectedInstance.token && chat.id) {
+      try {
+        console.log('📖 Tentando marcar chat como lido:', {
+          chatId: chat.id,
+          chatName: chat.name,
+          isGroup: chat.isGroup
+        });
+        
+        // TEMPORARIAMENTE DESABILITADO: markChatAsRead devido a erro 500 da API
+        // Executar em background sem aguardar para não bloquear o fluxo
+        const token = selectedInstance.token;
+        const chatId = chat.id;
+        if (token && chatId && typeof token === 'string' && typeof chatId === 'string') {
+          // FUNÇÃO TEMPORARIAMENTE DESABILITADA DEVIDO A ERRO 500 NO SERVIDOR UAZAPI
+          console.log('⚠️ markChatAsRead TEMPORARIAMENTE DESABILITADO devido a erro 500 da API');
+          console.log('📖 Chat selecionado:', { chatId, chatName: chat.name, isGroup: chat.isGroup });
+          
+          // TODO: Reabilitar quando o servidor UAZAPI corrigir o erro 500
+          /*
+          uazapiService.markChatAsRead(token, chatId, true)
+            .then((result) => {
+              if (result) {
+                console.log('✅ Chat marcado como lido com sucesso');
+              } else {
+                console.warn('⚠️ Falha ao marcar chat como lido');
+              }
+            })
+            .catch((error) => {
+              console.warn('⚠️ Erro ao marcar chat como lido (não crítico):', error.message);
+              // Erro não crítico - não mostrar para o usuário
+            });
+          */
+        }
+        
+      } catch (error) {
+        console.warn('⚠️ Erro ao iniciar marcação como lido:', error);
+        // Continuar mesmo se der erro
+      }
+    }
+    
+    // Atualizar contagem de não lidas localmente
+    setChats(prev => prev.map(c => 
+      c.id === chat.id ? { ...c, unreadCount: 0 } : c
+    ));
+    
+    // Carregar mensagens do chat
+    loadMessages(chat);
+  };
+
+  const handleSendMessage = async () => {
+    if (!newMessage.trim() || !selectedChat || !selectedInstance?.token) return;
+
+    const messageContent = newMessage.trim();
+    setNewMessage('');
+    setSendingMessage(true);
+
+    // Adicionar mensagem otimisticamente
+    const tempMessage: ChatMessage = {
+      id: Date.now().toString(),
+      chatId: selectedChat.id,
+      content: messageContent,
+      timestamp: Date.now(),
+      fromMe: true,
+      type: 'text',
+      status: 'sending'
+    };
+
+    setMessages(prev => [...prev, tempMessage]);
+
+    try {
+      console.log('📤 Enviando mensagem para:', selectedChat.name);
+      
+      // Enviar mensagem via API
+      const instanceToken = selectedInstance.token;
+      await uazapiService.sendSimpleMessage(instanceToken, {
+        number: selectedChat.id,
+        message: messageContent,
+        type: 'text'
+      });
+
+      // Atualizar status da mensagem
+      setMessages(prev => prev.map(msg => 
+        msg.id === tempMessage.id 
+          ? { ...msg, status: 'sent' as const }
+          : msg
+      ));
+
+      console.log('✅ Mensagem enviada com sucesso');
+      toast.success('Mensagem enviada');
+
+      // Focar input novamente
+      messageInputRef.current?.focus();
+
+    } catch (error) {
+      console.error('❌ Erro ao enviar mensagem:', error);
+      toast.error('Erro ao enviar mensagem');
+      
+      // Remover mensagem em caso de erro
+      setMessages(prev => prev.filter(msg => msg.id !== tempMessage.id));
+    } finally {
+      setSendingMessage(false);
+    }
+  };
+
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSendMessage();
+    }
+  };
+
+  const handleSelectTemplate = (template: any) => {
+    setNewMessage(template.content);
+    setShowTemplatesModal(false);
+    // Focar no input após aplicar template
+    setTimeout(() => {
+      messageInputRef.current?.focus();
+    }, 100);
+  };
+
+  const handleAssignAgent = (agentId: string, agentName: string) => {
+    if (!selectedChat) return;
+    
+    // Atualizar o chat selecionado
+    setSelectedChat(prev => prev ? {
+      ...prev,
+      agent: agentName || undefined,
+      status: agentName ? 'assigned' : 'unassigned'
+    } : null);
+    
+    // Atualizar a lista de chats
+    setChats(prev => prev.map(chat => 
+      chat.id === selectedChat.id 
+        ? { 
+            ...chat, 
+            agent: agentName || undefined,
+            status: agentName ? 'assigned' : 'unassigned'
+          }
+        : chat
+    ));
+    
+    setShowAssignModal(false);
+  };
+
+  const formatTime = (timestamp: number) => {
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diffHours = (now.getTime() - date.getTime()) / (1000 * 60 * 60);
+
+    if (diffHours < 24) {
+      return date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    } else {
+      return date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+    }
+  };
+
+  const getMessageIcon = (status?: string) => {
+    switch (status) {
+      case 'sending':
+        return <Clock className="h-3 w-3 text-gray-400" />;
+      case 'sent':
+        return <Check className="h-3 w-3 text-gray-400" />;
+      case 'delivered':
+        return <CheckCheck className="h-3 w-3 text-gray-400" />;
+      case 'read':
+        return <CheckCheck className="h-3 w-3 text-blue-500" />;
+      default:
+        return null;
+    }
+  };
+
+  // Função para renderizar mensagem citada/de resposta
+  const renderQuotedMessage = (quotedMsg: any, isFromMe: boolean) => {
+    if (!quotedMsg) {
+      console.log('❌ renderQuotedMessage chamada com quotedMsg vazio');
+      return null;
+    }
+
+    console.log('💬 ✅ RENDERIZANDO MENSAGEM CITADA!', {
+      quotedMsg,
+      isFromMe,
+      hasBody: !!quotedMsg.body,
+      hasPushName: !!quotedMsg.pushName
+    });
+
+    // Extrair informações da mensagem citada
+    const quotedContent = getQuotedMessageContent(quotedMsg);
+    const quotedAuthor = quotedMsg.pushName || quotedMsg.participant || quotedMsg.author || 'Usuário';
+    
+    return (
+      <div className={cn(
+        "mb-2 p-3 rounded-lg border-l-4 relative",
+        isFromMe 
+          ? "bg-white bg-opacity-20 border-white border-opacity-50" 
+          : "bg-gray-200 border-primary-500"
+      )}>
+        {/* Ícone de resposta */}
+        <div className={cn(
+          "absolute -left-1 top-2 w-3 h-3 rounded-full border-2",
+          isFromMe 
+            ? "bg-white border-white" 
+            : "bg-primary-500 border-primary-500"
+        )}>
+          <div className={cn(
+            "w-1 h-1 rounded-full absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2",
+            isFromMe ? "bg-primary-600" : "bg-white"
+          )} />
+        </div>
+        
+        <div className={cn(
+          "text-xs font-medium mb-1 flex items-center gap-1",
+          isFromMe ? "text-white text-opacity-80" : "text-primary-600"
+        )}>
+          <span className="text-xs">↩️</span>
+          <span className="truncate">{quotedAuthor}</span>
+        </div>
+        <div className={cn(
+          "text-sm break-words italic",
+          isFromMe ? "text-white text-opacity-90" : "text-gray-700"
+        )}
+        style={{
+          display: '-webkit-box',
+          WebkitLineClamp: 3,
+          WebkitBoxOrient: 'vertical',
+          overflow: 'hidden'
+        }}>
+          {quotedContent}
+        </div>
+      </div>
+    );
+  };
+
+  // Função para extrair conteúdo da mensagem citada
+  const getQuotedMessageContent = (quotedMsg: any): string => {
+    // Verificar diferentes estruturas possíveis da mensagem citada
+    if (typeof quotedMsg === 'string') {
+      return quotedMsg;
+    }
+
+    if (quotedMsg.body) {
+      if (typeof quotedMsg.body === 'string') {
+        return quotedMsg.body;
+      }
+      
+      // Se body é um objeto (mídia), extrair informações relevantes
+      if (typeof quotedMsg.body === 'object' && quotedMsg.body !== null) {
+        const mediaObj = quotedMsg.body;
+        
+        if (mediaObj.caption) {
+          return `${getMediaIcon(quotedMsg.type || 'document')} ${mediaObj.caption}`;
+        }
+        
+        if (mediaObj.fileName) {
+          return `${getMediaIcon(quotedMsg.type || 'document')} ${mediaObj.fileName}`;
+        }
+        
+        return `${getMediaIcon(quotedMsg.type || 'document')} ${getMediaTypeName(quotedMsg.type)}`;
+      }
+    }
+
+    // Tentar outros campos comuns
+    if (quotedMsg.conversation) {
+      return quotedMsg.conversation;
+    }
+
+    if (quotedMsg.text) {
+      return quotedMsg.text;
+    }
+
+    if (quotedMsg.content) {
+      return quotedMsg.content;
+    }
+
+    // Se tem tipo, mostrar tipo de mídia
+    if (quotedMsg.type && quotedMsg.type !== 'text') {
+      return `${getMediaIcon(quotedMsg.type)} ${getMediaTypeName(quotedMsg.type)}`;
+    }
+
+    return 'Mensagem';
+  };
+
+  // Função auxiliar para obter ícone da mídia
+  const getMediaIcon = (type: string): string => {
+    switch (type?.toLowerCase()) {
+      case 'image': 
+      case 'imageMessage': return '🖼️';
+      case 'video': 
+      case 'videoMessage': return '🎥';
+      case 'audio': 
+      case 'audioMessage':
+      case 'ptt': 
+      case 'pttMessage': return '🎵';
+      case 'document': 
+      case 'documentMessage': return '📄';
+      case 'sticker': 
+      case 'stickerMessage': return '🔖';
+      case 'location': 
+      case 'locationMessage': return '📍';
+      case 'contact': 
+      case 'contactMessage': return '👤';
+      default: return '📎';
+    }
+  };
+
+  // Função auxiliar para obter nome do tipo de mídia
+  const getMediaTypeName = (type: string): string => {
+    switch (type) {
+      case 'image': return 'Imagem';
+      case 'video': return 'Vídeo';
+      case 'audio': return 'Áudio';
+      case 'ptt': return 'Mensagem de voz';
+      case 'document': return 'Documento';
+      case 'sticker': return 'Figurinha';
+      case 'location': return 'Localização';
+      case 'contact': return 'Contato';
+      default: return 'Mídia';
+    }
+  };
+
+  // Função para renderizar conteúdo de mensagens com suporte a mídia
+  const renderMessageContent = (message: ChatMessage) => {
+    // Debug da mensagem sendo renderizada
+    console.log('🎨 Renderizando conteúdo da mensagem:', {
+      messageId: message.id,
+      type: message.type,
+      hasContent: !!message.content,
+      contentType: typeof message.content,
+      hasMediaUrl: !!message.mediaUrl,
+      fromMe: message.fromMe
+    });
+    
+    // Verificar se é uma mensagem de mídia
+    const isMediaMessage = ['image', 'video', 'audio', 'ptt', 'document'].includes(message.type);
+    
+    console.log('🔍 Verificação de mídia:', {
+      messageType: message.type,
+      isMediaMessage: isMediaMessage,
+      hasInstanceToken: !!selectedInstance?.token,
+      willUseMediaRenderer: isMediaMessage && !!selectedInstance?.token
+    });
+    
+    // Se é mídia E temos token da instância, usar MediaRenderer
+    if (isMediaMessage && selectedInstance?.token) {
+      console.log('🎬 Usando MediaRenderer para mensagem:', message.id);
+      const instanceToken = selectedInstance.token;
+      // Renderizar mídia usando o MediaRenderer
+      return (
+        <MediaRenderer
+          message={{
+            id: message.id,
+            type: message.type,
+            content: message.content,
+            mediaUrl: message.mediaUrl,
+            fromMe: message.fromMe
+          }}
+          instanceToken={instanceToken}
+        />
+      );
+    }
+    
+    // Para mensagens de texto, tratar conteúdo de forma segura
+    let content = message.content;
+    
+    // Se content é um objeto, tentar extrair texto
+    if (typeof content === 'object' && content !== null) {
+      console.warn('⚠️ Objeto detectado em message.content:', content);
+      
+      const mediaObj = content as any; // Cast seguro para acessar propriedades dinâmicas
+      
+      // Tentar extrair campos de texto comuns
+      if (mediaObj.caption) {
+        return String(mediaObj.caption);
+      }
+      if (mediaObj.fileName) {
+        return `📁 ${mediaObj.fileName}`;
+      }
+      if (mediaObj.title) {
+        return String(mediaObj.title);
+      }
+      
+      // Para diferentes tipos de mídia, mostrar indicadores apropriados
+      if (mediaObj.mimetype) {
+        const mimetype = String(mediaObj.mimetype);
+        if (mimetype.startsWith('image/')) {
+          return '🖼️ Imagem';
+        } else if (mimetype.startsWith('video/')) {
+          return '🎥 Vídeo';
+        } else if (mimetype.startsWith('audio/')) {
+          return '🎵 Áudio';
+        } else {
+          return '📎 Arquivo';
+        }
+      }
+      
+      // Se tudo falhar, mostrar tipo de mensagem genérico
+      return `📎 ${message.type || 'Mídia'}`;
+    }
+    
+    // Se já é string ou pode ser convertido, retornar como string
+    if (content !== null && content !== undefined) {
+      return String(content);
+    }
+    
+    // Fallback final
+    return 'Mensagem sem conteúdo';
+  };
+
+  const filteredChats = chats.filter(chat => {
+    const matchesSearch = chat.name.toLowerCase().includes(searchTerm.toLowerCase());
+    
+    const matchesFilter = 
+      selectedFilter === 'all' ||
+      (selectedFilter === 'mine' && chat.agent) ||
+      (selectedFilter === 'unassigned' && chat.status === 'unassigned');
+    
+    return matchesSearch && matchesFilter;
+  });
+
+  const unreadCount = chats.filter(chat => chat.unreadCount > 0).length;
+
+  // Método de debug para console do navegador
+  useEffect(() => {
+    // Expor método de debug no window para acesso via console
+    (window as any).debugConversas = async (token?: string) => {
+      const instanceToken = token || selectedInstance?.token;
+      if (!instanceToken) {
+        console.error('❌ Token não fornecido. Use: debugConversas("SEU_TOKEN_AQUI")');
+        return;
+      }
+
+      console.log('🔧 ===== DEBUG DE CONVERSAS CONECTEZAP =====');
+      console.log('🔧 Token:', instanceToken.substring(0, 10) + '...');
+      console.log('🔧 Instância selecionada:', selectedInstance?.name || 'Nenhuma');
+      console.log('🔧 URL do servidor:', getCurrentServerConfig()?.url || 'Não definido');
+      
+      try {
+        // 1. Testar conectividade
+        console.log('\n🔍 1. TESTANDO CONECTIVIDADE DA INSTÂNCIA...');
+        const connectivity = await uazapiService.testInstanceConnection(instanceToken);
+        console.log('📊 Resultado:', connectivity);
+
+        // 2. Buscar conversas
+        console.log('\n🔍 2. BUSCANDO CONVERSAS...');
+        const conversations = await uazapiService.searchChats(instanceToken, { limit: 10 });
+        console.log('📱 Conversas encontradas:', conversations.length);
+        
+        if (conversations.length > 0) {
+          console.log('📋 Primeira conversa:', conversations[0]);
+          
+          // 3. Testar mensagens da primeira conversa
+          console.log('\n🔍 3. TESTANDO MENSAGENS DA PRIMEIRA CONVERSA...');
+          const messages = await uazapiService.searchMessages(instanceToken, {
+            chatid: conversations[0].id,
+            limit: 5
+          });
+          console.log('💬 Mensagens encontradas:', messages.length);
+          if (messages.length > 0) {
+            console.log('📨 Primeira mensagem:', messages[0]);
+          }
+        }
+
+        // 4. Diagnóstico final
+        console.log('\n✅ DIAGNÓSTICO CONCLUÍDO');
+        console.log('📊 RESUMO:');
+        console.log('- Instância conectada:', connectivity.isConnected);
+        console.log('- Status:', connectivity.status);
+        console.log('- Conversas encontradas:', conversations.length);
+        console.log('- Possui contatos:', connectivity.hasContacts);
+        console.log('- Possui grupos:', connectivity.hasGroups);
+        
+        if (conversations.length === 0) {
+          console.log('\n⚠️ POSSÍVEIS SOLUÇÕES:');
+          console.log('1. Verifique se a instância está conectada');
+          console.log('2. Verifique se há conversas no WhatsApp');
+          console.log('3. Teste enviar uma mensagem primeiro');
+          console.log('4. Verifique o token da instância');
+        }
+
+      } catch (error) {
+        console.error('❌ ERRO no debug:', error);
+      }
+    };
+
+    console.log('🔧 Debug disponível via console: debugConversas("SEU_TOKEN")');
+    
+    return () => {
+      delete (window as any).debugConversas;
+    };
+  }, [selectedInstance]);
+
+  // Função para enviar múltiplas mídias
+  const handleSendMedia = async (mediaFiles: Array<{
+    id: string;
+    file: File;
+    type: 'image' | 'video' | 'audio' | 'document';
+    caption?: string;
+  }>) => {
+    if (!selectedChat || !selectedInstance || !selectedChat.id) {
+      throw new Error('Chat ou instância não selecionados');
+    }
+
+    try {
+      console.log('🎬 INICIANDO ENVIO DE MÚLTIPLAS MÍDIAS:', mediaFiles.length);
+      
+      // Usar método específico para múltiplas mídias
+      if (!selectedInstance.token) {
+        throw new Error('Token da instância não disponível');
+      }
+      
+      await uazapiService.sendMultipleMedia(
+        selectedInstance.token, 
+        selectedChat.id!, 
+        mediaFiles,
+        (current, total, currentFile) => {
+          // Callback de progresso - pode ser usado para mostrar progresso no modal
+          console.log(`📤 Enviando ${current}/${total}: ${currentFile}`);
+        }
+      );
+
+      // Recarregar mensagens para mostrar as mídias enviadas
+      await loadMessages(selectedChat);
+      
+      toast.success(`${mediaFiles.length} mídia(s) enviada(s) com sucesso!`);
+      
+    } catch (error: any) {
+      console.error('❌ ERRO AO ENVIAR MÍDIAS:', error);
+      toast.error(error.message || 'Erro ao enviar mídias');
+      throw error; // Re-throw para o modal tratar
+    }
+  };
 
   return (
-    <div className="h-[calc(100vh-7rem)] flex">
+    <div className="h-[calc(100vh-7rem)] flex bg-gray-50">
       {/* Left Sidebar - Chat List */}
-      <div className="w-96 border-r border-gray-200 bg-white flex flex-col">
+      <div className="w-96 bg-white border-r border-gray-200 flex flex-col">
         {/* Header */}
-        <div className="p-4 border-b border-gray-200">
-          <button className="flex items-center gap-2 w-full bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg transition-colors">
+        <div className="p-4 border-b border-gray-200 bg-white">
+          <div className="flex items-center justify-between mb-4">
+            <h1 className="text-lg font-semibold text-gray-900">Multiatendimento</h1>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowInstanceModal(true)}
+                className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
+                title="Selecionar Instância"
+              >
+                <Smartphone className="h-5 w-5" />
+              </button>
+              <button
+                onClick={loadChats}
+                disabled={loading}
+                className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 disabled:opacity-50"
+                title="Atualizar"
+              >
+                <RefreshCw className={cn("h-5 w-5", loading && "animate-spin")} />
+              </button>
+            </div>
+          </div>
+
+          {selectedInstance ? (
+            <div className="space-y-2 mb-4">
+              <div className="flex items-center gap-2">
+                <div className={cn(
+                  "w-2 h-2 rounded-full",
+                  selectedInstance.status === 'connected' ? "bg-green-500" : "bg-red-500"
+                )} />
+                <span className="text-sm text-gray-600">{selectedInstance.name}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                {realtimeConnected ? (
+                  <Wifi className="h-3 w-3 text-green-500" />
+                ) : (
+                  <WifiOff className="h-3 w-3 text-red-500" />
+                )}
+                <span className="text-xs text-gray-500">
+                  {realtimeConnected ? 'Tempo real ativo' : 'Tempo real desconectado'}
+                </span>
+              </div>
+            </div>
+          ) : (
+            <div className="text-sm text-gray-500 mb-4">Nenhuma instância selecionada</div>
+          )}
+
+          <button 
+            onClick={() => toast('Funcionalidade em desenvolvimento')}
+            className="flex items-center gap-2 w-full bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg transition-colors"
+          >
             <Plus className="h-5 w-5" />
             Nova conversa
           </button>
@@ -74,7 +1070,7 @@ export function ChatPage() {
             <MessageSquare className="h-5 w-5" />
             <span className="font-medium">Não lidas</span>
             <span className="bg-primary-100 text-primary-600 px-2 py-0.5 rounded-full text-sm">
-              {chats.filter(chat => chat.unread).length}
+              {unreadCount}
             </span>
           </div>
         </div>
@@ -85,7 +1081,7 @@ export function ChatPage() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
             <input
               type="text"
-              placeholder="Pesquisar..."
+              placeholder="Pesquisar conversas..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full pl-10 pr-4 py-2 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
@@ -97,7 +1093,7 @@ export function ChatPage() {
             <button
               onClick={() => setSelectedFilter('all')}
               className={cn(
-                "flex-1 px-4 py-1.5 text-sm font-medium rounded-md",
+                "flex-1 px-4 py-1.5 text-sm font-medium rounded-md transition-colors",
                 selectedFilter === 'all' ? "bg-white text-primary-600 shadow" : "text-gray-500 hover:text-gray-900"
               )}
             >
@@ -106,7 +1102,7 @@ export function ChatPage() {
             <button
               onClick={() => setSelectedFilter('mine')}
               className={cn(
-                "flex-1 px-4 py-1.5 text-sm font-medium rounded-md",
+                "flex-1 px-4 py-1.5 text-sm font-medium rounded-md transition-colors",
                 selectedFilter === 'mine' ? "bg-white text-primary-600 shadow" : "text-gray-500 hover:text-gray-900"
               )}
             >
@@ -115,7 +1111,7 @@ export function ChatPage() {
             <button
               onClick={() => setSelectedFilter('unassigned')}
               className={cn(
-                "flex-1 px-4 py-1.5 text-sm font-medium rounded-md",
+                "flex-1 px-4 py-1.5 text-sm font-medium rounded-md transition-colors",
                 selectedFilter === 'unassigned' ? "bg-white text-primary-600 shadow" : "text-gray-500 hover:text-gray-900"
               )}
             >
@@ -126,58 +1122,393 @@ export function ChatPage() {
 
         {/* Chat List */}
         <div className="flex-1 overflow-y-auto">
-          {filteredChats.map((chat) => (
+          {loading ? (
+            <div className="p-8 text-center">
+              <div className="animate-spin h-6 w-6 border-2 border-primary-600 border-t-transparent rounded-full mx-auto mb-2" />
+              <p className="text-sm text-gray-500">Carregando conversas...</p>
+            </div>
+          ) : !selectedInstance ? (
+            <div className="p-8 text-center">
+              <Smartphone className="h-8 w-8 text-gray-400 mx-auto mb-2" />
+              <p className="text-sm text-gray-500">Selecione uma instância</p>
+            </div>
+          ) : filteredChats.length === 0 ? (
+            <div className="p-8 text-center space-y-4">
+              <MessageSquare className="h-12 w-12 text-gray-400 mx-auto" />
+              <div>
+                <h3 className="text-lg font-medium text-gray-900 mb-2">
+                  {chats.length === 0 ? 'Nenhuma conversa encontrada' : 'Nenhum resultado para sua busca'}
+                </h3>
+                {chats.length === 0 ? (
+                  <div className="text-sm text-gray-500 space-y-2 max-w-sm mx-auto">
+                    <p>Não foram encontradas conversas para esta instância.</p>
+                    <div className="text-left">
+                      <p className="font-medium">Possíveis causas:</p>
+                      <ul className="list-disc list-inside space-y-1 text-xs">
+                        <li>Instância não está conectada</li>
+                        <li>Não há conversas no WhatsApp</li>
+                        <li>Token da instância inválido</li>
+                        <li>Problemas de conectividade</li>
+                      </ul>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-500">Tente ajustar os filtros ou termo de busca</p>
+                )}
+              </div>
+              {chats.length === 0 && selectedInstance && (
+                <div className="space-y-3">
+                  <div className="space-y-2">
+                    <button
+                      onClick={loadChats}
+                      disabled={loading}
+                      className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50"
+                    >
+                      {loading ? 'Recarregando...' : 'Tentar novamente'}
+                    </button>
+                    <button
+                      onClick={() => {
+                        console.log('🔧 Debug forçado - adicionando mensagem citada para teste');
+                        if (selectedChat) {
+                          const testMessage: ChatMessage = {
+                            id: 'test_quoted_' + Date.now(),
+                            chatId: selectedChat.id,
+                            content: 'Esta é uma resposta de teste',
+                            timestamp: Date.now(),
+                            fromMe: false,
+                            type: 'text',
+                            author: 'Sistema',
+                            quotedMsg: {
+                              body: 'Mensagem original simulada para teste',
+                              type: 'text',
+                              pushName: 'Rafael Mendes',
+                              id: 'test_original',
+                              timestamp: Date.now() - 60000
+                            }
+                          };
+                          setMessages(prev => [...prev, testMessage]);
+                          console.log('✅ Mensagem de teste com citação adicionada!');
+                        }
+                      }}
+                      className="px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 text-sm"
+                    >
+                      🧪 Testar Citação
+                    </button>
+                  </div>
+                  <button
+                    onClick={() => {
+                      console.log('🔧 Executando debug via botão...');
+                      (window as any).debugConversas?.(selectedInstance?.token);
+                    }}
+                    className="block mx-auto px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 text-sm"
+                  >
+                    🔧 Executar Diagnóstico
+                  </button>
+                  <p className="text-xs text-gray-400">
+                    Ou abra o console (F12) e execute: <code className="bg-gray-100 px-1 rounded">debugConversas()</code>
+                  </p>
+                </div>
+              )}
+            </div>
+          ) : (
+            filteredChats.map((chat) => (
             <div
               key={chat.id}
-              className="p-4 hover:bg-gray-50 cursor-pointer border-b border-gray-200"
+                onClick={() => handleSelectChat(chat)}
+                className={cn(
+                  "p-4 hover:bg-gray-50 cursor-pointer border-b border-gray-100 transition-colors",
+                  selectedChat?.id === chat.id && "bg-primary-50 border-primary-200"
+                )}
             >
               <div className="flex items-center gap-3">
                 <div className="relative">
-                  <div className="h-12 w-12 rounded-full bg-primary-100 flex items-center justify-center">
+                    <div className="h-12 w-12 rounded-full bg-primary-100 flex items-center justify-center flex-shrink-0">
                     <span className="text-primary-600 font-medium">
-                      {chat.name[0].toUpperCase()}
+                        {chat.name[0]?.toUpperCase() || '?'}
                     </span>
                   </div>
-                  {chat.unread && (
-                    <div className="absolute -top-1 -right-1 h-4 w-4 bg-primary-600 rounded-full border-2 border-white" />
-                  )}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between">
-                    <h3 className="font-medium text-gray-900 truncate">{chat.name}</h3>
-                    <span className="text-xs text-gray-500">{chat.time}</span>
+                    {chat.unreadCount > 0 && (
+                      <div className="absolute -top-1 -right-1 h-5 w-5 bg-primary-600 rounded-full flex items-center justify-center">
+                        <span className="text-xs text-white font-medium">
+                          {chat.unreadCount > 9 ? '9+' : chat.unreadCount}
+                        </span>
+                      </div>
+                    )}
                   </div>
-                  <div className="flex items-center gap-1 text-sm text-gray-500">
-                    {chat.hasAudio && (
-                      <div className="flex items-center gap-1">
-                        <span>🎵</span>
-                        <span>Áudio</span>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between mb-1">
+                      <h3 className="font-medium text-gray-900 truncate">{chat.name}</h3>
+                      <span className="text-xs text-gray-500 flex-shrink-0">
+                        {formatTime(chat.lastMessageTimestamp || Date.now())}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm text-gray-500 truncate">
+                        {typeof chat.lastMessage?.content === 'object' 
+                          ? '📎 Mídia' 
+                          : chat.lastMessage?.content || 'Sem mensagens'}
+                      </p>
+                      <div className="flex items-center gap-1 flex-shrink-0">
+                                                 {chat.status === 'unassigned' && (
+                           <div className="w-2 h-2 bg-orange-400 rounded-full" />
+                         )}
+                                                 {chat.agent && (
+                           <User className="h-3 w-3 text-gray-400" />
+                         )}
                       </div>
-                    )}
-                    {chat.hasImage && (
-                      <div className="flex items-center gap-1">
-                        <span>🖼️</span>
-                        <span>Imagem</span>
-                      </div>
-                    )}
-                    {!chat.hasAudio && !chat.hasImage && (
-                      <p className="truncate">{chat.message}</p>
-                    )}
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
-          ))}
+            ))
+          )}
         </div>
       </div>
 
       {/* Right Side - Chat Area */}
-      <div className="flex-1 bg-gray-50 flex items-center justify-center text-gray-500">
+      <div className="flex-1 flex flex-col">
+        {selectedChat ? (
+          <>
+            {/* Chat Header */}
+            <div className="p-4 border-b border-gray-200 bg-white">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-full bg-primary-100 flex items-center justify-center">
+                    <span className="text-primary-600 font-medium">
+                      {selectedChat.name[0]?.toUpperCase() || '?'}
+                    </span>
+                  </div>
+                  <div>
+                    <h2 className="font-semibold text-gray-900">{selectedChat.name}</h2>
+                    <button
+                      onClick={() => setShowAssignModal(true)}
+                      className="text-sm text-gray-500 hover:text-primary-600 transition-colors"
+                    >
+                      {selectedChat.agent ? `Atribuída: ${selectedChat.agent}` : 'Não atribuída - Clique para atribuir'}
+                    </button>
+                  </div>
+                </div>
+                                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => {
+                      console.log('🔧 Debug forçado - adicionando mensagem citada para teste');
+                      if (selectedChat) {
+                        const testMessage: ChatMessage = {
+                          id: 'test_quoted_' + Date.now(),
+                          chatId: selectedChat.id,
+                          content: 'Esta é uma resposta de teste que deveria mostrar a citação',
+                          timestamp: Date.now(),
+                          fromMe: false,
+                          type: 'text',
+                          author: 'Sistema',
+                          quotedMsg: {
+                            body: 'Mensagem original simulada para teste',
+                            type: 'text',
+                            pushName: 'Rafael Mendes',
+                            id: 'test_original',
+                            timestamp: Date.now() - 60000
+                          }
+                        };
+                        setMessages(prev => [...prev, testMessage]);
+                        console.log('✅ Mensagem de teste com citação adicionada!');
+                        
+                        // Scroll para o final
+                        setTimeout(scrollToBottom, 100);
+                      }
+                    }}
+                    className="p-2 text-orange-500 hover:text-orange-600 rounded-lg hover:bg-orange-50"
+                    title="🧪 Testar Mensagem Citada (Debug)"
+                  >
+                    <span className="text-xs">🧪</span>
+                  </button>
+                  <button
+                    onClick={() => setShowNotesPanel(true)}
+                    className="p-2 text-gray-400 hover:text-primary-600 rounded-lg hover:bg-gray-100"
+                    title="Notas internas"
+                  >
+                    <FileText className="h-5 w-5" />
+                  </button>
+                  <button
+                    onClick={() => toast('Funcionalidade em desenvolvimento')}
+                    className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
+                    title="Arquivar"
+                  >
+                    <Archive className="h-5 w-5" />
+                  </button>
+                  <button
+                    onClick={() => toast('Funcionalidade em desenvolvimento')}
+                    className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
+                    title="Mais opções"
+                  >
+                    <MoreVertical className="h-5 w-5" />
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Messages Area */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+              {loadingMessages ? (
+                <div className="text-center py-8">
+                  <div className="animate-spin h-6 w-6 border-2 border-primary-600 border-t-transparent rounded-full mx-auto mb-2" />
+                  <p className="text-sm text-gray-500">Carregando mensagens...</p>
+                </div>
+              ) : messages.length === 0 ? (
+                <div className="text-center py-8">
+                  <MessageSquare className="h-8 w-8 text-gray-400 mx-auto mb-2" />
+                  <p className="text-sm text-gray-500">Nenhuma mensagem ainda</p>
+                </div>
+              ) : (
+                messages.map((message) => (
+                  <div
+                    key={message.id}
+                    className={cn(
+                      "flex",
+                      message.fromMe ? "justify-end" : "justify-start"
+                    )}
+                  >
+                    <div
+                      className={cn(
+                        "max-w-xs lg:max-w-md px-4 py-2 rounded-lg",
+                        message.fromMe
+                          ? "bg-primary-600 text-white rounded-br-sm"
+                          : "bg-gray-100 text-gray-900 rounded-bl-sm"
+                      )}
+                    >
+                      {!message.fromMe && message.author && (
+                        <p className="text-xs text-gray-500 mb-1">{message.author}</p>
+                      )}
+                      
+                      {/* Renderizar mensagem citada se existir */}
+                      {message.quotedMsg && renderQuotedMessage(message.quotedMsg, message.fromMe)}
+                      
+                      {/* Verificar se é mídia para renderizar sem <p> */}
+                      {['image', 'video', 'audio', 'ptt', 'document'].includes(message.type) ? (
+                        <div className="mt-1">
+                          {renderMessageContent(message)}
+                        </div>
+                      ) : (
+                        <p className="break-words">{renderMessageContent(message)}</p>
+                      )}
+                      <div className="flex items-center justify-end gap-1 mt-1">
+                        <span className={cn(
+                          "text-xs",
+                          message.fromMe ? "text-primary-100" : "text-gray-500"
+                        )}>
+                          {formatTime(message.timestamp)}
+                        </span>
+                        {message.fromMe && getMessageIcon(message.status)}
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+              <div ref={messagesEndRef} />
+            </div>
+
+            {/* Message Input */}
+                        <div className="p-4 border-t border-gray-200 bg-white">
+              <div className="flex items-end gap-3">
+                <button
+                  onClick={() => setShowTemplatesModal(true)}
+                  className="p-2 text-gray-400 hover:text-primary-600 rounded-lg hover:bg-gray-100 flex-shrink-0"
+                  title="Templates de mensagem"
+                >
+                  <MessageSquare className="h-5 w-5" />
+                </button>
+                <button 
+                  onClick={() => setShowMediaModal(true)}
+                  className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
+                >
+                  <Paperclip className="h-5 w-5" />
+                </button>
+                <div className="flex-1">
+                  <textarea
+                    ref={messageInputRef}
+                    value={newMessage}
+                    onChange={(e) => setNewMessage(e.target.value)}
+                    onKeyPress={handleKeyPress}
+                    placeholder="Digite sua mensagem..."
+                    className="w-full resize-none rounded-lg border border-gray-200 px-4 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                    rows={1}
+                    style={{ minHeight: '40px', maxHeight: '120px' }}
+                    onInput={(e) => {
+                      const target = e.target as HTMLTextAreaElement;
+                      target.style.height = 'auto';
+                      target.style.height = target.scrollHeight + 'px';
+                    }}
+                  />
+                </div>
+                <button
+                  onClick={handleSendMessage}
+                  disabled={!newMessage.trim() || sendingMessage}
+                  className="p-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0 transition-colors"
+                  title="Enviar mensagem"
+                >
+                  <Send className="h-5 w-5" />
+                </button>
+              </div>
+            </div>
+          </>
+        ) : (
+          <div className="flex-1 flex items-center justify-center text-gray-500">
         <div className="text-center">
           <Phone className="h-12 w-12 mx-auto mb-4 text-gray-400" />
           <p>Selecione uma conversa para começar</p>
         </div>
       </div>
+        )}
+      </div>
+
+      {/* Instance Modal */}
+      {showInstanceModal && (
+        <SelectInstanceModal
+          onSelect={(instance: any) => {
+            setSelectedInstance(instance);
+            setShowInstanceModal(false);
+          }}
+          onClose={() => setShowInstanceModal(false)}
+        />
+      )}
+
+      {/* Templates Modal */}
+      <TemplatesModal 
+        isOpen={showTemplatesModal}
+        onClose={() => setShowTemplatesModal(false)}
+        onSelectTemplate={handleSelectTemplate}
+      />
+
+      {/* Notes Panel */}
+      {selectedChat && (
+        <NotesPanel 
+          chatId={selectedChat.id}
+          isOpen={showNotesPanel}
+          onClose={() => setShowNotesPanel(false)}
+        />
+      )}
+
+      {/* Assign Agent Modal */}
+      {selectedChat && (
+        <AssignAgentModal
+          isOpen={showAssignModal}
+          onClose={() => setShowAssignModal(false)}
+          chatId={selectedChat?.id || ''}
+          chatName={selectedChat?.name || 'Chat'}
+          currentAgent={selectedChat?.agent}
+          onAssign={(agent) => {
+            console.log('Agente atribuído:', agent);
+            setShowAssignModal(false);
+          }}
+        />
+      )}
+
+      {/* Modal de Upload de Mídia */}
+      <MediaUploadModal
+        isOpen={showMediaModal}
+        onClose={() => setShowMediaModal(false)}
+        onSendMedia={handleSendMedia}
+        chatName={selectedChat?.name || 'Chat'}
+      />
     </div>
   );
 }

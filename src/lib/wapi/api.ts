@@ -1,14 +1,30 @@
 // Configuração da API UAZAPI
 
-// Variáveis de ambiente
+// Variáveis de ambiente (fallback para o servidor 1)
 export const API_URL = import.meta.env.VITE_API_URL || 'https://i9place1.uazapi.com';
 export const ADMIN_TOKEN = import.meta.env.VITE_ADMIN_TOKEN || 'u1OUnI3tgoQwGII9Fw46XhFWeInWAAVNSO12x3sHwWuI5AkaH2';
 
+// Função para obter configurações atuais do servidor
+let currentServerConfig = {
+  url: API_URL,
+  adminToken: ADMIN_TOKEN
+};
+
+export const updateServerConfig = (url: string, adminToken: string) => {
+  currentServerConfig = { url, adminToken };
+  console.log('🔧 Configuração do servidor atualizada:', {
+    url,
+    adminToken: adminToken.substring(0, 10) + '...'
+  });
+};
+
+export const getCurrentServerConfig = () => currentServerConfig;
+
 // Log das configurações para debug
 console.log('🔧 Configurações da API UAZAPI:', {
-  API_URL,
-  ADMIN_TOKEN: ADMIN_TOKEN.substring(0, 10) + '...',
-  hasAdminToken: !!ADMIN_TOKEN
+  API_URL: currentServerConfig.url,
+  ADMIN_TOKEN: currentServerConfig.adminToken.substring(0, 10) + '...',
+  hasAdminToken: !!currentServerConfig.adminToken
 });
 
 import axios, { AxiosInstance } from 'axios';
@@ -49,24 +65,28 @@ export interface Group {
 }
 
 // Criando uma instância do axios para usar em toda a aplicação
-const uazapiClient = axios.create({
-  baseURL: API_URL,
-  headers: {
-    'Content-Type': 'application/json',
-    'Accept': 'application/json',
-    'AdminToken': ADMIN_TOKEN
-  },
-  timeout: 30000, // 30 segundos
-  maxRedirects: 5,
-  validateStatus: (status) => {
-    return status >= 200 && status < 300; // Aceita apenas status 2xx
-  }
-});
+const createUazapiClient = () => {
+  const config = getCurrentServerConfig();
+  return axios.create({
+    baseURL: config.url,
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      'AdminToken': config.adminToken
+    },
+    timeout: 30000, // 30 segundos
+    maxRedirects: 5,
+    validateStatus: (status) => {
+      return status >= 200 && status < 300; // Aceita apenas status 2xx
+    }
+  });
+};
 
 // Helper para criar uma instância do cliente com token
 const createInstanceClient = (instanceToken: string): AxiosInstance => {
+  const config = getCurrentServerConfig();
   return axios.create({
-    baseURL: API_URL,
+    baseURL: config.url,
     headers: {
       'Content-Type': 'application/json',
       'Accept': 'application/json',
@@ -82,6 +102,7 @@ const createInstanceClient = (instanceToken: string): AxiosInstance => {
 
 export const getInstances = async (): Promise<Instance[]> => {
   try {
+    const uazapiClient = createUazapiClient();
     const response = await uazapiClient.get('/instance/all');
 
     if (!response.data) {
@@ -111,19 +132,21 @@ export const getInstances = async (): Promise<Instance[]> => {
       : [];
   } catch (error: any) {
     const timestamp = new Date().toLocaleTimeString();
+    const config = getCurrentServerConfig();
     console.error(`[${timestamp}] ❌ Erro ao obter instâncias:`, {
       message: error.message,
       status: error.response?.status,
       statusText: error.response?.statusText,
       data: error.response?.data,
       url: error.config?.url,
-      adminToken: ADMIN_TOKEN.substring(0, 10) + '...'
+      serverUrl: config.url,
+      adminToken: config.adminToken.substring(0, 10) + '...'
     });
     
     // Verificar tipos específicos de erro
     if (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND') {
       console.error('🌐 Erro de conectividade: Não foi possível conectar à API UAZAPI');
-      console.error('💡 Verifique se a URL da API está correta:', API_URL);
+      console.error('💡 Verifique se a URL da API está correta:', config.url);
     } else if (error.response?.status === 401) {
       console.error('🔐 Erro de autenticação: ADMIN_TOKEN inválido ou expirado');
       console.error('💡 Verifique o ADMIN_TOKEN no arquivo .env');
@@ -196,7 +219,7 @@ export const sendTextMessage = async (instanceId: string, number: string, messag
 
 export const getChats = async (instanceId: string, searchTerm?: string, instanceToken?: string) => {
   try {
-    const client = instanceToken ? createInstanceClient(instanceToken) : uazapiClient;
+    const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
     
     // Parâmetros para a API UAZAPI v2
     const params: any = {
@@ -325,7 +348,7 @@ const getMockChats = () => {
 
 export const getMessages = async (instanceId: string, chatId: string, limit: number = 50, instanceToken?: string) => {
   try {
-    const client = instanceToken ? createInstanceClient(instanceToken) : uazapiClient;
+    const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
     
     try {
       // Url para buscar mensagens usando a API UAZAPI v2
@@ -462,7 +485,7 @@ export const getMessages = async (instanceId: string, chatId: string, limit: num
 // Nova função para buscar estatísticas de mensagens
 export const getMessageStats = async (instanceToken?: string) => {
   try {
-    const client = instanceToken ? createInstanceClient(instanceToken) : uazapiClient;
+    const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
     
     // Buscar todos os chats primeiro
     const chatsResponse = await client.post('/chat/find', {
@@ -530,7 +553,7 @@ export const getMessageStats = async (instanceToken?: string) => {
 
 export const getProfilePicture = async (instanceId: string, number: string, instanceToken?: string) => {
   try {
-    const client = instanceToken ? createInstanceClient(instanceToken) : uazapiClient;
+    const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
     const response = await client.get(`/chat/profilePicture/${instanceId}`, {
       params: { number }
     });
@@ -639,6 +662,7 @@ export const getProfileInfo = async (
 // Função para criar uma nova instância
 export const createInstance = async (instanceName: string): Promise<any> => {
   try {
+    const uazapiClient = createUazapiClient();
     const response = await uazapiClient.post('/instance/init', {
       instanceName,
       webhook: "", // Opcional
@@ -655,7 +679,7 @@ export const createInstance = async (instanceName: string): Promise<any> => {
 // Função para conectar uma instância
 export const connectInstance = async (instanceId: string, instanceToken?: string): Promise<any> => {
   try {
-    const client = instanceToken ? createInstanceClient(instanceToken) : uazapiClient;
+    const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
     const response = await client.post('/instance/connect', {
       id: instanceId
     });
@@ -669,7 +693,7 @@ export const connectInstance = async (instanceId: string, instanceToken?: string
 // Função para obter o QR code de uma instância
 export const getQrCode = async (instanceId: string, instanceToken?: string): Promise<string> => {
   try {
-    const client = instanceToken ? createInstanceClient(instanceToken) : uazapiClient;
+    const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
     const response = await client.get(`/instance/qrcode?id=${instanceId}`);
     return response.data;
   } catch (error) {
@@ -681,7 +705,7 @@ export const getQrCode = async (instanceId: string, instanceToken?: string): Pro
 // Função para verificar o status de uma instância
 export const checkInstanceStatus = async (instanceId: string, instanceToken?: string): Promise<string> => {
   try {
-    const client = instanceToken ? createInstanceClient(instanceToken) : uazapiClient;
+    const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
     const response = await client.get(`/instance/info?id=${instanceId}`);
     return response.data.status;
   } catch (error) {
@@ -693,7 +717,7 @@ export const checkInstanceStatus = async (instanceId: string, instanceToken?: st
 // Função para desconectar uma instância
 export const disconnectInstance = async (instanceId: string, instanceToken?: string): Promise<any> => {
   try {
-    const client = instanceToken ? createInstanceClient(instanceToken) : uazapiClient;
+    const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
     const response = await client.delete(`/instance/logout?id=${instanceId}`);
     return response.data;
   } catch (error) {
@@ -705,7 +729,7 @@ export const disconnectInstance = async (instanceId: string, instanceToken?: str
 // Função para deletar uma instância
 export const deleteInstance = async (instanceId: string, instanceToken?: string): Promise<any> => {
   try {
-    const client = instanceToken ? createInstanceClient(instanceToken) : uazapiClient;
+    const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
     const response = await client.delete(`/instance/delete?id=${instanceId}`);
     return response.data;
   } catch (error) {
@@ -717,7 +741,7 @@ export const deleteInstance = async (instanceId: string, instanceToken?: string)
 // Função para reiniciar uma instância
 export const restartInstance = async (instanceId: string, instanceToken?: string): Promise<any> => {
   try {
-    const client = instanceToken ? createInstanceClient(instanceToken) : uazapiClient;
+    const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
     const response = await client.post(`/api/instance/restart`, { instanceId });
     return response.data;
   } catch (error) {
@@ -729,7 +753,7 @@ export const restartInstance = async (instanceId: string, instanceToken?: string
 // Função para fazer logout de uma instância
 export const logoutInstance = async (instanceId: string, instanceToken?: string): Promise<any> => {
   try {
-    const client = instanceToken ? createInstanceClient(instanceToken) : uazapiClient;
+    const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
     const response = await client.post(`/api/instance/logout`, { instanceId });
     return response.data;
   } catch (error) {
@@ -863,7 +887,7 @@ export const getGroups = async (instanceId: string, instanceToken: string): Prom
 // Função para baixar arquivos de mensagens (imagens, áudios, vídeos, etc)
 export const downloadMessageMedia = async (instanceId: string, messageId: string, instanceToken?: string) => {
   try {
-    const client = instanceToken ? createInstanceClient(instanceToken) : uazapiClient;
+    const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
     
     console.log('Baixando mídia da mensagem:', messageId);
     
@@ -918,7 +942,7 @@ export const chat = {
   // Obter todos os chats
   getAll: async (instanceId: string, instanceToken?: string) => {
     try {
-      const client = instanceToken ? createInstanceClient(instanceToken) : uazapiClient;
+      const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
       
       console.log('Fazendo requisição para obter chats:', {
         instanceId,
@@ -960,7 +984,7 @@ export const chat = {
   // Obter mensagens de um chat
   fetchMessages: async (instanceId: string, chatId: string, limit: number = 50, instanceToken?: string) => {
     try {
-      const client = instanceToken ? createInstanceClient(instanceToken) : uazapiClient;
+      const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
       const response = await client.get('/chat/fetchMessages', {
         params: { instanceId, chatId, limit }
       });
@@ -974,7 +998,7 @@ export const chat = {
   // Obter nome e URL da imagem de um número
   getNameAndImageURL: async (instanceId: string, number: string, instanceToken?: string) => {
     try {
-      const client = instanceToken ? createInstanceClient(instanceToken) : uazapiClient;
+      const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
       const response = await client.post('/chat/GetNameAndImageURL', {
         number: number.includes('@') ? number : number + '@s.whatsapp.net'
       }, {
@@ -990,7 +1014,7 @@ export const chat = {
   // Obter todas mensagens não lidas
   getUnreadMessages: async (instanceId: string, instanceToken?: string) => {
     try {
-      const client = instanceToken ? createInstanceClient(instanceToken) : uazapiClient;
+      const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
       const response = await client.get('/chat/getUnreadMessages', {
         params: { instanceId }
       });
@@ -1004,7 +1028,7 @@ export const chat = {
   // Marcar mensagens como lidas
   markMessageAsRead: async (instanceId: string, messageId: string, instanceToken?: string) => {
     try {
-      const client = instanceToken ? createInstanceClient(instanceToken) : uazapiClient;
+      const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
       const response = await client.post('/chat/markMessageAsRead', {
         messageId
       }, {
@@ -1020,7 +1044,7 @@ export const chat = {
   // Arquivar um chat
   archive: async (instanceId: string, chatId: string, action: boolean = true, instanceToken?: string) => {
     try {
-      const client = instanceToken ? createInstanceClient(instanceToken) : uazapiClient;
+      const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
       const response = await client.post('/chat/archive', {
         chatId, action
       }, {
@@ -1036,7 +1060,7 @@ export const chat = {
   // Limpar mensagens de um chat
   clear: async (instanceId: string, chatId: string, instanceToken?: string) => {
     try {
-      const client = instanceToken ? createInstanceClient(instanceToken) : uazapiClient;
+      const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
       const response = await client.post('/chat/clear', {
         chatId
       }, {
@@ -1052,7 +1076,7 @@ export const chat = {
   // Deletar um chat
   delete: async (instanceId: string, chatId: string, instanceToken?: string) => {
     try {
-      const client = instanceToken ? createInstanceClient(instanceToken) : uazapiClient;
+      const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
       const response = await client.post('/chat/delete', {
         chatId
       }, {
@@ -1068,7 +1092,7 @@ export const chat = {
   // Marcar chat como não lido
   markAsUnread: async (instanceId: string, chatId: string, instanceToken?: string) => {
     try {
-      const client = instanceToken ? createInstanceClient(instanceToken) : uazapiClient;
+      const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
       const response = await client.post('/chat/markAsUnread', {
         chatId
       }, {
@@ -1084,7 +1108,7 @@ export const chat = {
   // Fixar um chat
   pin: async (instanceId: string, chatId: string, action: boolean = true, instanceToken?: string) => {
     try {
-      const client = instanceToken ? createInstanceClient(instanceToken) : uazapiClient;
+      const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
       const response = await client.post('/chat/pin', {
         chatId, action
       }, {
@@ -1100,7 +1124,7 @@ export const chat = {
   // Mutar um chat
   mute: async (instanceId: string, chatId: string, timeInSeconds: number = 8 * 60 * 60, instanceToken?: string) => {
     try {
-      const client = instanceToken ? createInstanceClient(instanceToken) : uazapiClient;
+      const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
       const response = await client.post('/chat/mute', {
         chatId, timeInSeconds
       }, {
@@ -1116,7 +1140,7 @@ export const chat = {
   // Desmutar um chat
   unmute: async (instanceId: string, chatId: string, instanceToken?: string) => {
     try {
-      const client = instanceToken ? createInstanceClient(instanceToken) : uazapiClient;
+      const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
       const response = await client.post('/chat/unmute', {
         chatId
       }, {
@@ -1132,7 +1156,7 @@ export const chat = {
   // Verificar se um número existe no WhatsApp
   whatsappNumberExists: async (instanceId: string, number: string, instanceToken?: string) => {
     try {
-      const client = instanceToken ? createInstanceClient(instanceToken) : uazapiClient;
+      const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
       const response = await client.get('/chat/whatsappNumberExists', {
         params: { 
           instanceId,
@@ -1151,7 +1175,7 @@ export const message = {
   // Enviar mensagem de texto
   sendText: async (instanceId: string, chatId: string, text: string, options: any = {}, instanceToken?: string) => {
     try {
-      const client = instanceToken ? createInstanceClient(instanceToken) : uazapiClient;
+      const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
       const response = await client.post('/message/sendText', {
         chatId, text, ...options
       }, {
@@ -1167,7 +1191,7 @@ export const message = {
   // Enviar imagem
   sendImage: async (instanceId: string, chatId: string, imageUrl: string, caption: string = '', options: any = {}, instanceToken?: string) => {
     try {
-      const client = instanceToken ? createInstanceClient(instanceToken) : uazapiClient;
+      const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
       const response = await client.post('/message/sendImage', {
         chatId, imageUrl, caption, ...options
       }, {
@@ -1183,7 +1207,7 @@ export const message = {
   // Enviar vídeo
   sendVideo: async (instanceId: string, chatId: string, videoUrl: string, caption: string = '', options: any = {}, instanceToken?: string) => {
     try {
-      const client = instanceToken ? createInstanceClient(instanceToken) : uazapiClient;
+      const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
       const response = await client.post('/message/sendVideo', {
         chatId, videoUrl, caption, ...options
       }, {
@@ -1199,7 +1223,7 @@ export const message = {
   // Enviar áudio
   sendAudio: async (instanceId: string, chatId: string, audioUrl: string, options: any = {}, instanceToken?: string) => {
     try {
-      const client = instanceToken ? createInstanceClient(instanceToken) : uazapiClient;
+      const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
       const response = await client.post('/message/sendAudio', {
         chatId, audioUrl, ...options
       }, {
@@ -1215,7 +1239,7 @@ export const message = {
   // Enviar documento
   sendDocument: async (instanceId: string, chatId: string, documentUrl: string, fileName: string = '', caption: string = '', options: any = {}, instanceToken?: string) => {
     try {
-      const client = instanceToken ? createInstanceClient(instanceToken) : uazapiClient;
+      const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
       const response = await client.post('/message/sendDocument', {
         chatId, documentUrl, fileName, caption, ...options
       }, {
@@ -1231,7 +1255,7 @@ export const message = {
   // Enviar mídia usando o endpoint /send/media
   sendMedia: async (number: string, type: string, file: string, text?: string, docName?: string, mimetype?: string, replyid?: string, mentions?: string, readchat: boolean = true, delay: number = 0, instanceToken?: string) => {
     try {
-      const client = instanceToken ? createInstanceClient(instanceToken) : uazapiClient;
+      const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
       const payload: any = {
         number,
         type,
@@ -1257,7 +1281,7 @@ export const message = {
   // Enviar localização
   sendLocation: async (instanceId: string, chatId: string, latitude: number, longitude: number, title: string = '', address: string = '', options: any = {}, instanceToken?: string) => {
     try {
-      const client = instanceToken ? createInstanceClient(instanceToken) : uazapiClient;
+      const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
       const response = await client.post('/message/sendLocation', {
         chatId, latitude, longitude, title, address, ...options
       }, {
@@ -1273,7 +1297,7 @@ export const message = {
   // Encaminhar mensagem
   forward: async (instanceId: string, chatId: string, messageId: string, options: any = {}, instanceToken?: string) => {
     try {
-      const client = instanceToken ? createInstanceClient(instanceToken) : uazapiClient;
+      const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
       const response = await client.post('/message/forward', {
         chatId, messageId, ...options
       }, {
@@ -1289,7 +1313,7 @@ export const message = {
   // Responder a uma mensagem
   reply: async (instanceId: string, chatId: string, text: string, messageId: string, options: any = {}, instanceToken?: string) => {
     try {
-      const client = instanceToken ? createInstanceClient(instanceToken) : uazapiClient;
+      const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
       const response = await client.post('/message/reply', {
         chatId, text, messageId, ...options
       }, {
@@ -1305,7 +1329,7 @@ export const message = {
   // Reagir a uma mensagem
   react: async (instanceId: string, messageId: string, emoji: string, instanceToken?: string) => {
     try {
-      const client = instanceToken ? createInstanceClient(instanceToken) : uazapiClient;
+      const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
       const response = await client.post('/message/react', {
         messageId, emoji
       }, {
@@ -1321,7 +1345,7 @@ export const message = {
   // Deletar mensagem
   delete: async (instanceId: string, messageId: string, deleteMediaInDevice: boolean = false, instanceToken?: string) => {
     try {
-      const client = instanceToken ? createInstanceClient(instanceToken) : uazapiClient;
+      const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
       const response = await client.post('/message/delete', {
         messageId, deleteMediaInDevice
       }, {
@@ -1339,7 +1363,7 @@ export const group = {
   // Criar grupo
   create: async (instanceId: string, groupName: string, participants: string[], instanceToken?: string) => {
     try {
-      const client = instanceToken ? createInstanceClient(instanceToken) : uazapiClient;
+      const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
       const response = await client.post('/group/create', {
         groupName, participants
       }, {
@@ -1355,7 +1379,7 @@ export const group = {
   // Obter informações do grupo
   getInfo: async (instanceId: string, groupId: string, instanceToken?: string) => {
     try {
-      const client = instanceToken ? createInstanceClient(instanceToken) : uazapiClient;
+      const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
       const response = await client.get('/group/getInfo', {
         params: { instanceId, groupId }
       });
@@ -1369,7 +1393,7 @@ export const group = {
   // Adicionar participantes ao grupo
   addParticipants: async (instanceId: string, groupId: string, participants: string[], instanceToken?: string) => {
     try {
-      const client = instanceToken ? createInstanceClient(instanceToken) : uazapiClient;
+      const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
       const response = await client.post('/group/addParticipants', {
         groupId, participants
       }, {
@@ -1385,7 +1409,7 @@ export const group = {
   // Remover participantes do grupo
   removeParticipants: async (instanceId: string, groupId: string, participants: string[], instanceToken?: string) => {
     try {
-      const client = instanceToken ? createInstanceClient(instanceToken) : uazapiClient;
+      const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
       const response = await client.post('/group/removeParticipants', {
         groupId, participants
       }, {
@@ -1401,7 +1425,7 @@ export const group = {
   // Promover participantes a administradores
   promoteParticipants: async (instanceId: string, groupId: string, participants: string[], instanceToken?: string) => {
     try {
-      const client = instanceToken ? createInstanceClient(instanceToken) : uazapiClient;
+      const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
       const response = await client.post('/group/promoteParticipants', {
         groupId, participants
       }, {
@@ -1417,7 +1441,7 @@ export const group = {
   // Rebaixar administradores a participantes comuns
   demoteParticipants: async (instanceId: string, groupId: string, participants: string[], instanceToken?: string) => {
     try {
-      const client = instanceToken ? createInstanceClient(instanceToken) : uazapiClient;
+      const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
       const response = await client.post('/group/demoteParticipants', {
         groupId, participants
       }, {
@@ -1433,7 +1457,7 @@ export const group = {
   // Definir descrição do grupo
   setDescription: async (instanceId: string, groupId: string, description: string, instanceToken?: string) => {
     try {
-      const client = instanceToken ? createInstanceClient(instanceToken) : uazapiClient;
+      const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
       const response = await client.post('/group/setDescription', {
         groupId, description
       }, {
@@ -1449,7 +1473,7 @@ export const group = {
   // Alterar imagem do grupo
   updateProfilePicture: async (instanceId: string, groupId: string, imageUrl: string, instanceToken?: string) => {
     try {
-      const client = instanceToken ? createInstanceClient(instanceToken) : uazapiClient;
+      const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
       const response = await client.post('/group/updateProfilePicture', {
         groupId, imageUrl
       }, {
@@ -1465,7 +1489,7 @@ export const group = {
   // Sair do grupo
   leave: async (instanceId: string, groupId: string, instanceToken?: string) => {
     try {
-      const client = instanceToken ? createInstanceClient(instanceToken) : uazapiClient;
+      const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
       const response = await client.post('/group/leave', {
         groupId
       }, {
@@ -1483,7 +1507,7 @@ export const label = {
   // Obter todas as etiquetas
   getAll: async (instanceId: string, instanceToken?: string) => {
     try {
-      const client = instanceToken ? createInstanceClient(instanceToken) : uazapiClient;
+      const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
       const response = await client.get('/label/getAll', {
         params: { instanceId }
       });
@@ -1497,7 +1521,7 @@ export const label = {
   // Criar nova etiqueta
   create: async (instanceId: string, labelName: string, labelColor: string, instanceToken?: string) => {
     try {
-      const client = instanceToken ? createInstanceClient(instanceToken) : uazapiClient;
+      const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
       const response = await client.post('/label/create', {
         labelName, labelColor
       }, {
@@ -1513,7 +1537,7 @@ export const label = {
   // Deletar etiqueta
   delete: async (instanceId: string, labelId: string, instanceToken?: string) => {
     try {
-      const client = instanceToken ? createInstanceClient(instanceToken) : uazapiClient;
+      const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
       const response = await client.post('/label/delete', {
         labelId
       }, {
@@ -1529,7 +1553,7 @@ export const label = {
   // Adicionar etiqueta a um chat
   addToChat: async (instanceId: string, chatId: string, labelId: string, instanceToken?: string) => {
     try {
-      const client = instanceToken ? createInstanceClient(instanceToken) : uazapiClient;
+      const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
       const response = await client.post('/label/addToChat', {
         chatId, labelId
       }, {
@@ -1545,7 +1569,7 @@ export const label = {
   // Remover etiqueta de um chat
   removeFromChat: async (instanceId: string, chatId: string, labelId: string, instanceToken?: string) => {
     try {
-      const client = instanceToken ? createInstanceClient(instanceToken) : uazapiClient;
+      const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
       const response = await client.post('/label/removeFromChat', {
         chatId, labelId
       }, {
@@ -1563,7 +1587,7 @@ export const webhook = {
   // Configurar webhook
   set: async (instanceId: string, url: string, allowedEvents: string[] = [], instanceToken?: string) => {
     try {
-      const client = instanceToken ? createInstanceClient(instanceToken) : uazapiClient;
+      const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
       const response = await client.post('/webhook/set', {
         url, allowedEvents
       }, {
@@ -1579,7 +1603,7 @@ export const webhook = {
   // Obter configuração atual do webhook
   get: async (instanceId: string, instanceToken?: string) => {
     try {
-      const client = instanceToken ? createInstanceClient(instanceToken) : uazapiClient;
+      const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
       const response = await client.get('/webhook/get', {
         params: { instanceId }
       });
@@ -1593,7 +1617,7 @@ export const webhook = {
   // Deletar webhook
   delete: async (instanceId: string, instanceToken?: string) => {
     try {
-      const client = instanceToken ? createInstanceClient(instanceToken) : uazapiClient;
+      const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
       const response = await client.post('/webhook/delete', {}, {
         params: { instanceId }
       });
@@ -1659,7 +1683,7 @@ export const searchMessages = async (
   instanceToken?: string
 ) => {
   try {
-    const client = instanceToken ? createInstanceClient(instanceToken) : uazapiClient;
+    const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
     
     // Parâmetros para a pesquisa de mensagens conforme a API Uazapi v2.0
     const params: any = {
@@ -1700,7 +1724,7 @@ export const getAllMessagesFromChat = async (
   instanceToken?: string
 ) => {
   try {
-    const client = instanceToken ? createInstanceClient(instanceToken) : uazapiClient;
+    const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
     
     // Parâmetros para obter todas as mensagens de um chat
     const params = {
@@ -1764,7 +1788,7 @@ export const markMessageAsRead = async (
   instanceToken?: string
 ) => {
   try {
-    const client = instanceToken ? createInstanceClient(instanceToken) : uazapiClient;
+    const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
     
     const response = await client.post('/message/markAsRead', {
       instanceId,
@@ -1785,7 +1809,7 @@ export const searchAllMessages = async (
   instanceToken?: string
 ) => {
   try {
-    const client = instanceToken ? createInstanceClient(instanceToken) : uazapiClient;
+    const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
     
     // Parâmetros para a pesquisa de mensagens em todos os chats
     const params = {

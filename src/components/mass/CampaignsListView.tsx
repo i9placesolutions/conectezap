@@ -15,9 +15,10 @@ import { toast } from 'react-hot-toast';
 
 interface CampaignsListViewProps {
   onRefresh?: () => void;
+  instanceToken?: string;
 }
 
-export function CampaignsListView({ onRefresh }: CampaignsListViewProps) {
+export function CampaignsListView({ onRefresh, instanceToken }: CampaignsListViewProps) {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [expandedCampaign, setExpandedCampaign] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -39,7 +40,7 @@ export function CampaignsListView({ onRefresh }: CampaignsListViewProps) {
   const loadCampaigns = async () => {
     try {
       setLoading(true);
-      const data = uazapiService.getCampaigns();
+      const data = await uazapiService.getCampaigns();
       setCampaigns(data);
     } catch (error) {
       console.error('Erro ao carregar campanhas:', error);
@@ -53,35 +54,67 @@ export function CampaignsListView({ onRefresh }: CampaignsListViewProps) {
     setExpandedCampaign(expandedCampaign === campaignId ? null : campaignId);
   };
 
-  const handlePauseCampaign = async (campaignId: string) => {
+  const handlePauseCampaign = async (campaignId: string, instanceToken?: string) => {
+    if (!instanceToken) {
+      toast.error('Token da instância não encontrado. Selecione uma instância válida.');
+      return;
+    }
+
     try {
-      await uazapiService.pauseCampaign(campaignId);
-      toast.success('Campanha pausada com sucesso');
-      loadCampaigns();
+      const result = await uazapiService.stopCampaign(instanceToken, campaignId);
+      if (result.success) {
+        toast.success('Campanha pausada com sucesso');
+        loadCampaigns();
+      } else {
+        toast.error(result.message || 'Erro ao pausar campanha');
+      }
     } catch (error) {
       console.error('Erro ao pausar campanha:', error);
       toast.error('Erro ao pausar campanha');
     }
   };
 
-  const handleResumeCampaign = async (campaignId: string) => {
+  const handleResumeCampaign = async (campaignId: string, instanceToken?: string) => {
+    if (!instanceToken) {
+      toast.error('Token da instância não encontrado. Selecione uma instância válida.');
+      return;
+    }
+
     try {
-      await uazapiService.resumeCampaign(campaignId);
-      toast.success('Campanha retomada com sucesso');
-      loadCampaigns();
+      const result = await uazapiService.continueCampaign(instanceToken, campaignId);
+      if (result.success) {
+        toast.success('Campanha retomada com sucesso');
+        loadCampaigns();
+      } else {
+        toast.error(result.message || 'Erro ao retomar campanha');
+      }
     } catch (error) {
       console.error('Erro ao retomar campanha:', error);
       toast.error('Erro ao retomar campanha');
     }
   };
 
-  const handleDeleteCampaign = async (campaignId: string) => {
+  const handleDeleteCampaign = async (campaignId: string, instanceToken?: string) => {
+    if (!instanceToken) {
+      toast.error('Token da instância não encontrado. Selecione uma instância válida.');
+      return;
+    }
+
+    // Confirmar antes de deletar
+    if (!window.confirm('Tem certeza que deseja deletar esta campanha? Esta ação não pode ser desfeita.')) {
+      return;
+    }
+
     try {
-      await uazapiService.deleteCampaign(campaignId);
-      toast.success('Campanha excluída com sucesso');
-      loadCampaigns();
-      if (onRefresh) {
-        onRefresh();
+      const result = await uazapiService.deleteCampaignNew(instanceToken, campaignId);
+      if (result.success) {
+        toast.success(result.message || 'Campanha excluída com sucesso');
+        loadCampaigns();
+        if (onRefresh) {
+          onRefresh();
+        }
+      } else {
+        toast.error(result.message || 'Erro ao excluir campanha');
       }
     } catch (error) {
       console.error('Erro ao excluir campanha:', error);
@@ -297,7 +330,7 @@ export function CampaignsListView({ onRefresh }: CampaignsListViewProps) {
                   <div className="flex space-x-2">
                     {campaign.status === 'running' && (
                       <button
-                        onClick={() => handlePauseCampaign(campaign.id)}
+                        onClick={() => handlePauseCampaign(campaign.id, instanceToken)}
                         className="flex items-center gap-1 px-2 py-1 text-yellow-700 bg-yellow-50 rounded-md hover:bg-yellow-100"
                         title="Pausar campanha"
                       >
@@ -306,7 +339,7 @@ export function CampaignsListView({ onRefresh }: CampaignsListViewProps) {
                     )}
                     {campaign.status === 'paused' && (
                       <button
-                        onClick={() => handleResumeCampaign(campaign.id)}
+                        onClick={() => handleResumeCampaign(campaign.id, instanceToken)}
                         className="flex items-center gap-1 px-2 py-1 text-green-700 bg-green-50 rounded-md hover:bg-green-100"
                         title="Continuar campanha"
                       >
@@ -314,7 +347,7 @@ export function CampaignsListView({ onRefresh }: CampaignsListViewProps) {
                       </button>
                     )}
                     <button
-                      onClick={() => handleDeleteCampaign(campaign.id)}
+                      onClick={() => handleDeleteCampaign(campaign.id, instanceToken)}
                       className="flex items-center gap-1 px-2 py-1 text-red-700 bg-red-50 rounded-md hover:bg-red-100"
                       title="Excluir campanha"
                     >

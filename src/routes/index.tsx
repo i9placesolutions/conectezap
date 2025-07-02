@@ -18,7 +18,7 @@ import { ProfileSettingsPage } from '../pages/ProfileSettingsPage';
 import { ClientsPage } from '../pages/ClientsPage';
 import { MessagesPage } from '../pages/MessagesPage';
 import { ChatPage } from '../pages/ChatPage';
-import { ChatZapPage } from '../pages/ChatZapPage';
+
 import { InstancesPage } from '../pages/InstancesPage';
 import { MassMessagingPage } from '../pages/MassMessagingPage';
 import { ReportsPage } from '../pages/ReportsPage';
@@ -49,7 +49,7 @@ export function AppRoutes() {
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="/settings/profile" element={<ProfileSettingsPage />} />
         <Route path="/clients" element={<ClientsPage />} />
-        <Route path="/messages/chatzap" element={<ChatZapPage />} />
+        
         <Route path="/messages/multi" element={<ChatPage />} />
         <Route path="/messages/campaigns" element={<MessagesPage />} />
         <Route path="/messages/instances" element={<InstancesPage />} />

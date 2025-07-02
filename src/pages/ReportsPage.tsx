@@ -26,6 +26,7 @@ interface Report {
   owner?: string;
   created?: string;
   updated?: string;
+  folder_id?: string; // ID para controle via API UAZAPI
   // Campos de compatibilidade com dados antigos
   total: number;
   delivered: number;
@@ -130,6 +131,12 @@ export function ReportsPage() {
         id: selectedInstance.id,
         token: selectedInstance.token.substring(0, 10) + '...'
       });
+      
+      // Forçar verificação de status primeiro para detectar campanhas travadas
+      if (!isAutoRefresh) {
+        console.log('🔍 Executando verificação de status das campanhas...');
+        await uazapiService.forceCampaignStatusUpdate(selectedInstance.token);
+      }
       
       const campaignsData = await uazapiService.getCampaigns(selectedInstance.token);
       
@@ -271,8 +278,16 @@ export function ReportsPage() {
       return;
     }
 
+    // Confirmar antes de parar
+    if (!window.confirm('Tem certeza que deseja parar esta campanha?')) {
+      return;
+    }
+
     try {
+      console.log('Tentando parar campanha:', { campaignId, token: selectedInstance.token });
       const result = await uazapiService.stopCampaign(selectedInstance.token, campaignId);
+      console.log('Resultado do stop:', result);
+      
       if (result.success) {
         toast.success(result.message || 'Campanha parada com sucesso');
         // Recarregar campanhas para atualizar o status
@@ -282,7 +297,7 @@ export function ReportsPage() {
       }
     } catch (error) {
       console.error('Erro ao parar campanha:', error);
-      toast.error('Erro ao parar campanha');
+      toast.error('Erro ao parar campanha. Verifique o console para mais detalhes.');
     }
   };
 
@@ -319,9 +334,12 @@ export function ReportsPage() {
     }
 
     try {
+      console.log('Tentando deletar campanha:', { campaignId, token: selectedInstance.token });
       const result = await uazapiService.deleteCampaignNew(selectedInstance.token, campaignId);
+      console.log('Resultado do delete:', result);
+      
       if (result.success) {
-        toast.success(result.message || 'Campanha deletada com sucesso');
+        toast.success(result.message || `Campanha deletada com sucesso. ${result.deleted || 0} mensagens removidas.`);
         // Recarregar campanhas para remover a campanha deletada
         fetchCampaigns();
       } else {
@@ -329,7 +347,7 @@ export function ReportsPage() {
       }
     } catch (error) {
       console.error('Erro ao deletar campanha:', error);
-      toast.error('Erro ao deletar campanha');
+      toast.error('Erro ao deletar campanha. Verifique o console para mais detalhes.');
     }
   };
 
@@ -460,18 +478,32 @@ export function ReportsPage() {
             <span className="hidden sm:inline">{loadingCampaigns ? 'Carregando...' : 'Atualizar'}</span>
           </button>
           
-          {/* Botão de debug - remover em produção */}
+          {/* Botão de verificação forçada de status */}
           <button
-            onClick={() => {
-              console.log('=== DEBUG INFO ===');
-              console.log('Instância selecionada:', selectedInstance);
-              console.log('Campanhas atuais:', campaigns);
-              console.log('Campanhas ativas:', campaigns.filter(c => ['running', 'ativo', 'scheduled'].includes(c.status)));
-              fetchCampaigns(false);
+            onClick={async () => {
+              if (!selectedInstance?.token) {
+                toast.error('Nenhuma instância selecionada');
+                return;
+              }
+              
+              setIsRefreshing(true);
+              try {
+                console.log('🔍 Executando verificação forçada de status...');
+                await uazapiService.forceCampaignStatusUpdate(selectedInstance.token);
+                await fetchCampaigns(false);
+                toast.success('Verificação de status concluída');
+              } catch (error) {
+                console.error('Erro na verificação:', error);
+                toast.error('Erro ao verificar status das campanhas');
+              } finally {
+                setIsRefreshing(false);
+              }
             }}
-            className="flex items-center justify-center gap-2 px-3 lg:px-4 py-2.5 lg:py-3 bg-red-50 border border-red-300 rounded-lg hover:bg-red-100 text-red-700 text-sm lg:text-base font-medium transition-colors"
+            disabled={isRefreshing || loadingCampaigns || !selectedInstance}
+            className="flex items-center justify-center gap-2 px-3 lg:px-4 py-2.5 lg:py-3 bg-orange-50 border border-orange-300 rounded-lg hover:bg-orange-100 text-orange-700 text-sm lg:text-base font-medium transition-colors disabled:opacity-50"
+            title="Forçar verificação de status das campanhas"
           >
-            🐛
+            🔧
           </button>
           <button
             onClick={() => generatePDF(reports, dateRange)}
@@ -795,14 +827,14 @@ export function ReportsPage() {
                         {(report.status === 'running' || report.status === 'ativo') && (
                           <>
                             <button
-                              onClick={() => handleStopCampaign(report.id)}
+                              onClick={() => handleStopCampaign(report.folder_id || report.id)}
                               className="p-2 lg:p-3 text-yellow-600 hover:text-yellow-800 hover:bg-yellow-50 rounded-lg transition-colors"
                               title="Parar campanha"
                             >
                               <Pause className="h-4 w-4 lg:h-5 lg:w-5" />
                             </button>
                             <button
-                              onClick={() => handleDeleteCampaign(report.id)}
+                              onClick={() => handleDeleteCampaign(report.folder_id || report.id)}
                               className="p-2 lg:p-3 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg transition-colors"
                               title="Deletar campanha"
                             >
@@ -813,14 +845,14 @@ export function ReportsPage() {
                         {report.status === 'paused' && (
                           <>
                             <button
-                              onClick={() => handleContinueCampaign(report.id)}
+                              onClick={() => handleContinueCampaign(report.folder_id || report.id)}
                               className="p-2 lg:p-3 text-green-600 hover:text-green-800 hover:bg-green-50 rounded-lg transition-colors"
                               title="Continuar campanha"
                             >
                               <Play className="h-4 w-4 lg:h-5 lg:w-5" />
                             </button>
                             <button
-                              onClick={() => handleDeleteCampaign(report.id)}
+                              onClick={() => handleDeleteCampaign(report.folder_id || report.id)}
                               className="p-2 lg:p-3 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg transition-colors"
                               title="Deletar campanha"
                             >
@@ -830,7 +862,7 @@ export function ReportsPage() {
                         )}
                         {(report.status === 'completed' || report.status === 'failed' || report.status === 'cancelled') && (
                           <button
-                            onClick={() => handleDeleteCampaign(report.id)}
+                            onClick={() => handleDeleteCampaign(report.folder_id || report.id)}
                             className="p-2 lg:p-3 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg transition-colors"
                             title="Deletar campanha"
                           >
@@ -839,7 +871,7 @@ export function ReportsPage() {
                         )}
                         {report.status === 'scheduled' && (
                           <button
-                            onClick={() => handleDeleteCampaign(report.id)}
+                            onClick={() => handleDeleteCampaign(report.folder_id || report.id)}
                             className="p-2 lg:p-3 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg transition-colors"
                             title="Deletar campanha"
                           >

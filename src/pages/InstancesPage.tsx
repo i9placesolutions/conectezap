@@ -6,8 +6,8 @@ import { InstanceModal } from '../components/instance/InstanceModal';
 import { InstanceCard } from '../components/instance/InstanceCard';
 import { instanceAPI } from '../lib/api/instance';
 import { QRCodeModal } from '../components/instance/QRCodeModal';
-import { getInstances } from '../lib/wapi/api';
-import { API_URL, ADMIN_TOKEN } from '../lib/wapi/api';
+import { getInstances, getCurrentServerConfig } from '../lib/wapi/api';
+import { useServer } from '../contexts/ServerContext';
 
 interface Instance {
   id: string;
@@ -73,12 +73,13 @@ export function InstancesPage() {
 
   const handleCreateInstance = async (data: any) => {
     try {
-      const response = await fetch(`${API_URL}/instance/init`, {
+      const config = getCurrentServerConfig();
+      const response = await fetch(`${config.url}/instance/init`, {
         method: 'POST',
         headers: {
           'Accept': 'application/json',
           'Content-Type': 'application/json',
-          'admintoken': ADMIN_TOKEN
+          'admintoken': config.adminToken
         },
         body: JSON.stringify(data)
       });
@@ -122,7 +123,8 @@ export function InstancesPage() {
       setPairCode(null);
 
       // Verificamos o status da instância
-      const statusResponse = await fetch(`${API_URL}/instance/status`, {
+      const config = getCurrentServerConfig();
+      const statusResponse = await fetch(`${config.url}/instance/status`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -146,7 +148,7 @@ export function InstancesPage() {
       }
 
       // Tentamos gerar o QR code
-      const response = await fetch(`${API_URL}/instance/connect`, {
+      const response = await fetch(`${config.url}/instance/connect`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -206,7 +208,8 @@ export function InstancesPage() {
         return;
       }
 
-      const response = await fetch(`${API_URL}/instance/pair`, {
+      const config = getCurrentServerConfig();
+      const response = await fetch(`${config.url}/instance/pair`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -238,7 +241,8 @@ export function InstancesPage() {
         return;
       }
 
-      const response = await fetch(`${API_URL}/instance/disconnect`, {
+      const config = getCurrentServerConfig();
+      const response = await fetch(`${config.url}/instance/disconnect`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -269,7 +273,8 @@ export function InstancesPage() {
         return;
       }
 
-      const response = await fetch(`${API_URL}/instance`, {
+      const config = getCurrentServerConfig();
+      const response = await fetch(`${config.url}/instance`, {
         method: 'DELETE',
         headers: {
           'Accept': 'application/json',

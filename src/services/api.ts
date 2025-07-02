@@ -1,31 +1,64 @@
 import axios from 'axios';
 
-// Cria uma instância do Axios com a URL base e cabeçalhos padrão
-const api = axios.create({
-  baseURL: 'https://i9place1.uazapi.com',
-  headers: {
-    'Content-Type': 'application/json',
-  }
-});
+// Função para obter configurações dinâmicas do servidor
+let currentServerConfig = {
+  url: 'https://i9place1.uazapi.com',
+  adminToken: 'u1OUnI3tgoQwGII9Fw46XhFWeInWAAVNSO12x3sHwWuI5AkaH2'
+};
+
+export const getCurrentServerConfig = () => currentServerConfig;
+
+export const updateServerConfig = (url: string, adminToken: string) => {
+  currentServerConfig = { url, adminToken };
+  console.log('🔧 Configuração do servidor atualizada:', {
+    url,
+    adminToken: adminToken.substring(0, 10) + '...'
+  });
+};
+
+// Cria uma instância do Axios com a URL base e cabeçalhos padrão dinâmicos
+const createApiClient = () => {
+  const config = getCurrentServerConfig();
+  return axios.create({
+    baseURL: config.url,
+    headers: {
+      'Content-Type': 'application/json',
+    }
+  });
+};
+
+// Instância inicial da API
+let api = createApiClient();
 
 // Adiciona o token de autenticação a todas as requisições
-api.interceptors.request.use(config => {
-  // Tokens para diferentes tipos de requisições
-  // O adminToken é obtido do arquivo UAZAPI.JSON
-  const adminToken = 'u1OUnI3tgoQwGII9Fw46XhFWeInWAAVNSO12x3sHwWuI5AkaH2';
-  
-  // Se for uma requisição de instância (que usa token específico), usa o token da instância
-  // caso contrário, usa o adminToken
-  if (config.url?.includes('/instance/')) {
-    const instanceToken = localStorage.getItem('instanceToken');
-    if (instanceToken) {
-      config.headers.token = instanceToken;
+const setupInterceptors = (apiInstance: any) => {
+  apiInstance.interceptors.request.use((config: any) => {
+    const serverConfig = getCurrentServerConfig();
+    
+    // Se for uma requisição de instância (que usa token específico), usa o token da instância
+    // caso contrário, usa o adminToken do servidor selecionado
+    if (config.url?.includes('/instance/')) {
+      const instanceToken = localStorage.getItem('instanceToken');
+      if (instanceToken) {
+        config.headers.token = instanceToken;
+      }
+    } else {
+      config.headers.token = serverConfig.adminToken;
     }
-  } else {
-    config.headers.token = adminToken;
-  }
+    
+    return config;
+  });
   
-  return config;
-});
+  return apiInstance;
+};
+
+// Configurar interceptors na instância inicial
+setupInterceptors(api);
+
+// Função para recriar a API quando o servidor mudar
+export const recreateApi = () => {
+  api = setupInterceptors(createApiClient());
+  console.log('🔄 API recreada para o servidor:', getCurrentServerConfig().url);
+};
 
 export default api;

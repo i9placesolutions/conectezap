@@ -48,13 +48,6 @@ interface Plan {
 // Features based on your WhatsApp pages functionality
 const defaultFeatures: Feature[] = [
   { 
-    id: 'chatzap',
-    name: 'ChatZap',
-    description: 'Interface de chat unificada para atendimento',
-    icon: MessageCircle,
-    included: false
-  },
-  { 
     id: 'multi',
     name: 'Multi-atendimento',
     description: 'Atendimento simultâneo com múltiplos agentes',
