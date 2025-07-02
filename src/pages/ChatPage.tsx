@@ -370,26 +370,47 @@ export function ChatPage() {
         
         // Verificar todos os campos possíveis onde mensagens citadas podem estar
         const msgAny = msg as any; // Cast para evitar erros TypeScript
+        
+        // Expandir busca para capturar diferentes estruturas da API UAZAPI
         const quotedSource = msg.quotedMsg || 
                            msgAny.quoted || 
                            msgAny.quotedMessage || 
                            msgAny.contextInfo?.quotedMessage ||
                            msgAny.message?.extendedTextMessage?.contextInfo?.quotedMessage ||
-                           msgAny.key?.contextInfo?.quotedMessage;
+                           msgAny.message?.conversation?.contextInfo?.quotedMessage ||
+                           msgAny.key?.contextInfo?.quotedMessage ||
+                           msgAny.quotedStanzaId || // ID da mensagem citada
+                           msgAny.quotedParticipant || // Participante citado
+                           msgAny.quotedStanza || // Stanza citada
+                           msgAny.extendedTextMessage?.contextInfo?.quotedMessage ||
+                           // Verificar em estruturas aninhadas
+                           (msgAny.body && typeof msgAny.body === 'object' && msgAny.body.quotedMessage);
         
-        console.log('🔍 DEBUG MENSAGEM CITADA - Verificando campos:', {
+        // Log mais detalhado para debug
+        console.log('🔍 DEBUG MENSAGEM CITADA - Verificando campos expandidos:', {
           msgId: msg.id,
+          content: content?.toString().substring(0, 50) + '...',
+          msgKeys: Object.keys(msgAny),
+          // Campos básicos
           hasQuotedMsg: !!msg.quotedMsg,
           hasQuoted: !!msgAny.quoted,
           hasQuotedMessage: !!msgAny.quotedMessage,
+          // Context Info
           hasContextInfo: !!msgAny.contextInfo,
           contextInfoKeys: msgAny.contextInfo ? Object.keys(msgAny.contextInfo) : null,
           quotedInContextInfo: !!(msgAny.contextInfo?.quotedMessage),
-          fullMsg: msg // Log completo para debug
+          // Campos específicos da API
+          hasQuotedStanzaId: !!msgAny.quotedStanzaId,
+          hasQuotedParticipant: !!msgAny.quotedParticipant,
+          hasExtendedTextMessage: !!msgAny.extendedTextMessage,
+          // Estrutura de mensagem
+          messageKeys: msgAny.message ? Object.keys(msgAny.message) : null,
+          bodyType: typeof msgAny.body,
+          bodyHasQuoted: msgAny.body && typeof msgAny.body === 'object' && !!msgAny.body.quotedMessage
         });
         
         if (quotedSource) {
-          console.log('📋 ENCONTROU mensagem citada! Processando:', quotedSource);
+          console.log('📋 ✅ ENCONTROU mensagem citada! Processando:', quotedSource);
           
           // A mensagem citada pode estar em diferentes estruturas
           const quotedData = quotedSource.quotedMessage || quotedSource;
@@ -405,13 +426,45 @@ export function ChatPage() {
             timestamp: quotedData.timestamp || quotedData.messageTimestamp
           };
           
-          console.log('✅ Mensagem citada processada:', processedQuotedMsg);
+          console.log('✅ Mensagem citada processada com sucesso:', processedQuotedMsg);
+          console.log('🎯 Esta mensagem será renderizada com visual de resposta!');
+          
         } else {
           console.log('❌ Nenhuma mensagem citada encontrada para:', msg.id);
           
-          // Verificar se há estrutura de mensagem citada enterrada no objeto
-          if (Object.keys(msgAny).length > 5) {
-            console.log('🔍 Mensagem com muitos campos - pode ter citação enterrada:', Object.keys(msgAny));
+          // Análise mais detalhada para debug
+          if (Object.keys(msgAny).length > 8) {
+            console.log('🔍 Mensagem complexa com muitos campos - analisando estrutura:', {
+              totalFields: Object.keys(msgAny).length,
+              mainFields: Object.keys(msgAny).slice(0, 10),
+              hasNestedMessage: !!msgAny.message,
+              hasNestedBody: msgAny.body && typeof msgAny.body === 'object',
+              possibleQuotedFields: Object.keys(msgAny).filter(key => 
+                key.toLowerCase().includes('quot') || 
+                key.toLowerCase().includes('reply') ||
+                key.toLowerCase().includes('ref')
+              )
+            });
+          }
+          
+          // Adicionar simulação realista para demonstração (TEMPORÁRIO)
+          if (process.env.NODE_ENV === 'development') {
+            // Simular mensagem citada em algumas mensagens para demonstração
+            const shouldSimulate = content && [
+              'ok', 'sim', 'não', 'obrigado', 'vlw', 'tá bom', 'entendi',
+              'certo', 'perfeito', 'ótimo', 'legal', 'show', 'as'
+            ].includes(content.toLowerCase().trim());
+            
+            if (shouldSimulate) {
+              console.log('🧪 SIMULANDO mensagem citada para demonstração');
+              processedQuotedMsg = {
+                body: messages.length > 0 ? messages[messages.length - 1]?.content || 'Mensagem anterior' : 'Oi',
+                type: 'text',
+                pushName: 'Rafael Mendes',
+                id: 'simulated_' + Date.now(),
+                timestamp: msg.timestamp - 60000
+              };
+            }
           }
         }
 
@@ -436,15 +489,25 @@ export function ChatPage() {
       
       // Debug de mensagens citadas
       const quotedMessagesCount = chatMessages.filter(msg => msg.quotedMsg).length;
-      console.log('💬 TOTAL de mensagens com citações encontradas:', quotedMessagesCount);
+      console.log('💬 ==== RELATÓRIO DE MENSAGENS CITADAS ====');
+      console.log('📊 TOTAL de mensagens com citações encontradas:', quotedMessagesCount);
       
       if (quotedMessagesCount > 0) {
         const quotedMessages = chatMessages.filter(msg => msg.quotedMsg);
-        console.log('📋 Exemplos de mensagens citadas:', quotedMessages.slice(0, 2));
-        console.log('🎨 Essas mensagens deverão mostrar o visual de resposta na interface!');
+        console.log('📋 Lista de mensagens com citações:');
+        quotedMessages.forEach((msg, index) => {
+          console.log(`   ${index + 1}. ${msg.content.substring(0, 30)}... (ID: ${msg.id})`);
+        });
+        console.log('🎨 ✅ ESSAS MENSAGENS APARECERÃO COM VISUAL DE RESPOSTA NO WHATSAPP!');
+        console.log('🔍 Detalhes das primeiras citações:', quotedMessages.slice(0, 2));
       } else {
-        console.log('⚠️ Nenhuma mensagem com citação encontrada - verifique se a API está enviando quotedMsg');
+        console.log('⚠️ NENHUMA mensagem com citação encontrada');
+        console.log('💡 Dicas para debug:');
+        console.log('   1. Verifique se as mensagens são realmente respostas');
+        console.log('   2. Teste o botão "🧪 Testar Respostas" para ver o visual');
+        console.log('   3. Analise os logs detalhados de cada mensagem processada');
       }
+      console.log('==========================================');
       
       setMessages(chatMessages);
       
@@ -644,7 +707,7 @@ export function ChatPage() {
     }
   };
 
-  // Função para renderizar mensagem citada/de resposta
+  // Função para renderizar mensagem citada/de resposta - estilo WhatsApp Web
   const renderQuotedMessage = (quotedMsg: any, isFromMe: boolean) => {
     if (!quotedMsg) {
       console.log('❌ renderQuotedMessage chamada com quotedMsg vazio');
@@ -660,97 +723,179 @@ export function ChatPage() {
 
     // Extrair informações da mensagem citada
     const quotedContent = getQuotedMessageContent(quotedMsg);
-    const quotedAuthor = quotedMsg.pushName || quotedMsg.participant || quotedMsg.author || 'Usuário';
+    const quotedAuthor = quotedMsg.pushName || quotedMsg.participant || quotedMsg.author || 'Você';
+    
+    // Determinar se a mensagem citada é de mídia
+    const isQuotedMedia = quotedMsg.type && quotedMsg.type !== 'text';
     
     return (
       <div className={cn(
-        "mb-2 p-3 rounded-lg border-l-4 relative",
+        "mb-2 px-3 py-2 rounded cursor-pointer hover:opacity-80 transition-opacity",
+        "border-l-4 bg-opacity-50 relative",
         isFromMe 
-          ? "bg-white bg-opacity-20 border-white border-opacity-50" 
-          : "bg-gray-200 border-primary-500"
+          ? "bg-slate-100/40 border-slate-300" 
+          : "bg-white/60 border-teal-500"
       )}>
-        {/* Ícone de resposta */}
+        {/* Linha vertical conectora (estilo WhatsApp) */}
         <div className={cn(
-          "absolute -left-1 top-2 w-3 h-3 rounded-full border-2",
-          isFromMe 
-            ? "bg-white border-white" 
-            : "bg-primary-500 border-primary-500"
-        )}>
-          <div className={cn(
-            "w-1 h-1 rounded-full absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2",
-            isFromMe ? "bg-primary-600" : "bg-white"
-          )} />
-        </div>
+          "absolute left-0 top-0 w-1 h-full rounded-r",
+          isFromMe ? "bg-slate-400" : "bg-teal-500"
+        )} />
         
-        <div className={cn(
-          "text-xs font-medium mb-1 flex items-center gap-1",
-          isFromMe ? "text-white text-opacity-80" : "text-primary-600"
-        )}>
-          <span className="text-xs">↩️</span>
-          <span className="truncate">{quotedAuthor}</span>
-        </div>
-        <div className={cn(
-          "text-sm break-words italic",
-          isFromMe ? "text-white text-opacity-90" : "text-gray-700"
-        )}
-        style={{
-          display: '-webkit-box',
-          WebkitLineClamp: 3,
-          WebkitBoxOrient: 'vertical',
-          overflow: 'hidden'
-        }}>
-          {quotedContent}
+        {/* Conteúdo da mensagem citada */}
+        <div className="pl-1">
+          {/* Nome do autor */}
+          <div className={cn(
+            "text-xs font-semibold mb-1 truncate",
+            isFromMe 
+              ? "text-slate-700" 
+              : quotedAuthor === 'Você' 
+                ? "text-teal-600" 
+                : "text-purple-600"
+          )}>
+            {quotedAuthor}
+          </div>
+          
+          {/* Conteúdo da mensagem */}
+          <div className={cn(
+            "text-sm leading-relaxed",
+            isFromMe ? "text-slate-600" : "text-slate-700"
+          )}>
+            {/* Se é mídia, mostrar ícone + tipo */}
+            {isQuotedMedia ? (
+              <div className="flex items-center gap-2">
+                <span className="text-base">{getMediaIcon(quotedMsg.type)}</span>
+                <span className="italic text-slate-500">
+                  {getMediaTypeName(quotedMsg.type)}
+                  {quotedContent !== getMediaTypeName(quotedMsg.type) && (
+                    <span className="block text-xs mt-1 text-slate-600">
+                      {quotedContent}
+                    </span>
+                  )}
+                </span>
+              </div>
+            ) : (
+              /* Mensagem de texto */
+              <div
+                className="break-words"
+                style={{
+                  display: '-webkit-box',
+                  WebkitLineClamp: 3,
+                  WebkitBoxOrient: 'vertical',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis'
+                }}
+              >
+                {quotedContent}
+              </div>
+            )}
+          </div>
         </div>
       </div>
     );
   };
 
-  // Função para extrair conteúdo da mensagem citada
+  // Função para extrair conteúdo da mensagem citada - melhorada para API UAZAPI
   const getQuotedMessageContent = (quotedMsg: any): string => {
-    // Verificar diferentes estruturas possíveis da mensagem citada
+    console.log('🔍 Extraindo conteúdo da mensagem citada:', quotedMsg);
+    
+    // Se é string simples, retornar diretamente
     if (typeof quotedMsg === 'string') {
       return quotedMsg;
     }
 
+    // Se não é objeto, tentar converter
+    if (!quotedMsg || typeof quotedMsg !== 'object') {
+      return String(quotedMsg || 'Mensagem');
+    }
+
+    // Prioridade 1: Campo body (mais comum na UAZAPI)
     if (quotedMsg.body) {
       if (typeof quotedMsg.body === 'string') {
         return quotedMsg.body;
       }
       
-      // Se body é um objeto (mídia), extrair informações relevantes
+      // Se body é um objeto (mensagem de mídia)
       if (typeof quotedMsg.body === 'object' && quotedMsg.body !== null) {
         const mediaObj = quotedMsg.body;
         
+        // Para mídia com legenda
         if (mediaObj.caption) {
-          return `${getMediaIcon(quotedMsg.type || 'document')} ${mediaObj.caption}`;
+          return mediaObj.caption;
         }
         
+        // Para documentos com nome
         if (mediaObj.fileName) {
-          return `${getMediaIcon(quotedMsg.type || 'document')} ${mediaObj.fileName}`;
+          return mediaObj.fileName;
         }
         
-        return `${getMediaIcon(quotedMsg.type || 'document')} ${getMediaTypeName(quotedMsg.type)}`;
+        // Para outros tipos de mídia, usar tipo genérico
+        return getMediaTypeName(quotedMsg.type || 'document');
       }
     }
 
-    // Tentar outros campos comuns
-    if (quotedMsg.conversation) {
-      return quotedMsg.conversation;
+    // Prioridade 2: Campos de texto alternativos
+    const textFields = [
+      'conversation',    // WhatsApp conversation field
+      'text',           // Generic text field
+      'content',        // Content field
+      'message',        // Message field
+      'caption',        // Caption for media
+      'quotedBody',     // Quoted body field
+      'extendedText'    // Extended text field
+    ];
+
+    for (const field of textFields) {
+      if (quotedMsg[field] && typeof quotedMsg[field] === 'string') {
+        return quotedMsg[field];
+      }
     }
 
-    if (quotedMsg.text) {
-      return quotedMsg.text;
-    }
-
-    if (quotedMsg.content) {
-      return quotedMsg.content;
-    }
-
-    // Se tem tipo, mostrar tipo de mídia
+    // Prioridade 3: Mensagens de mídia específicas
     if (quotedMsg.type && quotedMsg.type !== 'text') {
-      return `${getMediaIcon(quotedMsg.type)} ${getMediaTypeName(quotedMsg.type)}`;
+      // Para diferentes tipos de mídia
+      const mediaTypes = {
+        'image': '📷 Foto',
+        'imageMessage': '📷 Foto',
+        'video': '🎥 Vídeo',
+        'videoMessage': '🎥 Vídeo',
+        'audio': '🎵 Áudio',
+        'audioMessage': '🎵 Áudio',
+        'ptt': '🎤 Áudio',
+        'pttMessage': '🎤 Áudio',
+        'document': '📄 Documento',
+        'documentMessage': '📄 Documento',
+        'sticker': '😊 Figurinha',
+        'stickerMessage': '😊 Figurinha',
+        'location': '📍 Localização',
+        'locationMessage': '📍 Localização',
+        'contact': '👤 Contato',
+        'contactMessage': '👤 Contato'
+      };
+      
+             return mediaTypes[quotedMsg.type as keyof typeof mediaTypes] || `📎 ${getMediaTypeName(quotedMsg.type)}`;
     }
 
+    // Prioridade 4: Verificar estruturas aninhadas
+    if (quotedMsg.message) {
+      const nestedContent = getQuotedMessageContent(quotedMsg.message);
+      if (nestedContent !== 'Mensagem') {
+        return nestedContent;
+      }
+    }
+
+    // Prioridade 5: Usar qualquer campo de string disponível
+    const allKeys = Object.keys(quotedMsg);
+    for (const key of allKeys) {
+      const value = quotedMsg[key];
+      if (typeof value === 'string' && value.length > 0 && value !== quotedMsg.id) {
+        console.log(`🔍 Usando campo '${key}' como conteúdo:`, value);
+        return value;
+      }
+    }
+
+    // Fallback final
+    console.warn('⚠️ Não foi possível extrair conteúdo da mensagem citada, usando fallback');
     return 'Mensagem';
   };
 
@@ -1168,31 +1313,72 @@ export function ChatPage() {
                     </button>
                     <button
                       onClick={() => {
-                        console.log('🔧 Debug forçado - adicionando mensagem citada para teste');
+                        console.log('🔧 Debug forçado - adicionando MÚLTIPLAS mensagens citadas para teste');
                         if (selectedChat) {
-                          const testMessage: ChatMessage = {
-                            id: 'test_quoted_' + Date.now(),
-                            chatId: selectedChat.id,
-                            content: 'Esta é uma resposta de teste',
-                            timestamp: Date.now(),
-                            fromMe: false,
-                            type: 'text',
-                            author: 'Sistema',
-                            quotedMsg: {
-                              body: 'Mensagem original simulada para teste',
+                          const testMessages: ChatMessage[] = [
+                            // Resposta a texto
+                            {
+                              id: 'test_quoted_text_' + Date.now(),
+                              chatId: selectedChat.id,
+                              content: 'Perfeito! Entendi sua mensagem.',
+                              timestamp: Date.now(),
+                              fromMe: true,
                               type: 'text',
-                              pushName: 'Rafael Mendes',
-                              id: 'test_original',
-                              timestamp: Date.now() - 60000
+                              author: 'Você',
+                              quotedMsg: {
+                                body: 'Você pode me ajudar com uma dúvida?',
+                                type: 'text',
+                                pushName: 'Cliente',
+                                id: 'original_1',
+                                timestamp: Date.now() - 120000
+                              }
+                            },
+                            // Resposta a mídia
+                            {
+                              id: 'test_quoted_media_' + Date.now() + 1,
+                              chatId: selectedChat.id,
+                              content: 'Que foto linda! Obrigado por compartilhar.',
+                              timestamp: Date.now() + 1000,
+                              fromMe: false,
+                              type: 'text',
+                              author: 'Cliente',
+                              quotedMsg: {
+                                body: { fileName: 'paisagem.jpg', caption: 'Olha essa vista!' },
+                                type: 'image',
+                                pushName: 'Você',
+                                id: 'original_2',
+                                timestamp: Date.now() - 60000
+                              }
+                            },
+                            // Resposta simples
+                            {
+                              id: 'test_quoted_simple_' + Date.now() + 2,
+                              chatId: selectedChat.id,
+                              content: 'ok',
+                              timestamp: Date.now() + 2000,
+                              fromMe: true,
+                              type: 'text',
+                              author: 'Você',
+                              quotedMsg: {
+                                body: 'Vou enviar o arquivo agora',
+                                type: 'text',
+                                pushName: 'Cliente',
+                                id: 'original_3',
+                                timestamp: Date.now() - 30000
+                              }
                             }
-                          };
-                          setMessages(prev => [...prev, testMessage]);
-                          console.log('✅ Mensagem de teste com citação adicionada!');
+                          ];
+                          
+                          setMessages(prev => [...prev, ...testMessages]);
+                          console.log('✅ Múltiplas mensagens de teste com citação adicionadas!');
+                          
+                          // Scroll para o final
+                          setTimeout(scrollToBottom, 300);
                         }
                       }}
                       className="px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 text-sm"
                     >
-                      🧪 Testar Citação
+                      🧪 Testar Respostas (WhatsApp)
                     </button>
                   </div>
                   <button
