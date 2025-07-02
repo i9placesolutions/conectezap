@@ -53,7 +53,7 @@ export function ChatPage() {
   const messageInputRef = useRef<HTMLTextAreaElement>(null);
 
   // Função para analisar se uma mensagem pode ser uma resposta baseado em padrões
-  const analyzeIfCouldBeReply = (msg: any, content: string | null, chatMessages: any[]) => {
+  const analyzeIfCouldBeReply = (msg: any, content: string | null, apiMessages: any[]) => {
     if (!content) return { isLikely: false };
     
     const contentLower = content.toLowerCase().trim();
@@ -68,13 +68,16 @@ export function ChatPage() {
     const isReplyLikeContent = replyPatterns.includes(contentLower) || 
                               contentLower.length <= 5 && /^[a-záéíóúâêîôûãõç]+$/.test(contentLower);
     
-    if (isReplyLikeContent && chatMessages.length > 0) {
+    if (isReplyLikeContent && apiMessages.length > 0) {
       // Pegar a mensagem anterior que não seja do mesmo autor
       const msgAuthor = msg.fromMe ? 'Você' : (msg.pushName || msg.author || 'Contato');
-      const previousMessage = chatMessages
+      const previousMessage = apiMessages
         .slice()
         .reverse()
-        .find(m => m.author !== msgAuthor);
+        .find(m => {
+          const prevAuthor = m.fromMe ? 'Você' : (m.pushName || m.author || 'Contato');
+          return prevAuthor !== msgAuthor;
+        });
       
       if (previousMessage) {
         // Verificar se há proximidade temporal (último 5 minutos)
@@ -82,12 +85,16 @@ export function ChatPage() {
         const isRecent = timeDiff < 5 * 60 * 1000; // 5 minutos
         
         if (isRecent) {
+          const prevBody = typeof previousMessage.body === 'string' 
+            ? previousMessage.body 
+            : 'Mensagem anterior';
+            
           return {
             isLikely: true,
             quotedMessage: {
-              body: previousMessage.content || 'Mensagem anterior',
+              body: prevBody,
               type: previousMessage.type || 'text',
-              pushName: previousMessage.author || 'Contato',
+              pushName: previousMessage.author || previousMessage.pushName || 'Contato',
               id: previousMessage.id || 'inferred_' + Date.now(),
               timestamp: previousMessage.timestamp || (msg.timestamp - 60000)
             }
@@ -576,7 +583,8 @@ export function ChatPage() {
           }
           
           // DETECÇÃO ALTERNATIVA: Tentar inferir se é uma resposta baseado em padrões
-          const couldBeReply = analyzeIfCouldBeReply(msg, content, chatMessages);
+          // Usar apiMessages que já existe neste ponto
+          const couldBeReply = analyzeIfCouldBeReply(msg, content, apiMessages);
           if (couldBeReply.isLikely) {
             console.log('🕵️ DETECTADA possível resposta por análise de padrões:', couldBeReply);
             processedQuotedMsg = couldBeReply.quotedMessage;
@@ -590,20 +598,19 @@ export function ChatPage() {
               'certo', 'perfeito', 'ótimo', 'legal', 'show', 'as', 'top'
             ].includes(content.toLowerCase().trim());
             
-            if (shouldSimulate) {
-              console.log('🧪 SIMULANDO mensagem citada para demonstração');
-              const previousMessage = chatMessages.length > 0 ? 
-                chatMessages[chatMessages.length - 1] : 
-                { content: 'ola', author: 'i9Place' };
-              
-              processedQuotedMsg = {
-                body: previousMessage.content || 'Mensagem anterior',
-                type: 'text',
-                pushName: previousMessage.author || 'Contato',
-                id: 'simulated_' + Date.now(),
-                timestamp: msg.timestamp - 60000
-              };
-            }
+                          if (shouldSimulate && apiMessages.length > 0) {
+                console.log('🧪 SIMULANDO mensagem citada para demonstração');
+                const previousMessage = apiMessages[apiMessages.length - 1];
+                const prevMsgAny = previousMessage as any;
+                
+                processedQuotedMsg = {
+                  body: typeof prevMsgAny.body === 'string' ? prevMsgAny.body : 'Mensagem anterior',
+                  type: 'text',
+                  pushName: prevMsgAny.author || prevMsgAny.pushName || 'Contato',
+                  id: 'simulated_' + Date.now(),
+                  timestamp: msg.timestamp - 60000
+                };
+              }
           }
         }
 
