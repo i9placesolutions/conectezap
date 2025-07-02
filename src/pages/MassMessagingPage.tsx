@@ -117,10 +117,10 @@ export function MassMessagingPage() {
   
   // Configurações anti-spam avançadas
   const [antiSpamConfig, setAntiSpamConfig] = useState<AntiSpamConfig>({
-    validateNumbers: false, // TEMPORARIAMENTE DESABILITADO - estava marcando todos como inválidos
+    validateNumbers: true, // HABILITADO PARA TESTE - vamos diagnosticar o problema
     enableWarmup: false,
     monitorDelivery: true,
-    autoBlacklist: false, // TEMPORARIAMENTE DESABILITADO - estava removendo todos os números
+    autoBlacklist: false, // DESABILITADO - não queremos remover números durante teste
     smartDelays: false, // DESABILITADO - não deve sobrescrever configurações do usuário
     maxDailyMessages: 1000,
     deliveryThreshold: 80
@@ -1071,24 +1071,72 @@ export function MassMessagingPage() {
     }
 
     try {
-      toast.loading('Executando diagnóstico da API...', { id: 'debug' });
+      toast.loading('⚡ Testando API de validação...', { id: 'debug' });
       
-      const result = await uazapiService.debugNumberValidation(selectedInstance.token);
+      // Usar o teste rápido primeiro
+      const quickResult = await uazapiService.quickValidationTest(selectedInstance.token);
+      
+      console.log('⚡ RESULTADO DO TESTE RÁPIDO:', quickResult);
+      
+      if (!quickResult.success) {
+        toast.dismiss('debug');
+        toast.error(`❌ API com problema: ${quickResult.error}`);
+        console.error('❌ TESTE RÁPIDO FALHOU:', quickResult);
+        
+        // Tentar diagnóstico completo se o rápido falhar
+        toast.loading('🔬 Executando diagnóstico completo...', { id: 'debug' });
+        const fullResult = await uazapiService.debugNumberValidation(selectedInstance.token);
+        toast.dismiss('debug');
+        
+        if (fullResult.success) {
+          toast('📊 Diagnóstico completo - veja console');
+        } else {
+          toast.error(`❌ API não funcionando: ${fullResult.error}`);
+        }
+        return;
+      }
       
       toast.dismiss('debug');
       
-      if (result.success) {
-        toast.success('Diagnóstico concluído! Verifique o console para detalhes.');
-        console.log('🎯 RESULTADO COMPLETO DO DIAGNÓSTICO:', result);
+      if (quickResult.validationLogic === 'funcionando') {
+        toast.success('✅ API funcionando corretamente!');
+        console.log('✅ VALIDAÇÃO FUNCIONANDO:', quickResult);
       } else {
-        toast.error('Erro no diagnóstico. Verifique o console.');
-        console.error('❌ ERRO NO DIAGNÓSTICO:', result);
+        toast(`⚠️ API responde mas precisa ajuste - veja console`, {
+          duration: 4000
+        });
+        console.log('⚠️ VALIDAÇÃO PRECISA AJUSTE:', quickResult);
+        
+        // Mostrar qual campo usar
+        if (quickResult.rawResult) {
+          console.log('💡 CAMPOS DISPONÍVEIS:', Object.keys(quickResult.rawResult));
+          console.log('🔧 SUGESTÃO: Verificar qual campo indica validação');
+        }
+      }
+      
+      // Testar com números reais se tudo OK
+      if (quickResult.success && selectedContacts.length > 0) {
+        toast.loading('🧪 Testando com seus números...', { id: 'real-test' });
+        
+        const testNumbers = selectedContacts.slice(0, 3).map(c => c.number.replace(/\D/g, ''));
+        const realTest = await uazapiService.checkNumbers(selectedInstance.token, testNumbers);
+        
+        toast.dismiss('real-test');
+        console.log('🧪 TESTE COM NÚMEROS REAIS:', realTest);
+        
+        if (realTest && realTest.length > 0) {
+          const validCount = realTest.filter(r => r.exists).length;
+          toast(`📊 Teste: ${validCount}/${realTest.length} números válidos`, {
+            duration: 4000
+          });
+        }
       }
       
     } catch (error) {
       toast.dismiss('debug');
-      toast.error('Erro ao executar diagnóstico');
-      console.error('❌ ERRO CRÍTICO NO DIAGNÓSTICO:', error);
+      toast.dismiss('real-test');
+      toast.error('❌ Erro ao executar diagnóstico');
+      console.error('❌ ERRO AO EXECUTAR DIAGNÓSTICO:', error);
     }
   };
 

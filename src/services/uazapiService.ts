@@ -2064,6 +2064,93 @@ export const uazapiService = {
     }
   },
 
+  // Função de teste rápida e simples
+  async quickValidationTest(instanceToken: string): Promise<any> {
+    console.log('⚡ TESTE RÁPIDO DE VALIDAÇÃO');
+    console.log('=============================');
+    
+    try {
+      // Testar com apenas 1 número bem simples
+      const testNumber = '5511999999999';
+      console.log(`🧪 Testando com: ${testNumber}`);
+      
+      const api = createApiClient();
+      
+      const response = await api.post('/chat/check', {
+        numbers: [testNumber]
+      }, {
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'token': instanceToken
+        }
+      });
+      
+      console.log('✅ RESPOSTA RECEBIDA:');
+      console.log(`   Status: ${response.status}`);
+      console.log(`   Tipo: ${typeof response.data}`);
+      console.log(`   Dados:`, response.data);
+      
+      // Analisar estrutura da resposta
+      if (Array.isArray(response.data) && response.data.length > 0) {
+        const firstResult = response.data[0];
+        console.log('\n🔍 ANALISANDO PRIMEIRO RESULTADO:');
+        console.log(`   Propriedades: ${Object.keys(firstResult).join(', ')}`);
+        
+        // Verificar qual propriedade indica se o número é válido
+        const checkProps = ['exists', 'valid', 'whatsapp', 'registered', 'status'];
+        for (const prop of checkProps) {
+          if (firstResult.hasOwnProperty(prop)) {
+            console.log(`   ✓ ${prop}: ${firstResult[prop]}`);
+          }
+        }
+        
+        // Determinar qual lógica usar
+        let isValid = false;
+        if (firstResult.exists !== undefined) {
+          isValid = !!firstResult.exists;
+          console.log(`\n💡 USAR LÓGICA: result.exists (${isValid})`);
+        } else if (firstResult.valid !== undefined) {
+          isValid = !!firstResult.valid;
+          console.log(`\n💡 USAR LÓGICA: result.valid (${isValid})`);
+        } else if (firstResult.whatsapp !== undefined) {
+          isValid = !!firstResult.whatsapp;
+          console.log(`\n💡 USAR LÓGICA: result.whatsapp (${isValid})`);
+        } else if (firstResult.status !== undefined) {
+          isValid = firstResult.status === 'valid' || firstResult.status === 'exists';
+          console.log(`\n💡 USAR LÓGICA: result.status === 'valid' (${isValid})`);
+        } else {
+          console.log('\n❓ NENHUMA PROPRIEDADE DE VALIDAÇÃO ENCONTRADA');
+        }
+        
+        return {
+          success: true,
+          format: 'array',
+          validationLogic: isValid ? 'funcionando' : 'precisa ajuste',
+          rawResult: firstResult,
+          recommendedField: Object.keys(firstResult)[0]
+        };
+        
+      } else {
+        console.log('\n❌ FORMATO INESPERADO DA RESPOSTA');
+        return {
+          success: false,
+          format: 'unexpected',
+          rawResponse: response.data
+        };
+      }
+      
+    } catch (error: any) {
+      console.error('❌ ERRO NO TESTE RÁPIDO:', error);
+      return {
+        success: false,
+        error: error.message,
+        status: error.response?.status,
+        data: error.response?.data
+      };
+    }
+  },
+
   // ===== ENDPOINTS PARA AÇÕES NA MENSAGEM E BUSCAR =====
 
   // Buscar mensagens - CONFORME DOCUMENTAÇÃO OFICIAL UAZAPI
