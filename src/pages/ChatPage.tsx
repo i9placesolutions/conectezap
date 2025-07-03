@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
-import { Search, Plus, MessageSquare, Phone, Send, Paperclip, MoreVertical, Clock, Check, CheckCheck, Smartphone, RefreshCw, Archive, Pin, Volume2, VolumeX, Trash2, User, Wifi, WifiOff, FileText } from 'lucide-react';
+import { Search, Plus, MessageSquare, Phone, Send, Paperclip, MoreVertical, Clock, Check, CheckCheck, Smartphone, RefreshCw, Archive, User, Wifi, WifiOff, FileText } from 'lucide-react';
 import { cn } from '../lib/utils';
-import { uazapiService, Chat as UazapiChat, Message } from '../services/uazapiService';
+import { uazapiService, Chat as UazapiChat } from '../services/uazapiService';
 import { getCurrentServerConfig } from '../services/api';
 import { useInstance } from '../contexts/InstanceContext';
+import { message } from '../lib/wapi/api';
 import { toast } from 'react-hot-toast';
 import { SelectInstanceModal } from '../components/instance/SelectInstanceModal';
 import { useRealTimeChat } from '../hooks/useRealTimeChat';
@@ -48,6 +49,7 @@ export function ChatPage() {
   const [showNotesPanel, setShowNotesPanel] = useState(false);
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [showMediaModal, setShowMediaModal] = useState(false);
+  const [replyingToMessage, setReplyingToMessage] = useState<ChatMessage | null>(null);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messageInputRef = useRef<HTMLTextAreaElement>(null);
@@ -115,6 +117,70 @@ export function ChatPage() {
       
       // Se a mensagem for do chat atualmente selecionado, adicionar às mensagens
       if (selectedChat && message.chatId === selectedChat.id) {
+        // Aplicar a mesma lógica de processamento de citações usada no carregamento
+        let processedQuotedMsg = null;
+        const msgAny = message as any;
+        
+        // Verificar todos os campos possíveis onde mensagens citadas podem estar
+        const quotedSource = message.quotedMsg || 
+                           msgAny.quoted || 
+                           msgAny.quotedMessage || 
+                           msgAny.contextInfo?.quotedMessage ||
+                           msgAny.message?.extendedTextMessage?.contextInfo?.quotedMessage ||
+                           msgAny.message?.conversation?.contextInfo?.quotedMessage ||
+                           msgAny.key?.contextInfo?.quotedMessage ||
+                           msgAny.quotedStanzaId || 
+                           msgAny.quotedParticipant || 
+                           msgAny.quotedStanza || 
+                           msgAny.extendedTextMessage?.contextInfo?.quotedMessage ||
+                           (msgAny.body && typeof msgAny.body === 'object' && msgAny.body.quotedMessage) ||
+                           msgAny.replyTo ||
+                           msgAny.repliedTo ||
+                           msgAny.inReplyTo ||
+                           msgAny.quotedContent ||
+                           msgAny.quotedText ||
+                           msgAny.quotedBody ||
+                           msgAny.reference ||
+                           msgAny.messageRef ||
+                           msgAny.quotedMessageId ||
+                           msgAny.originalMessage ||
+                           msgAny.parentMessage ||
+                           msgAny.message?.quotedMessage ||
+                           msgAny.message?.quoted ||
+                           msgAny.message?.contextInfo ||
+                           msgAny.stanzaId ||
+                           msgAny.participant ||
+                           msgAny.quotedStanzaId ||
+                           (msgAny.key && msgAny.key.participant && msgAny.key.id);
+        
+        if (quotedSource) {
+          console.log('📋 ✅ ENCONTROU mensagem citada em tempo real! Processando:', quotedSource);
+          
+          const quotedData = quotedSource.quotedMessage || quotedSource;
+          
+          processedQuotedMsg = {
+            ...quotedData,
+            body: quotedData.body || quotedData.text || quotedData.conversation,
+            type: quotedData.type || 'text',
+            pushName: quotedData.pushName || quotedData.participant || quotedData.author,
+            id: quotedData.id || quotedData.messageId,
+            timestamp: quotedData.timestamp || quotedData.messageTimestamp
+          };
+          
+          console.log('✅ Mensagem citada processada em tempo real:', processedQuotedMsg);
+        } else {
+          // Tentar inferir se é uma resposta baseado em padrões
+          setMessages(prev => {
+            const content = message.body || message.content || '';
+            const couldBeReply = analyzeIfCouldBeReply(message, content, prev);
+            if (couldBeReply.isLikely) {
+              console.log('🕵️ DETECTADA possível resposta em tempo real por análise de padrões:', couldBeReply);
+              processedQuotedMsg = couldBeReply.quotedMessage;
+            }
+            return prev;
+          });
+        }
+        
         const newMessage: ChatMessage = {
           id: message.id || Date.now().toString(),
           chatId: message.chatId,
@@ -124,7 +190,7 @@ export function ChatPage() {
           type: message.type || 'text',
           author: message.author || message.pushName,
           mediaUrl: message.mediaUrl,
-          quotedMsg: message.quotedMsg
+          quotedMsg: processedQuotedMsg
         };
         
         setMessages(prev => {
@@ -746,7 +812,14 @@ export function ChatPage() {
       timestamp: Date.now(),
       fromMe: true,
       type: 'text',
-      status: 'sending'
+      status: 'sending',
+      quotedMsg: replyingToMessage ? {
+        id: replyingToMessage.id,
+        body: replyingToMessage.content,
+        type: replyingToMessage.type,
+        pushName: replyingToMessage.author || 'Você',
+        fromMe: replyingToMessage.fromMe
+      } : undefined
     };
 
     setMessages(prev => [...prev, tempMessage]);
@@ -754,13 +827,32 @@ export function ChatPage() {
     try {
       console.log('📤 Enviando mensagem para:', selectedChat.name);
       
-      // Enviar mensagem via API
       const instanceToken = selectedInstance.token;
-      await uazapiService.sendSimpleMessage(instanceToken, {
-        number: selectedChat.id,
-        message: messageContent,
-        type: 'text'
-      });
+      
+      // Se está respondendo a uma mensagem, usar endpoint de reply
+      if (replyingToMessage) {
+        console.log('💬 Respondendo à mensagem:', replyingToMessage.id);
+        
+        // Usar a função reply da API
+        await message.reply(
+          selectedInstance.id || 'default',
+          selectedChat.id,
+          messageContent,
+          replyingToMessage.id,
+          {},
+          instanceToken
+        );
+        
+        // Limpar estado de resposta
+        setReplyingToMessage(null);
+      } else {
+        // Enviar mensagem normal
+        await uazapiService.sendSimpleMessage(instanceToken, {
+          number: selectedChat.id,
+          message: messageContent,
+          type: 'text'
+        });
+      }
 
       // Atualizar status da mensagem
       setMessages(prev => prev.map(msg => 
@@ -781,6 +873,9 @@ export function ChatPage() {
       
       // Remover mensagem em caso de erro
       setMessages(prev => prev.filter(msg => msg.id !== tempMessage.id));
+      
+      // Limpar estado de resposta em caso de erro
+      setReplyingToMessage(null);
     } finally {
       setSendingMessage(false);
     }
@@ -802,29 +897,16 @@ export function ChatPage() {
     }, 100);
   };
 
-  const handleAssignAgent = (agentId: string, agentName: string) => {
-    if (!selectedChat) return;
-    
-    // Atualizar o chat selecionado
-    setSelectedChat(prev => prev ? {
-      ...prev,
-      agent: agentName || undefined,
-      status: agentName ? 'assigned' : 'unassigned'
-    } : null);
-    
-    // Atualizar a lista de chats
-    setChats(prev => prev.map(chat => 
-      chat.id === selectedChat.id 
-        ? { 
-            ...chat, 
-            agent: agentName || undefined,
-            status: agentName ? 'assigned' : 'unassigned'
-          }
-        : chat
-    ));
-    
-    setShowAssignModal(false);
+  const handleReplyToMessage = (message: ChatMessage) => {
+    setReplyingToMessage(message);
+    messageInputRef.current?.focus();
   };
+
+  const handleCancelReply = () => {
+    setReplyingToMessage(null);
+  };
+
+
 
   const formatTime = (timestamp: number) => {
     const date = new Date(timestamp);
@@ -875,29 +957,22 @@ export function ChatPage() {
     const isQuotedMedia = quotedMsg.type && quotedMsg.type !== 'text';
     
     return (
-      <div className={cn(
-        "mb-2 px-3 py-2 rounded cursor-pointer hover:opacity-80 transition-opacity",
-        "border-l-4 bg-opacity-50 relative",
-        isFromMe 
-          ? "bg-slate-100/40 border-slate-300" 
-          : "bg-white/60 border-teal-500"
-      )}>
-        {/* Linha vertical conectora (estilo WhatsApp) */}
+      <div className="flex items-start gap-2">
+        {/* Linha indicadora vertical */}
         <div className={cn(
-          "absolute left-0 top-0 w-1 h-full rounded-r",
-          isFromMe ? "bg-slate-400" : "bg-teal-500"
+          "w-1 h-full min-h-[40px] rounded-full flex-shrink-0",
+          isFromMe ? "bg-white/60" : "bg-green-500"
         )} />
         
-        {/* Conteúdo da mensagem citada */}
-        <div className="pl-1">
-          {/* Nome do autor */}
+        <div className="flex-1 min-w-0">
+          {/* Nome do autor com cores do WhatsApp Web */}
           <div className={cn(
-            "text-xs font-semibold mb-1 truncate",
+            "text-xs font-medium mb-1 truncate",
             isFromMe 
-              ? "text-slate-700" 
+              ? "text-white/90" 
               : quotedAuthor === 'Você' 
-                ? "text-teal-600" 
-                : "text-purple-600"
+                ? "text-green-600" 
+                : "text-blue-600"
           )}>
             {quotedAuthor}
           </div>
@@ -905,32 +980,34 @@ export function ChatPage() {
           {/* Conteúdo da mensagem */}
           <div className={cn(
             "text-sm leading-relaxed",
-            isFromMe ? "text-slate-600" : "text-slate-700"
+            isFromMe ? "text-white/80" : "text-gray-700"
           )}>
             {/* Se é mídia, mostrar ícone + tipo */}
             {isQuotedMedia ? (
               <div className="flex items-center gap-2">
                 <span className="text-base">{getMediaIcon(quotedMsg.type)}</span>
-                <span className="italic text-slate-500">
+                <span className={cn(
+                  "italic",
+                  isFromMe ? "text-white/70" : "text-gray-500"
+                )}>
                   {getMediaTypeName(quotedMsg.type)}
                   {quotedContent !== getMediaTypeName(quotedMsg.type) && (
-                    <span className="block text-xs mt-1 text-slate-600">
+                    <span className={cn(
+                      "block text-xs mt-1",
+                      isFromMe ? "text-white/80" : "text-gray-600"
+                    )}>
                       {quotedContent}
                     </span>
                   )}
                 </span>
               </div>
             ) : (
-              /* Mensagem de texto */
+              /* Mensagem de texto com estilo WhatsApp Web */
               <div
-                className="break-words"
-                style={{
-                  display: '-webkit-box',
-                  WebkitLineClamp: 3,
-                  WebkitBoxOrient: 'vertical',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis'
-                }}
+                className={cn(
+                  "break-words font-normal line-clamp-2",
+                  isFromMe ? "text-white/85" : "text-gray-700"
+                )}
               >
                 {quotedContent}
               </div>
@@ -1695,48 +1772,136 @@ export function ChatPage() {
                   <div
                     key={message.id}
                     className={cn(
-                      "flex",
+                      "flex group",
                       message.fromMe ? "justify-end" : "justify-start"
                     )}
                   >
+                    {/* Botão de resposta (aparece no hover) */}
+                    {!message.fromMe && (
+                      <button
+                        onClick={() => handleReplyToMessage(message)}
+                        className="opacity-0 group-hover:opacity-100 transition-opacity p-1 mr-2 mt-auto mb-2 text-gray-400 hover:text-primary-600 rounded"
+                        title="Responder"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+                        </svg>
+                      </button>
+                    )}
+                    
                     <div
                       className={cn(
-                        "max-w-xs lg:max-w-md px-4 py-2 rounded-lg",
+                        "max-w-xs lg:max-w-md rounded-lg overflow-hidden",
+                        message.quotedMsg ? "" : "px-4 py-2", // Padding condicional
                         message.fromMe
                           ? "bg-primary-600 text-white rounded-br-sm"
                           : "bg-gray-100 text-gray-900 rounded-bl-sm"
                       )}
                     >
-                      {!message.fromMe && message.author && (
-                        <p className="text-xs text-gray-500 mb-1">{message.author}</p>
-                      )}
-                      
-                      {/* Renderizar mensagem citada se existir */}
-                      {message.quotedMsg && renderQuotedMessage(message.quotedMsg, message.fromMe)}
-                      
-                      {/* Verificar se é mídia para renderizar sem <p> */}
-                      {['image', 'video', 'audio', 'ptt', 'document'].includes(message.type) ? (
-                        <div className="mt-1">
-                          {renderMessageContent(message)}
+                      {/* Container para mensagem com citação */}
+                      {message.quotedMsg ? (
+                        <div className="flex flex-col">
+                          {/* Mensagem citada */}
+                          <div className={cn(
+                            "px-3 py-2 border-b",
+                            message.fromMe 
+                              ? "border-white/20 bg-black/10" 
+                              : "border-gray-300 bg-white/50"
+                          )}>
+                            {renderQuotedMessage(message.quotedMsg, message.fromMe)}
+                          </div>
+                          
+                          {/* Resposta */}
+                          <div className="px-4 py-2">
+                            {!message.fromMe && message.author && (
+                              <p className="text-xs text-gray-500 mb-1">{message.author}</p>
+                            )}
+                            
+                            {/* Conteúdo da resposta */}
+                            {['image', 'video', 'audio', 'ptt', 'document'].includes(message.type) ? (
+                              <div className="mt-1">
+                                {renderMessageContent(message)}
+                              </div>
+                            ) : (
+                              <p className="break-words">{renderMessageContent(message)}</p>
+                            )}
+                            
+                            <div className="flex items-center justify-end gap-1 mt-1">
+                              <span className={cn(
+                                "text-xs",
+                                message.fromMe ? "text-primary-100" : "text-gray-500"
+                              )}>
+                                {formatTime(message.timestamp)}
+                              </span>
+                              {message.fromMe && getMessageIcon(message.status)}
+                            </div>
+                          </div>
                         </div>
                       ) : (
-                        <p className="break-words">{renderMessageContent(message)}</p>
+                        /* Mensagem normal sem citação */
+                        <>
+                          {!message.fromMe && message.author && (
+                            <p className="text-xs text-gray-500 mb-1">{message.author}</p>
+                          )}
+                          
+                          {/* Verificar se é mídia para renderizar sem <p> */}
+                          {['image', 'video', 'audio', 'ptt', 'document'].includes(message.type) ? (
+                            <div className="mt-1">
+                              {renderMessageContent(message)}
+                            </div>
+                          ) : (
+                            <p className="break-words">{renderMessageContent(message)}</p>
+                          )}
+                          <div className="flex items-center justify-end gap-1 mt-1">
+                            <span className={cn(
+                              "text-xs",
+                              message.fromMe ? "text-primary-100" : "text-gray-500"
+                            )}>
+                              {formatTime(message.timestamp)}
+                            </span>
+                            {message.fromMe && getMessageIcon(message.status)}
+                          </div>
+                        </>
                       )}
-                      <div className="flex items-center justify-end gap-1 mt-1">
-                        <span className={cn(
-                          "text-xs",
-                          message.fromMe ? "text-primary-100" : "text-gray-500"
-                        )}>
-                          {formatTime(message.timestamp)}
-                        </span>
-                        {message.fromMe && getMessageIcon(message.status)}
-                      </div>
                     </div>
                   </div>
                 ))
               )}
               <div ref={messagesEndRef} />
             </div>
+
+            {/* Reply Preview */}
+            {replyingToMessage && (
+              <div className="px-4 py-3 border-t border-gray-200 bg-gray-50">
+                <div className="flex items-start gap-3">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-1">
+                      <svg className="w-4 h-4 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+                      </svg>
+                      <span className="text-sm font-medium text-gray-700">Respondendo a {replyingToMessage.author || 'Contato'}</span>
+                    </div>
+                    <div className="bg-white rounded-lg p-3 border-l-4 border-primary-600">
+                      <p className="text-sm text-gray-600 line-clamp-2">
+                        {replyingToMessage.type === 'text' 
+                          ? replyingToMessage.content 
+                          : `📎 ${replyingToMessage.type.charAt(0).toUpperCase() + replyingToMessage.type.slice(1)}`
+                        }
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={handleCancelReply}
+                    className="p-1 text-gray-400 hover:text-gray-600 rounded"
+                    title="Cancelar resposta"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* Message Input */}
                         <div className="p-4 border-t border-gray-200 bg-white">
@@ -1760,7 +1925,7 @@ export function ChatPage() {
                     value={newMessage}
                     onChange={(e) => setNewMessage(e.target.value)}
                     onKeyPress={handleKeyPress}
-                    placeholder="Digite sua mensagem..."
+                    placeholder={replyingToMessage ? "Digite sua resposta..." : "Digite sua mensagem..."}
                     className="w-full resize-none rounded-lg border border-gray-200 px-4 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                     rows={1}
                     style={{ minHeight: '40px', maxHeight: '120px' }}
@@ -1844,3 +2009,5 @@ export function ChatPage() {
     </div>
   );
 }
+
+export default ChatPage;

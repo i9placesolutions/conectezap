@@ -319,8 +319,8 @@ export const uazapiService = {
         type: typeof numbers
       });
       
-      const minDelay = Math.floor((data.minDelay || 3000) / 1000); // Converter para segundos
-      const maxDelay = Math.floor((data.maxDelay || 7000) / 1000); // Converter para segundos
+      const minDelay = data.minDelay || 3; // Já em segundos
+        const maxDelay = data.maxDelay || 7; // Já em segundos
       
       // Criar ID único para a campanha
       const campaignId = `campaign_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
@@ -391,31 +391,7 @@ export const uazapiService = {
         availableMessages.push(data.message);
       }
 
-      // Processar configurações anti-spam
-      const antiSpamConfig = data.antiSpamConfig || {};
-      const shouldUseSmartDelays = antiSpamConfig.smartDelays || false;
-      
-      // Função para gerar delay inteligente
-      const generateSmartDelay = (min: number, max: number): number => {
-        if (!shouldUseSmartDelays) {
-          return Math.floor(Math.random() * (max - min + 1)) + min;
-        }
-        
-        const mean = (min + max) / 2;
-        const stdDev = (max - min) / 6;
-        
-        // Box-Muller transform para distribuição normal
-        let u = 0, v = 0;
-        while(u === 0) u = Math.random();
-        while(v === 0) v = Math.random();
-        
-        const z = Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
-        const delay = Math.round(mean + z * stdDev);
-        
-        return Math.max(min, Math.min(max, delay));
-      };
-      
-              console.log('Mensagens disponíveis para variação:', {
+      console.log('Mensagens disponíveis para variação:', {
           totalTextos: availableMessages.length,
           usandoVariacoes: availableMessages.length > 1,
           textos: availableMessages.map((text: string) => text.substring(0, 50) + '...')
@@ -477,6 +453,11 @@ export const uazapiService = {
         info: string;
         messages: any[]; // Idealmente, tipar os objetos de mensagem aqui também
         scheduled_for?: number;
+        autoPause?: {
+          enabled: boolean;
+          pauseAfterCount: number;
+          pauseDurationMinutes: number;
+        };
       }
       
       const requestData: CampaignProcessingData = {
@@ -555,15 +536,27 @@ export const uazapiService = {
             info: string;
             messages: any[];
             scheduled_for?: number;
+            autoPause?: {
+              enabled: boolean;
+              pauseAfterCount: number;
+              pauseDurationMinutes: number;
+            };
           }
           
           // Construir o payload com todas as mensagens
-          const baseDelayMin = Math.floor((requestData.delayMin || 1000) / 1000);
-          const baseDelayMax = Math.floor((requestData.delayMax || 3000) / 1000);
+          // A API UAZAPI espera delayMin e delayMax em segundos, não em milissegundos
+          const baseDelayMin = requestData.delayMin || 1;
+          const baseDelayMax = requestData.delayMax || 3;
+          
+          console.log('⏱️ Configurações de delay:', {
+            delayMinEnviado: baseDelayMin,
+            delayMaxEnviado: baseDelayMax,
+            unidade: 'segundos'
+          });
           
           const payload: UazapiSenderAdvancedPayload = {
-            delayMin: shouldUseSmartDelays ? generateSmartDelay(baseDelayMin, baseDelayMax) : baseDelayMin,
-            delayMax: shouldUseSmartDelays ? generateSmartDelay(baseDelayMin, baseDelayMax) : baseDelayMax,
+            delayMin: baseDelayMin,
+            delayMax: baseDelayMax,
             info: requestData.info || 'Campanha ConecteZap',
             messages: massMessages
           };
@@ -571,6 +564,18 @@ export const uazapiService = {
           // Adicionar scheduled_for se estiver definido
           if (requestData.scheduled_for) {
             payload.scheduled_for = requestData.scheduled_for;
+          }
+          
+          // Adicionar configurações de pausa automática se estiverem habilitadas
+          // NOTA: A API UAZAPI pode não processar nativamente essas configurações de pausa automática
+          // Essas configurações são enviadas para compatibilidade futura ou processamento customizado
+          if (requestData.autoPause && requestData.autoPause.enabled) {
+            payload.autoPause = {
+              enabled: true,
+              pauseAfterCount: requestData.autoPause.pauseAfterCount,
+              pauseDurationMinutes: requestData.autoPause.pauseDurationMinutes
+            };
+            console.log('⏸️ Configurações de pausa automática incluídas no payload:', payload.autoPause);
           }
           
           console.log('Estrutura da campanha única:', {
@@ -586,7 +591,8 @@ export const uazapiService = {
             })),
             delayMin: payload.delayMin,
             delayMax: payload.delayMax,
-            scheduled_for: payload.scheduled_for || 'não agendado'
+            scheduled_for: payload.scheduled_for || 'não agendado',
+            autoPause: payload.autoPause || 'desabilitado'
           });
           
           // Fazer a requisição para o endpoint /sender/advanced
@@ -1785,619 +1791,6 @@ export const uazapiService = {
     }
   },
 
-  // Verificar se número existe no WhatsApp
-  async checkNumber(instanceToken: string, number: string): Promise<any> {
-    try {
-      // Usar a função checkNumbers que já tem toda a lógica robusta
-      const results = await this.checkNumbers(instanceToken, [number]);
-      
-      if (results && results.length > 0) {
-        return results[0];
-      }
-      
-      return {
-        exists: false,
-        number: number,
-        error: 'Nenhum resultado retornado'
-      };
-      
-    } catch (error: any) {
-      console.error('Erro ao verificar número (função individual):', error);
-      
-      return {
-        exists: false,
-        number: number,
-        error: error.message || 'Erro desconhecido'
-      };
-    }
-  },
-
-  // Verificar múltiplos números de uma vez (mais eficiente)
-  async checkNumbers(instanceToken: string, numbers: string[]): Promise<{ number: string; exists: boolean; [key: string]: any }[]> {
-    try {
-      const api = createApiClient(); const response = await api.post('/chat/check', {
-        numbers: numbers
-      }, {
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-          'token': instanceToken
-        }
-      });
-      
-      console.log('🔍 DEBUG RESPOSTA DA API /chat/check:');
-      console.log('- Status:', response.status);
-      console.log('- Tipo da resposta:', typeof response.data);
-      console.log('- É array?:', Array.isArray(response.data));
-      console.log('- Dados completos:', JSON.stringify(response.data, null, 2));
-      
-      // Se a resposta for um array
-      if (Array.isArray(response.data)) {
-        console.log(`📋 Processando ${response.data.length} resultados da API...`);
-        
-        return response.data.map((result, index) => {
-          console.log(`Resultado ${index + 1}:`, result);
-          console.log(`- Campos disponíveis:`, Object.keys(result || {}));
-          
-          // Tentar diferentes campos que podem indicar se o número existe
-          const exists = !!(
-            result.exists || 
-            result.valid || 
-            result.status === 'valid' || 
-            result.status === 'exists' ||
-            result.whatsapp ||
-            result.registered ||
-            (result.status && result.status !== 'invalid' && result.status !== 'not_found')
-          );
-          
-          console.log(`- Número ${numbers[index]} existe? ${exists}`);
-          console.log(`- Campos verificados: exists=${result.exists}, valid=${result.valid}, status=${result.status}, whatsapp=${result.whatsapp}, registered=${result.registered}`);
-          
-          return {
-            number: numbers[index],
-            exists: exists,
-            originalResponse: result,
-            ...result
-          };
-        });
-      }
-      
-      // Se a resposta for um objeto com propriedade results ou similar
-      if (response.data && typeof response.data === 'object') {
-        console.log('📦 Resposta é um objeto, procurando array de resultados...');
-        
-        // Tentar diferentes propriedades que podem conter os resultados
-        const possibleArrays = ['results', 'data', 'numbers', 'contacts'];
-        
-        for (const prop of possibleArrays) {
-          if (response.data[prop] && Array.isArray(response.data[prop])) {
-            console.log(`✅ Encontrado array em '${prop}' com ${response.data[prop].length} items`);
-            
-            return response.data[prop].map((result: any, index: number) => {
-              const exists = !!(
-                result.exists || 
-                result.valid || 
-                result.status === 'valid' || 
-                result.status === 'exists' ||
-                result.whatsapp ||
-                result.registered ||
-                (result.status && result.status !== 'invalid' && result.status !== 'not_found')
-              );
-              
-              return {
-                number: numbers[index] || result.number || 'unknown',
-                exists: exists,
-                originalResponse: result,
-                ...result
-              };
-            });
-          }
-        }
-      }
-      
-      console.log('⚠️ Formato de resposta não reconhecido, retornando todos como inválidos');
-      
-      // Fallback: retornar todos como não existem
-      return numbers.map(number => ({
-        number: number,
-        exists: false,
-        error: 'Formato de resposta não reconhecido'
-      }));
-      
-    } catch (error: any) {
-      console.error('Erro ao verificar números:', error);
-      
-      // Log mais detalhado para erro 400
-      if (error.response?.status === 400) {
-        console.error('Erro 400 - Dados da requisição (múltiplos números):', {
-          url: error.config?.url,
-          method: error.config?.method,
-          headers: error.config?.headers,
-          data: error.config?.data,
-          responseData: error.response?.data,
-          numbersCount: numbers.length,
-          numbers: numbers.slice(0, 5) // Mostrar apenas os primeiros 5 para debug
-        });
-      }
-      
-      // Retornar todos como erro para não bloquear o processo
-      const errorMessage = error.response?.status === 400 ? 'Formato de dados inválido' : error.message || 'Erro desconhecido';
-      return numbers.map(number => ({
-        number: number,
-        exists: false,
-        error: errorMessage
-      }));
-    }
-  },
-
-  // Método de teste para verificar se a API está funcionando corretamente
-  async testCheckNumbersAPI(instanceToken: string): Promise<{ success: boolean; message: string; details?: any }> {
-    try {
-      console.log('🧪 Testando API de verificação de números...');
-      
-      // Testar com um número fictício
-      const testNumbers = ['5511999999999'];
-      
-      const result = await this.checkNumbers(instanceToken, testNumbers);
-      
-      if (result && Array.isArray(result) && result.length > 0) {
-        console.log('✅ API de verificação funcionando corretamente');
-        return {
-          success: true,
-          message: 'API de verificação de números funcionando corretamente',
-          details: result
-        };
-      } else {
-        console.log('⚠️ API retornou resposta inesperada');
-        return {
-          success: false,
-          message: 'API retornou resposta inesperada',
-          details: result
-        };
-      }
-      
-    } catch (error: any) {
-      console.error('❌ Erro no teste da API:', error);
-      return {
-        success: false,
-        message: `Erro no teste: ${error.message || 'Erro desconhecido'}`,
-        details: {
-          status: error.response?.status,
-          data: error.response?.data
-        }
-      };
-    }
-  },
-
-  // Função de debug para diagnosticar problemas de validação
-  async debugNumberValidation(instanceToken: string, testNumbers: string[] = ['5511999999999', '551199999999']): Promise<any> {
-    console.log('🔬 DIAGNÓSTICO COMPLETO DA VALIDAÇÃO DE NÚMEROS');
-    console.log('================================================');
-    
-    try {
-      console.log(`🎯 Testando com números: ${testNumbers.join(', ')}`);
-      
-      const api = createApiClient();
-      
-      console.log('📤 Fazendo requisição direta para /chat/check...');
-      const response = await api.post('/chat/check', {
-        numbers: testNumbers
-      }, {
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-          'token': instanceToken
-        }
-      });
-      
-      console.log('📥 RESPOSTA BRUTA DA API:');
-      console.log('- Status HTTP:', response.status);
-      console.log('- Headers:', response.headers);
-      console.log('- Tipo de dados:', typeof response.data);
-      console.log('- É array?:', Array.isArray(response.data));
-      console.log('- Tamanho (se array):', Array.isArray(response.data) ? response.data.length : 'N/A');
-      console.log('- JSON completo:', JSON.stringify(response.data, null, 2));
-      
-      if (Array.isArray(response.data)) {
-        console.log('\n📋 ANÁLISE DETALHADA DE CADA RESULTADO:');
-        response.data.forEach((item, index) => {
-          console.log(`\n[${index + 1}] Resultado para ${testNumbers[index]}:`);
-          console.log('   - Tipo:', typeof item);
-          console.log('   - Todas as propriedades:', Object.keys(item || {}));
-          console.log('   - Valores:', JSON.stringify(item, null, 4));
-          
-          // Testar diferentes propriedades
-          const possibleValidFlags = ['exists', 'valid', 'whatsapp', 'registered', 'status'];
-          console.log('   - Análise de flags de validação:');
-          possibleValidFlags.forEach(flag => {
-            if (item && item.hasOwnProperty(flag)) {
-              console.log(`     ✓ ${flag}: ${item[flag]} (${typeof item[flag]})`);
-            } else {
-              console.log(`     ✗ ${flag}: não presente`);
-            }
-          });
-        });
-      } else if (response.data && typeof response.data === 'object') {
-        console.log('\n📦 RESPOSTA É UM OBJETO - Analisando propriedades:');
-        console.log('   - Propriedades do objeto:', Object.keys(response.data));
-        
-        Object.keys(response.data).forEach(key => {
-          const value = response.data[key];
-          console.log(`   - ${key}: ${typeof value} ${Array.isArray(value) ? `(array com ${value.length} items)` : ''}`);
-          
-          if (Array.isArray(value)) {
-            console.log(`     └─ Primeiro item do array:`, JSON.stringify(value[0], null, 6));
-          }
-        });
-      }
-      
-      console.log('\n🧩 TESTANDO FUNÇÃO checkNumbers:');
-      const processedResult = await this.checkNumbers(instanceToken, testNumbers);
-      console.log('   - Resultado processado:', JSON.stringify(processedResult, null, 2));
-      
-      return {
-        success: true,
-        rawResponse: response.data,
-        processedResponse: processedResult,
-        analysis: {
-          statusCode: response.status,
-          dataType: typeof response.data,
-          isArray: Array.isArray(response.data),
-          itemCount: Array.isArray(response.data) ? response.data.length : 'N/A'
-        }
-      };
-      
-    } catch (error: any) {
-      console.error('❌ ERRO NO DIAGNÓSTICO:', error);
-      console.log('   - Status:', error.response?.status);
-      console.log('   - Dados do erro:', error.response?.data);
-      console.log('   - Mensagem:', error.message);
-      
-      return {
-        success: false,
-        error: error.message,
-        details: {
-          status: error.response?.status,
-          data: error.response?.data
-        }
-      };
-    }
-  },
-
-  // Função de teste rápida e simples
-  async quickValidationTest(instanceToken: string): Promise<any> {
-    console.log('⚡ TESTE RÁPIDO DE VALIDAÇÃO');
-    console.log('=============================');
-    
-    try {
-      // Testar com apenas 1 número bem simples
-      const testNumber = '5511999999999';
-      console.log(`🧪 Testando com: ${testNumber}`);
-      
-      const api = createApiClient();
-      
-      const response = await api.post('/chat/check', {
-        numbers: [testNumber]
-      }, {
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-          'token': instanceToken
-        }
-      });
-      
-      console.log('✅ RESPOSTA RECEBIDA:');
-      console.log(`   Status: ${response.status}`);
-      console.log(`   Tipo: ${typeof response.data}`);
-      console.log(`   Dados:`, response.data);
-      
-      // Analisar estrutura da resposta
-      if (Array.isArray(response.data) && response.data.length > 0) {
-        const firstResult = response.data[0];
-        console.log('\n🔍 ANALISANDO PRIMEIRO RESULTADO:');
-        console.log(`   Propriedades: ${Object.keys(firstResult).join(', ')}`);
-        
-        // Verificar qual propriedade indica se o número é válido
-        const checkProps = ['exists', 'valid', 'whatsapp', 'registered', 'status'];
-        for (const prop of checkProps) {
-          if (firstResult.hasOwnProperty(prop)) {
-            console.log(`   ✓ ${prop}: ${firstResult[prop]}`);
-          }
-        }
-        
-        // Determinar qual lógica usar
-        let isValid = false;
-        if (firstResult.exists !== undefined) {
-          isValid = !!firstResult.exists;
-          console.log(`\n💡 USAR LÓGICA: result.exists (${isValid})`);
-        } else if (firstResult.valid !== undefined) {
-          isValid = !!firstResult.valid;
-          console.log(`\n💡 USAR LÓGICA: result.valid (${isValid})`);
-        } else if (firstResult.whatsapp !== undefined) {
-          isValid = !!firstResult.whatsapp;
-          console.log(`\n💡 USAR LÓGICA: result.whatsapp (${isValid})`);
-        } else if (firstResult.status !== undefined) {
-          isValid = firstResult.status === 'valid' || firstResult.status === 'exists';
-          console.log(`\n💡 USAR LÓGICA: result.status === 'valid' (${isValid})`);
-        } else {
-          console.log('\n❓ NENHUMA PROPRIEDADE DE VALIDAÇÃO ENCONTRADA');
-        }
-        
-        return {
-          success: true,
-          format: 'array',
-          validationLogic: isValid ? 'funcionando' : 'precisa ajuste',
-          rawResult: firstResult,
-          recommendedField: Object.keys(firstResult)[0]
-        };
-        
-      } else {
-        console.log('\n❌ FORMATO INESPERADO DA RESPOSTA');
-        return {
-          success: false,
-          format: 'unexpected',
-          rawResponse: response.data
-        };
-      }
-      
-    } catch (error: any) {
-      console.error('❌ ERRO NO TESTE RÁPIDO:', error);
-      return {
-        success: false,
-        error: error.message,
-        status: error.response?.status,
-        data: error.response?.data
-      };
-    }
-  },
-
-  // ===== ENDPOINTS PARA AÇÕES NA MENSAGEM E BUSCAR =====
-
-  // Buscar mensagens - CONFORME DOCUMENTAÇÃO OFICIAL UAZAPI
-  async searchMessages(instanceToken: string, filters: {
-    chatid?: string;
-    id?: string;
-    limit?: number;
-  }): Promise<Message[]> {
-    try {
-      console.log('💬 BUSCANDO MENSAGENS - Token:', instanceToken?.substring(0, 10) + '...');
-      console.log('💬 BUSCANDO MENSAGENS - Filtros:', filters);
-      console.log('💬 BUSCANDO MENSAGENS - Chat ID:', filters.chatid);
-      
-      if (!filters.chatid && !filters.id) {
-        console.warn('⚠️ ChatID ou ID não fornecido para buscar mensagens');
-        return [];
-      }
-      
-      const api = createApiClient(); 
-      
-      // USAR APENAS O ENDPOINT OFICIAL: POST /message/find
-      console.log('💬 Usando endpoint oficial: POST /message/find');
-      
-      // Preparar body conforme documentação oficial
-      const requestBody: any = {};
-      
-      if (filters.chatid) {
-        // Garantir que o chatid termine com @s.whatsapp.net para conversas individuais
-        // ou @g.us para grupos
-        let chatid = filters.chatid;
-        if (!chatid.includes('@')) {
-          // Se não tem @, adicionar @s.whatsapp.net (padrão para conversas individuais)
-          chatid = `${chatid}@s.whatsapp.net`;
-        }
-        requestBody.chatid = chatid;
-      }
-      
-      if (filters.id) {
-        requestBody.id = filters.id;
-      }
-      
-      if (filters.limit) {
-        requestBody.limit = filters.limit;
-      }
-      
-      console.log('📤 REQUISIÇÃO /message/find:', requestBody);
-      
-      const response = await api.post('/message/find', requestBody, {
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-          'token': instanceToken
-        }
-      });
-      
-      console.log('📨 RESPOSTA /message/find:');
-      console.log('- Status:', response.status);
-      console.log('- Data Type:', typeof response.data);
-      console.log('- Data Length:', Array.isArray(response.data) ? response.data.length : 'Not array');
-      console.log('- Data:', response.data);
-      
-      if (!response.data) {
-        console.log('⚠️ Resposta vazia da API');
-        return [];
-      }
-      
-      // A API pode retornar array direto ou objeto com array
-      let messagesArray: any[] = [];
-      
-      if (Array.isArray(response.data)) {
-        messagesArray = response.data;
-      } else if (response.data.messages && Array.isArray(response.data.messages)) {
-        messagesArray = response.data.messages;
-      } else {
-        console.error('❌ Formato de resposta não esperado:', response.data);
-        return [];
-      }
-      
-      if (messagesArray.length === 0) {
-        console.log('⚠️ Nenhuma mensagem encontrada para os filtros especificados');
-        return [];
-      }
-      
-      console.log(`📋 PROCESSANDO ${messagesArray.length} MENSAGENS`);
-      if (messagesArray.length > 0) {
-        console.log('📨 Primeira mensagem (exemplo):', messagesArray[0]);
-        console.log('📨 Campos disponíveis:', Object.keys(messagesArray[0] || {}));
-      }
-      
-      const mappedMessages = messagesArray.map((message: any) => ({
-        id: message.id || message._id || Date.now().toString(),
-        chatId: message.chatId || message.from || message.remoteJid || filters.chatid || '',
-        fromMe: message.fromMe || false,
-        timestamp: message.timestamp || message.messageTimestamp || message.t || Date.now(),
-        body: message.body || message.text || message.content || message.conversation || '',
-        type: message.type || 'text',
-        mediaUrl: message.mediaUrl || message.media || '',
-        quotedMsg: message.quotedMsg || message.contextInfo?.quotedMessage || null,
-        isForwarded: message.isForwarded || false,
-        author: message.author || message.pushName || message.participant || '',
-        pushName: message.pushName || '',
-        status: message.status || 'sent'
-      }));
-      
-      // Filtrar mensagens válidas
-      const validMessages = mappedMessages.filter(msg => 
-        msg.id && msg.id.length > 0 && (msg.body || msg.type !== 'text')
-      );
-      
-      console.log(`✅ SUCESSO: ${validMessages.length} de ${mappedMessages.length} mensagens válidas processadas`);
-      return validMessages;
-      
-    } catch (error: any) {
-      console.error('❌ ERRO CRÍTICO ao buscar mensagens:', {
-        message: error.message,
-        status: error.response?.status,
-        statusText: error.response?.statusText,
-        data: error.response?.data,
-        url: error.config?.url,
-        method: error.config?.method,
-        chatid: filters.chatid
-      });
-      
-      // Verificar erros específicos
-      if (error.response?.status === 404) {
-        console.warn('⚠️ Endpoint /message/find não encontrado - verifique a URL base do servidor');
-      } else if (error.response?.status === 401) {
-        console.warn('⚠️ Token inválido ou sem permissão');
-      } else if (error.response?.status === 400) {
-        console.warn('⚠️ Parâmetros inválidos na requisição');
-      }
-      
-      return [];
-    }
-  },
-
-  // Enviar reação
-  async reactToMessage(instanceToken: string, number: string, messageId: string, emoji: string): Promise<boolean> {
-    try {
-      const api = createApiClient(); const response = await api.post('/message/react', {
-        number: number,
-        text: emoji,
-        id: messageId
-      }, {
-        headers: {
-          'Accept': 'application/json',
-          'token': instanceToken
-        }
-      });
-      
-      console.log('Resposta da API (reagir mensagem):', response.data);
-      return response.data.success || false;
-    } catch (error) {
-      console.error('Erro ao reagir à mensagem:', error);
-      return false;
-    }
-  },
-
-  // Apagar mensagem
-  async deleteMessage(instanceToken: string, messageId: string): Promise<boolean> {
-    try {
-      const api = createApiClient(); const response = await api.post('/message/delete', {
-        id: messageId
-      }, {
-        headers: {
-          'Accept': 'application/json',
-          'token': instanceToken
-        }
-      });
-      
-      console.log('Resposta da API (apagar mensagem):', response.data);
-      return response.data.success || false;
-    } catch (error) {
-      console.error('Erro ao apagar mensagem:', error);
-      return false;
-    }
-  },
-
-  // Marcar mensagem como lida
-  async markMessageAsRead(instanceToken: string, messageIds: string[]): Promise<boolean> {
-    try {
-      const api = createApiClient(); const response = await api.post('/message/markread', {
-        id: messageIds
-      }, {
-        headers: {
-          'Accept': 'application/json',
-          'token': instanceToken
-        }
-      });
-      
-      console.log('Resposta da API (marcar mensagem como lida):', response.data);
-      return response.data.success || false;
-    } catch (error) {
-      console.error('Erro ao marcar mensagem como lida:', error);
-      return false;
-    }
-  },
-
-  // Baixar arquivo de uma mensagem
-  async downloadMessageMedia(instanceToken: string, messageId: string, transcribe: boolean = false, openaiApiKey?: string): Promise<any> {
-    try {
-      const requestData: any = {
-        id: messageId,
-        transcribe: transcribe
-      };
-      
-      if (transcribe && openaiApiKey) {
-        requestData.openai_apikey = openaiApiKey;
-      }
-      
-      const api = createApiClient(); const response = await api.post('/message/download', requestData, {
-        headers: {
-          'Accept': 'application/json',
-          'token': instanceToken
-        }
-      });
-      
-      console.log('Resposta da API (baixar mídia):', response.data);
-      return response.data;
-    } catch (error) {
-      console.error('Erro ao baixar mídia da mensagem:', error);
-      return null;
-    }
-  },
-
-  // Enviar presença (digitando/gravando)
-  async sendPresence(instanceToken: string, number: string, presence: 'composing' | 'recording', delay: number = 2000): Promise<boolean> {
-    try {
-      const api = createApiClient(); const response = await api.post('/message/presence', {
-        number: number,
-        presence: presence,
-        delay: delay
-      }, {
-        headers: {
-          'Accept': 'application/json',
-          'token': instanceToken
-        }
-      });
-      
-      console.log('Resposta da API (enviar presença):', response.data);
-      return response.data.success || false;
-    } catch (error) {
-      console.error('Erro ao enviar presença:', error);
-      return false;
-    }
-  },
-
   // Método para buscar detalhes das mensagens de uma campanha
   async getCampaignMessages(instanceToken: string, folderId: string): Promise<any[]> {
     try {
@@ -2929,6 +2322,253 @@ export const uazapiService = {
     console.log('✅ ENVIO DE MÚLTIPLAS MÍDIAS CONCLUÍDO');
   },
 
-};
+  // ===== ENDPOINTS PARA AÇÕES NA MENSAGEM E BUSCAR =====
 
+  // Buscar mensagens - CONFORME DOCUMENTAÇÃO OFICIAL UAZAPI
+  async searchMessages(instanceToken: string, filters: {
+    chatid?: string;
+    id?: string;
+    limit?: number;
+  }): Promise<Message[]> {
+    try {
+      console.log('💬 BUSCANDO MENSAGENS - Token:', instanceToken?.substring(0, 10) + '...');
+      console.log('💬 BUSCANDO MENSAGENS - Filtros:', filters);
+      console.log('💬 BUSCANDO MENSAGENS - Chat ID:', filters.chatid);
+      
+      if (!filters.chatid && !filters.id) {
+        console.warn('⚠️ ChatID ou ID não fornecido para buscar mensagens');
+        return [];
+      }
+      
+      const api = createApiClient(); 
+      
+      // USAR APENAS O ENDPOINT OFICIAL: POST /message/find
+      console.log('💬 Usando endpoint oficial: POST /message/find');
+      
+      // Preparar body conforme documentação oficial
+      const requestBody: any = {};
+      
+      if (filters.chatid) {
+        // Garantir que o chatid termine com @s.whatsapp.net para conversas individuais
+        // ou @g.us para grupos
+        let chatid = filters.chatid;
+        if (!chatid.includes('@')) {
+          // Se não tem @, adicionar @s.whatsapp.net (padrão para conversas individuais)
+          chatid = `${chatid}@s.whatsapp.net`;
+        }
+        requestBody.chatid = chatid;
+      }
+      
+      if (filters.id) {
+        requestBody.id = filters.id;
+      }
+      
+      if (filters.limit) {
+        requestBody.limit = filters.limit;
+      }
+      
+      console.log('📤 REQUISIÇÃO /message/find:', requestBody);
+      
+      const response = await api.post('/message/find', requestBody, {
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'token': instanceToken
+        }
+      });
+      
+      console.log('📨 RESPOSTA /message/find:');
+      console.log('- Status:', response.status);
+      console.log('- Data Type:', typeof response.data);
+      console.log('- Data Length:', Array.isArray(response.data) ? response.data.length : 'Not array');
+      console.log('- Data:', response.data);
+      
+      if (!response.data) {
+        console.log('⚠️ Resposta vazia da API');
+        return [];
+      }
+      
+      // A API pode retornar array direto ou objeto com array
+      let messagesArray: any[] = [];
+      
+      if (Array.isArray(response.data)) {
+        messagesArray = response.data;
+      } else if (response.data.messages && Array.isArray(response.data.messages)) {
+        messagesArray = response.data.messages;
+      } else {
+        console.error('❌ Formato de resposta não esperado:', response.data);
+        return [];
+      }
+      
+      if (messagesArray.length === 0) {
+        console.log('⚠️ Nenhuma mensagem encontrada para os filtros especificados');
+        return [];
+      }
+      
+      console.log(`📋 PROCESSANDO ${messagesArray.length} MENSAGENS`);
+      if (messagesArray.length > 0) {
+        console.log('📨 Primeira mensagem (exemplo):', messagesArray[0]);
+        console.log('📨 Campos disponíveis:', Object.keys(messagesArray[0] || {}));
+      }
+      
+      const mappedMessages = messagesArray.map((message: any) => ({
+        id: message.id || message._id || Date.now().toString(),
+        chatId: message.chatId || message.from || message.remoteJid || filters.chatid || '',
+        fromMe: message.fromMe || false,
+        timestamp: message.timestamp || message.messageTimestamp || message.t || Date.now(),
+        body: message.body || message.text || message.content || message.conversation || '',
+        type: message.type || 'text',
+        mediaUrl: message.mediaUrl || message.media || '',
+        quotedMsg: message.quotedMsg || message.contextInfo?.quotedMessage || null,
+        isForwarded: message.isForwarded || false,
+        author: message.author || message.pushName || message.participant || '',
+        pushName: message.pushName || '',
+        status: message.status || 'sent'
+      }));
+      
+      // Filtrar mensagens válidas
+      const validMessages = mappedMessages.filter(msg => 
+        msg.id && msg.id.length > 0 && (msg.body || msg.type !== 'text')
+      );
+      
+      console.log(`✅ SUCESSO: ${validMessages.length} de ${mappedMessages.length} mensagens válidas processadas`);
+      return validMessages;
+      
+    } catch (error: any) {
+      console.error('❌ ERRO CRÍTICO ao buscar mensagens:', {
+        message: error.message,
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data,
+        url: error.config?.url,
+        method: error.config?.method,
+        chatid: filters.chatid
+      });
+      
+      // Verificar erros específicos
+      if (error.response?.status === 404) {
+        console.warn('⚠️ Endpoint /message/find não encontrado - verifique a URL base do servidor');
+      } else if (error.response?.status === 401) {
+        console.warn('⚠️ Token inválido ou sem permissão');
+      } else if (error.response?.status === 400) {
+        console.warn('⚠️ Parâmetros inválidos na requisição');
+      }
+      
+      return [];
+    }
+  },
+
+  // Enviar reação
+  async reactToMessage(instanceToken: string, number: string, messageId: string, emoji: string): Promise<boolean> {
+    try {
+      const api = createApiClient(); const response = await api.post('/message/react', {
+        number: number,
+        text: emoji,
+        id: messageId
+      }, {
+        headers: {
+          'Accept': 'application/json',
+          'token': instanceToken
+        }
+      });
+      
+      console.log('Resposta da API (reagir mensagem):', response.data);
+      return response.data.success || false;
+    } catch (error) {
+      console.error('Erro ao reagir à mensagem:', error);
+      return false;
+    }
+  },
+
+  // Apagar mensagem
+  async deleteMessage(instanceToken: string, messageId: string): Promise<boolean> {
+    try {
+      const api = createApiClient(); const response = await api.post('/message/delete', {
+        id: messageId
+      }, {
+        headers: {
+          'Accept': 'application/json',
+          'token': instanceToken
+        }
+      });
+      
+      console.log('Resposta da API (apagar mensagem):', response.data);
+      return response.data.success || false;
+    } catch (error) {
+      console.error('Erro ao apagar mensagem:', error);
+      return false;
+    }
+  },
+
+  // Marcar mensagem como lida
+  async markMessageAsRead(instanceToken: string, messageIds: string[]): Promise<boolean> {
+    try {
+      const api = createApiClient(); const response = await api.post('/message/markread', {
+        id: messageIds
+      }, {
+        headers: {
+          'Accept': 'application/json',
+          'token': instanceToken
+        }
+      });
+      
+      console.log('Resposta da API (marcar mensagem como lida):', response.data);
+      return response.data.success || false;
+    } catch (error) {
+      console.error('Erro ao marcar mensagem como lida:', error);
+      return false;
+    }
+  },
+
+  // Baixar arquivo de uma mensagem
+  async downloadMessageMedia(instanceToken: string, messageId: string, transcribe: boolean = false, openaiApiKey?: string): Promise<any> {
+    try {
+      const requestData: any = {
+        id: messageId,
+        transcribe: transcribe
+      };
+      
+      if (transcribe && openaiApiKey) {
+        requestData.openai_apikey = openaiApiKey;
+      }
+      
+      const api = createApiClient(); const response = await api.post('/message/download', requestData, {
+        headers: {
+          'Accept': 'application/json',
+          'token': instanceToken
+        }
+      });
+      
+      console.log('Resposta da API (baixar mídia):', response.data);
+      return response.data;
+    } catch (error) {
+      console.error('Erro ao baixar mídia da mensagem:', error);
+      return null;
+    }
+  },
+
+  // Enviar presença (digitando/gravando)
+  async sendPresence(instanceToken: string, number: string, presence: 'composing' | 'recording', delay: number = 2000): Promise<boolean> {
+    try {
+      const api = createApiClient(); const response = await api.post('/message/presence', {
+        number: number,
+        presence: presence,
+        delay: delay
+      }, {
+        headers: {
+          'Accept': 'application/json',
+          'token': instanceToken
+        }
+      });
+      
+      console.log('Resposta da API (enviar presença):', response.data);
+      return response.data.success || false;
+    } catch (error) {
+      console.error('Erro ao enviar presença:', error);
+      return false;
+    }
+  },
+
+};
 export default uazapiService;
+

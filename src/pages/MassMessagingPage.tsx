@@ -15,8 +15,7 @@ import {
   FileUp, 
   X, 
   Loader2,
-  BarChart2,
-  Settings
+  BarChart2
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { InstanceModal } from '../components/InstanceModal';
@@ -26,7 +25,7 @@ import { useNavigate } from 'react-router-dom';
 import { ContactSelectionModal } from '../components/mass/ContactSelectionModal';
 import { GroupSelectionModal } from '../components/mass/GroupSelectionModal';
 import { useAuth } from '../contexts/AuthContext';
-import { filterValidNumbers, addToBlacklist, getBlacklistStats } from '../lib/blacklist';
+import { filterValidNumbers, getBlacklistStats } from '../lib/blacklist';
 
 // Importando o serviço UAZAPI e seus tipos para garantir compatibilidade
 import { Group, Contact, uazapiService } from '../services/uazapiService';
@@ -117,7 +116,7 @@ export function MassMessagingPage() {
   
   // Configurações anti-spam avançadas
   const [antiSpamConfig, setAntiSpamConfig] = useState<AntiSpamConfig>({
-    validateNumbers: true, // HABILITADO PARA TESTE - vamos diagnosticar o problema
+    validateNumbers: false, // DESABILITADO - funcionalidade removida
     enableWarmup: false,
     monitorDelivery: true,
     autoBlacklist: false, // DESABILITADO - não queremos remover números durante teste
@@ -127,14 +126,14 @@ export function MassMessagingPage() {
   });
   
   // Estados para validação e monitoramento
-  const [validatingNumbers, setValidatingNumbers] = useState(false);
+  const [validatingNumbers] = useState(false);
   const [deliveryStats] = useState<DeliveryStats>({
     sent: 0,
     delivered: 0,
     failed: 0,
     rate: 0
   });
-  const [invalidNumbers, setInvalidNumbers] = useState<string[]>([]);
+  const [invalidNumbers] = useState<string[]>([]);
   const [blacklistedNumbers, setBlacklistedNumbers] = useState<string[]>([]);
   const [blacklistStats, setBlacklistStats] = useState({ total: 0, byReason: {}, recentlyAdded: 0 });
   
@@ -321,153 +320,7 @@ export function MassMessagingPage() {
     return selectedContacts.length + selectedGroups.length;
   };
 
-  // Função para gerar delay inteligente (distribuição gaussiana)
-  const generateSmartDelay = (minDelay: number, maxDelay: number): number => {
-    if (!antiSpamConfig.smartDelays) {
-      return Math.floor(Math.random() * (maxDelay - minDelay + 1)) + minDelay;
-    }
-    
-    const mean = (minDelay + maxDelay) / 2;
-    const stdDev = (maxDelay - minDelay) / 6;
-    
-    // Box-Muller transform para distribuição normal
-    let u = 0, v = 0;
-    while(u === 0) u = Math.random();
-    while(v === 0) v = Math.random();
-    
-    const z = Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
-    const delay = Math.round(mean + z * stdDev);
-    
-    return Math.max(minDelay, Math.min(maxDelay, delay));
-  };
 
-  // Função para validar números antes do envio
-  const validateNumbers = async (numbers: string[]): Promise<string[]> => {
-    if (!antiSpamConfig.validateNumbers || !selectedInstance?.token) {
-      console.log('⏭️ Validação desabilitada ou sem instância selecionada');
-      return numbers;
-    }
-
-    setValidatingNumbers(true);
-    const validNumbers: string[] = [];
-    const invalidNums: string[] = [];
-
-    try {
-      toast.loading('Validando números no WhatsApp...', { id: 'validating' });
-      
-      // DEBUG: Testar a API primeiro
-      console.log('🔬 Executando diagnóstico da API antes da validação...');
-      const debugResult = await uazapiService.debugNumberValidation(selectedInstance.token, numbers.slice(0, 2));
-      console.log('📊 Resultado do diagnóstico:', debugResult);
-      
-      // Processar números em lotes de 10 para não sobrecarregar a API
-      const batchSize = 10;
-      const batches = [];
-      
-      for (let i = 0; i < numbers.length; i += batchSize) {
-        batches.push(numbers.slice(i, i + batchSize));
-      }
-      
-      console.log(`📦 Dividindo ${numbers.length} números em ${batches.length} lotes de até ${batchSize} números`);
-      
-      let processedCount = 0;
-      
-      for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
-        const batch = batches[batchIndex];
-        
-        try {
-          console.log(`🔍 Validando lote ${batchIndex + 1}/${batches.length} com ${batch.length} números...`);
-          
-          const results = await uazapiService.checkNumbers(selectedInstance.token, batch);
-          
-          console.log(`📋 Resultados do lote ${batchIndex + 1}:`, results);
-          
-          if (!results || !Array.isArray(results)) {
-            console.error('❌ Resultado inválido da API para o lote', batchIndex + 1);
-            // Adicionar todos do lote como válidos para não bloquear
-            validNumbers.push(...batch);
-            processedCount += batch.length;
-            continue;
-          }
-          
-          let batchValidCount = 0;
-          let batchInvalidCount = 0;
-          
-          for (const result of results) {
-            console.log(`🔎 Analisando resultado:`, {
-              number: result.number,
-              exists: result.exists,
-              originalResponse: result.originalResponse
-            });
-            
-            if (result.exists) {
-              validNumbers.push(result.number);
-              batchValidCount++;
-              console.log(`✅ ${result.number} - VÁLIDO`);
-            } else {
-              invalidNums.push(result.number);
-              batchInvalidCount++;
-              console.log(`❌ ${result.number} - INVÁLIDO`);
-              
-              // Adicionar número inválido à blacklist se configurado
-              if (antiSpamConfig.autoBlacklist && selectedInstance?.id) {
-                addToBlacklist(result.number, 'invalid', selectedInstance.id);
-              }
-            }
-          }
-          
-          console.log(`📊 Lote ${batchIndex + 1} concluído: ${batchValidCount} válidos, ${batchInvalidCount} inválidos`);
-          
-          processedCount += batch.length;
-          
-          // Atualizar progresso
-          toast.loading(`Validando números... ${processedCount}/${numbers.length} (${validNumbers.length} válidos, ${invalidNums.length} inválidos)`, { id: 'validating' });
-          
-          // Delay entre lotes para não sobrecarregar
-          if (batchIndex < batches.length - 1) {
-            console.log('⏳ Aguardando 2s antes do próximo lote...');
-            await new Promise(resolve => setTimeout(resolve, 2000));
-          }
-          
-        } catch (error) {
-          console.error(`❌ Erro ao validar lote ${batchIndex + 1}:`, error);
-          // Em caso de erro, incluir todos os números do lote para não bloquear o envio
-          for (const number of batch) {
-            if (antiSpamConfig.autoBlacklist && selectedInstance?.id) {
-              addToBlacklist(number, 'error', selectedInstance.id);
-            }
-            validNumbers.push(number);
-          }
-          processedCount += batch.length;
-        }
-      }
-
-      setInvalidNumbers(invalidNums);
-      
-      console.log(`✅ Validação concluída: ${validNumbers.length} válidos, ${invalidNums.length} inválidos`);
-      
-      if (invalidNums.length > 0) {
-        toast.dismiss('validating');
-        toast(`${invalidNums.length} números inválidos foram removidos automaticamente`, { 
-          icon: '⚠️',
-          duration: 4000 
-        });
-      } else {
-        toast.dismiss('validating');
-        toast.success('Todos os números foram validados!');
-      }
-      
-    } catch (error) {
-      console.error('❌ Erro crítico na validação:', error);
-      toast.dismiss('validating');
-      toast.error('Erro na validação. Continuando sem validar.');
-      return numbers; // Retorna todos os números em caso de erro
-    } finally {
-      setValidatingNumbers(false);
-    }
-
-    return validNumbers;
-  };
 
   // Função para verificar limite diário
   const checkDailyLimit = (): boolean => {
@@ -490,35 +343,7 @@ export function MassMessagingPage() {
 
 
 
-  // Função para aplicar configurações inteligentes baseadas no volume
-  const applySmartSettings = (totalRecipients: number): void => {
-    if (totalRecipients <= 100) {
-      // Campanhas pequenas
-      setMinDelay(10);
-      setMaxDelay(30);
-      setPauseAfterCount(30);
-      setPauseDurationMinutes(3);
-      setUseBlocks(false);
-    } else if (totalRecipients <= 500) {
-      // Campanhas médias
-      setMinDelay(15);
-      setMaxDelay(45);
-      setPauseAfterCount(40);
-      setPauseDurationMinutes(5);
-      setUseBlocks(true);
-      setBlockSize(50);
-      setDelayBetweenBlocks(600); // 10 minutos
-    } else {
-      // Campanhas grandes
-      setMinDelay(30);
-      setMaxDelay(60);
-      setPauseAfterCount(25);
-      setPauseDurationMinutes(10);
-      setUseBlocks(true);
-      setBlockSize(Math.min(50, Math.ceil(totalRecipients / 20)));
-      setDelayBetweenBlocks(1800); // 30 minutos
-    }
-  };
+
   
   // Função principal para envio da campanha de mensagens
   const handleSubmit = async () => {
@@ -599,7 +424,8 @@ export function MassMessagingPage() {
         }
       }
 
-      // 4. Validar números antes do envio
+      // 4. Validação de números REMOVIDA
+      /*
       if (antiSpamConfig.validateNumbers) {
         numbers = await validateNumbers(numbers);
         
@@ -608,6 +434,7 @@ export function MassMessagingPage() {
           return;
         }
       }
+      */
       
       // Primeiro, salvar a campanha no Supabase
       const campaignData: Partial<MassCampaign> = {
@@ -622,8 +449,8 @@ export function MassMessagingPage() {
         sent_count: 0,
         failed_count: 0,
         status: sendMode === 'schedule' ? 'scheduled' : 'sending',
-        min_delay: minDelay * 1000,
-        max_delay: maxDelay * 1000,
+        min_delay: minDelay,
+            max_delay: maxDelay,
         scheduled_for: sendMode === 'schedule' && scheduleDate && scheduleTime
           ? new Date(`${scheduleDate}T${scheduleTime}`).toISOString()
           : undefined
@@ -671,8 +498,8 @@ export function MassMessagingPage() {
         message: messageData?.text || '',
         alternativeMessages: messageData?.useAlternativeTexts ? allMessages : undefined,
         numbers: numbers,
-        minDelay: antiSpamConfig.smartDelays ? generateSmartDelay(minDelay, maxDelay) * 1000 : minDelay * 1000,
-        maxDelay: antiSpamConfig.smartDelays ? generateSmartDelay(minDelay, maxDelay) * 1000 : maxDelay * 1000,
+        minDelay: minDelay,
+            maxDelay: maxDelay,
         media: mediaData,
         // Configurações de pausa automática
         autoPause: useAutoPause ? {
@@ -747,7 +574,7 @@ export function MassMessagingPage() {
       setCurrentCampaign(null);
       
       // Navegar para a página de relatórios imediatamente
-      navigate('/messages/campaigns');
+      navigate('/messages/reports');
       
       // Processar envio em segundo plano
       setTimeout(async () => {
@@ -1063,83 +890,6 @@ export function MassMessagingPage() {
     navigate('/messages/reports');
   };
 
-  // Função de debug temporária para testar a API
-  const debugValidationAPI = async () => {
-    if (!selectedInstance?.token) {
-      toast.error('Selecione uma instância primeiro');
-      return;
-    }
-
-    try {
-      toast.loading('⚡ Testando API de validação...', { id: 'debug' });
-      
-      // Usar o teste rápido primeiro
-      const quickResult = await uazapiService.quickValidationTest(selectedInstance.token);
-      
-      console.log('⚡ RESULTADO DO TESTE RÁPIDO:', quickResult);
-      
-      if (!quickResult.success) {
-        toast.dismiss('debug');
-        toast.error(`❌ API com problema: ${quickResult.error}`);
-        console.error('❌ TESTE RÁPIDO FALHOU:', quickResult);
-        
-        // Tentar diagnóstico completo se o rápido falhar
-        toast.loading('🔬 Executando diagnóstico completo...', { id: 'debug' });
-        const fullResult = await uazapiService.debugNumberValidation(selectedInstance.token);
-        toast.dismiss('debug');
-        
-        if (fullResult.success) {
-          toast('📊 Diagnóstico completo - veja console');
-        } else {
-          toast.error(`❌ API não funcionando: ${fullResult.error}`);
-        }
-        return;
-      }
-      
-      toast.dismiss('debug');
-      
-      if (quickResult.validationLogic === 'funcionando') {
-        toast.success('✅ API funcionando corretamente!');
-        console.log('✅ VALIDAÇÃO FUNCIONANDO:', quickResult);
-      } else {
-        toast(`⚠️ API responde mas precisa ajuste - veja console`, {
-          duration: 4000
-        });
-        console.log('⚠️ VALIDAÇÃO PRECISA AJUSTE:', quickResult);
-        
-        // Mostrar qual campo usar
-        if (quickResult.rawResult) {
-          console.log('💡 CAMPOS DISPONÍVEIS:', Object.keys(quickResult.rawResult));
-          console.log('🔧 SUGESTÃO: Verificar qual campo indica validação');
-        }
-      }
-      
-      // Testar com números reais se tudo OK
-      if (quickResult.success && selectedContacts.length > 0) {
-        toast.loading('🧪 Testando com seus números...', { id: 'real-test' });
-        
-        const testNumbers = selectedContacts.slice(0, 3).map(c => c.number.replace(/\D/g, ''));
-        const realTest = await uazapiService.checkNumbers(selectedInstance.token, testNumbers);
-        
-        toast.dismiss('real-test');
-        console.log('🧪 TESTE COM NÚMEROS REAIS:', realTest);
-        
-        if (realTest && realTest.length > 0) {
-          const validCount = realTest.filter(r => r.exists).length;
-          toast(`📊 Teste: ${validCount}/${realTest.length} números válidos`, {
-            duration: 4000
-          });
-        }
-      }
-      
-    } catch (error) {
-      toast.dismiss('debug');
-      toast.dismiss('real-test');
-      toast.error('❌ Erro ao executar diagnóstico');
-      console.error('❌ ERRO AO EXECUTAR DIAGNÓSTICO:', error);
-    }
-  };
-
   return (
     <div className="space-y-4 sm:space-y-6">
       <InstanceModal />
@@ -1169,23 +919,14 @@ export function MassMessagingPage() {
             <p className="text-sm sm:text-base text-gray-600 mt-1">Envie mensagens para múltiplos contatos</p>
           </div>
           <div className="flex gap-2">
-            <button
-              onClick={debugValidationAPI}
-              className="flex items-center justify-center gap-2 px-3 sm:px-4 py-2 bg-orange-100 hover:bg-orange-200 text-orange-700 rounded-lg transition-colors text-sm sm:text-base"
-              title="Testar API de validação"
-            >
-              <Settings className="h-4 w-4" />
-              <span className="hidden sm:inline">Debug API</span>
-              <span className="sm:hidden">Debug</span>
-            </button>
-            <button
-              onClick={goToHistory}
-              className="flex items-center justify-center gap-2 px-3 sm:px-4 py-2 bg-primary-100 hover:bg-primary-200 text-primary-700 rounded-lg transition-colors text-sm sm:text-base"
-            >
-              <BarChart2 className="h-4 w-4" />
-              <span className="hidden sm:inline">Ver Histórico de Campanhas</span>
-              <span className="sm:hidden">Histórico</span>
-            </button>
+          <button
+            onClick={goToHistory}
+            className="flex items-center justify-center gap-2 px-3 sm:px-4 py-2 bg-primary-100 hover:bg-primary-200 text-primary-700 rounded-lg transition-colors text-sm sm:text-base"
+          >
+            <BarChart2 className="h-4 w-4" />
+            <span className="hidden sm:inline">Ver Histórico de Campanhas</span>
+            <span className="sm:hidden">Histórico</span>
+          </button>
           </div>
         </div>
       )}
@@ -1973,23 +1714,6 @@ export function MassMessagingPage() {
                   
                   <div className="space-y-4 p-4 bg-green-50 rounded-lg border border-green-200">
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      {/* Validação de números */}
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <span className="text-sm font-medium text-gray-700">Validar Números</span>
-                          <p className="text-xs text-gray-500">Verificar se existem no WhatsApp</p>
-                        </div>
-                        <label className="relative inline-flex items-center cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={antiSpamConfig.validateNumbers}
-                            onChange={(e) => setAntiSpamConfig(prev => ({ ...prev, validateNumbers: e.target.checked }))}
-                            className="sr-only peer"
-                          />
-                          <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-green-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-green-600"></div>
-                        </label>
-                      </div>
-
                       {/* Delays inteligentes */}
                       <div className="flex items-center justify-between">
                         <div>
@@ -2220,7 +1944,6 @@ export function MassMessagingPage() {
                         <span className="text-gray-600 text-sm sm:text-base">Proteção Anti-Spam:</span>
                         <span className="font-medium text-green-600 text-sm sm:text-base">
                           {[
-                            antiSpamConfig.validateNumbers && 'Validação',
                             antiSpamConfig.smartDelays && 'Delays Smart',
                             antiSpamConfig.monitorDelivery && 'Monitoramento',
                             antiSpamConfig.autoBlacklist && 'Auto-Blacklist'
@@ -2477,8 +2200,8 @@ export function MassMessagingPage() {
                       {maxDelay < 30 && getTotalRecipients() > 500 && (
                         <p>• Para campanhas grandes, considere aumentar o delay máximo para 30-60s</p>
                       )}
-                      {!antiSpamConfig.validateNumbers && (
-                        <p>• Ative a validação de números para melhorar a taxa de entrega</p>
+                      {!antiSpamConfig.smartDelays && (
+                        <p>• Ative delays inteligentes para melhorar a taxa de entrega</p>
                       )}
                       {!messageData?.useAlternativeTexts && getTotalRecipients() > 100 && (
                         <p>• Use variações de texto para parecer mais natural</p>

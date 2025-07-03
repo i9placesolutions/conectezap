@@ -104,8 +104,8 @@ export function InstanceModal() {
             </p>
           </div>
         ) : (
-          <div className="space-y-2">
-            <p className="text-sm text-gray-600 mb-4">
+          <div className="space-y-2 max-h-96 overflow-y-auto">
+            <p className="text-sm text-gray-600 mb-4 px-1">
               Escolha uma instância conectada para continuar:
             </p>
             {apiInstances.map(instance => (
