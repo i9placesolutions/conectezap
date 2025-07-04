@@ -100,6 +100,32 @@ const createInstanceClient = (instanceToken: string): AxiosInstance => {
   });
 };
 
+// Função para mapear status da API UAZAPI para status interno
+const mapInstanceStatus = (apiStatus: string): 'connected' | 'disconnected' | 'connecting' => {
+  if (!apiStatus) return 'disconnected';
+  
+  const status = apiStatus.toLowerCase();
+  
+  // Status que indicam conexão estabelecida
+  if (['connected', 'open', 'online', 'active'].includes(status)) {
+    return 'connected';
+  }
+  
+  // Status que indicam processo de conexão
+  if (['connecting', 'loading', 'qrcode', 'qr', 'pairing', 'authenticating', 'starting', 'initializing', 'opening'].includes(status)) {
+    return 'connecting';
+  }
+  
+  // Status que indicam desconexão ou erro
+  if (['disconnected', 'close', 'closed', 'offline', 'inactive', 'error', 'failed', 'timeout'].includes(status)) {
+    return 'disconnected';
+  }
+  
+  // Status desconhecido - assumir desconectado por segurança
+  console.warn(`Status desconhecido da instância: ${apiStatus}`);
+  return 'disconnected';
+};
+
 export const getInstances = async (): Promise<Instance[]> => {
   try {
     const uazapiClient = createUazapiClient();
@@ -118,8 +144,7 @@ export const getInstances = async (): Promise<Instance[]> => {
       ? response.data.map((instance: any) => ({
           id: instance.id || '',
           name: instance.name || instance.profileName || instance.id || 'Sem nome',
-          status: instance.state === 'open' || instance.status === 'connected' ? 'connected' : 
-                  instance.state === 'connecting' || instance.status === 'connecting' ? 'connecting' : 'disconnected',
+          status: mapInstanceStatus(instance.state || instance.status),
           token: instance.token || instance.apikey || '',
           phoneConnected: instance.phoneConnected || instance.phone || '',
           profileName: instance.profileName || '',

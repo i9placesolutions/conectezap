@@ -1,13 +1,13 @@
 import { useState, useEffect } from 'react';
-import { Search, Plus, RefreshCw, Phone, AlertTriangle, Settings } from 'lucide-react';
+import { Search, Plus, RefreshCw, Phone, AlertTriangle } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { toast } from 'react-hot-toast';
 import { InstanceModal } from '../components/instance/InstanceModal';
 import { InstanceCard } from '../components/instance/InstanceCard';
-import { instanceAPI } from '../lib/api/instance';
+
 import { QRCodeModal } from '../components/instance/QRCodeModal';
 import { getInstances, getCurrentServerConfig } from '../lib/wapi/api';
-import { useServer } from '../contexts/ServerContext';
+
 
 interface Instance {
   id: string;

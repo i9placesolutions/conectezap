@@ -83,6 +83,26 @@ class InstanceAPI {
         return 'connected';
       }
 
+      // Primeiro tenta o endpoint /instance/status (padrão UAZAPI)
+      try {
+        const statusResponse = await fetch(`${API_URL}/instance/status`, {
+          method: 'GET',
+          headers: {
+            ...this.headers,
+            'token': API_KEY // UAZAPI usa 'token' no header
+          }
+        });
+
+        if (statusResponse.ok) {
+          const statusData = await statusResponse.json();
+          console.log(`Status da instância ${instanceId}:`, statusData);
+          return statusData.status || statusData.state || 'disconnected';
+        }
+      } catch (statusError) {
+        console.warn('Erro no endpoint /instance/status, tentando connectionState:', statusError);
+      }
+
+      // Fallback para o endpoint antigo
       const response = await fetch(`${API_URL}/instance/connectionState/${instanceId}`, {
         method: 'GET',
         headers: this.headers
@@ -108,42 +128,78 @@ class InstanceAPI {
 
       // First check if already connected
       const state = await this.getConnectionState(instanceId);
-      if (state === 'connected') {
+      if (state === 'connected' || state === 'open') {
         throw new Error('Instância já está conectada');
       }
 
-      // Try to initialize
-      const initResponse = await fetch(`${API_URL}/instance/init/${instanceId}`, {
-        method: 'GET',
-        headers: this.headers
+      // Usar o endpoint padrão da UAZAPI para conectar
+      const connectResponse = await fetch(`${API_URL}/instance/connect`, {
+        method: 'POST',
+        headers: {
+          ...this.headers,
+          'token': API_KEY
+        },
+        body: JSON.stringify({})
       });
 
-      if (!initResponse.ok) {
-        throw new Error('Erro ao inicializar instância. Tente novamente em alguns instantes.');
+      if (!connectResponse.ok) {
+        // Fallback para o método antigo se o novo não funcionar
+        console.warn('Endpoint /instance/connect falhou, tentando método antigo');
+        
+        const initResponse = await fetch(`${API_URL}/instance/init/${instanceId}`, {
+          method: 'GET',
+          headers: this.headers
+        });
+
+        if (!initResponse.ok) {
+          throw new Error('Erro ao inicializar instância. Tente novamente em alguns instantes.');
+        }
+
+        // Wait a moment for the instance to initialize
+        await new Promise(resolve => setTimeout(resolve, 2000));
       }
 
-      // Wait a moment for the instance to initialize
-      await new Promise(resolve => setTimeout(resolve, 2000));
-
-      // Get QR code
-      const qrResponse = await fetch(`${API_URL}/instance/qrcode/${instanceId}`, {
+      // Get QR code usando o endpoint padrão da UAZAPI
+      const qrResponse = await fetch(`${API_URL}/instance/qrcode`, {
         method: 'GET',
-        headers: this.headers
+        headers: {
+          ...this.headers,
+          'token': API_KEY
+        }
       });
 
       if (!qrResponse.ok) {
-        throw new Error('Erro ao gerar QR code. Tente novamente.');
+        // Fallback para o método antigo
+        const qrResponseOld = await fetch(`${API_URL}/instance/qrcode/${instanceId}`, {
+          method: 'GET',
+          headers: this.headers
+        });
+
+        if (!qrResponseOld.ok) {
+          throw new Error('Erro ao gerar QR code. Tente novamente.');
+        }
+
+        const qrDataOld = await qrResponseOld.json();
+        const qrCodeOld = qrDataOld.qrcode?.base64 || qrDataOld.base64 || qrDataOld.qr;
+
+        if (!qrCodeOld) {
+          throw new Error('QR code não disponível. Tente novamente em alguns instantes.');
+        }
+
+        return { 
+          qrCode: `data:image/png;base64,${qrCodeOld}`
+        };
       }
 
       const qrData = await qrResponse.json();
-      const qrCode = qrData.qrcode?.base64 || qrData.base64 || qrData.qr;
+      const qrCode = qrData.qrcode?.base64 || qrData.base64 || qrData.qr || qrData.code;
 
       if (!qrCode) {
         throw new Error('QR code não disponível. Tente novamente em alguns instantes.');
       }
 
       return { 
-        qrCode: `data:image/png;base64,${qrCode}`
+        qrCode: qrCode.startsWith('data:') ? qrCode : `data:image/png;base64,${qrCode}`
       };
     } catch (error) {
       console.error('Error connecting instance:', error);
@@ -157,6 +213,23 @@ class InstanceAPI {
     }
 
     try {
+      // Usar o endpoint padrão da UAZAPI para desconectar
+      const disconnectResponse = await fetch(`${API_URL}/instance/disconnect`, {
+        method: 'POST',
+        headers: {
+          ...this.headers,
+          'token': API_KEY
+        }
+      });
+
+      if (disconnectResponse.ok) {
+        toast.success('Instância desconectada com sucesso!');
+        return;
+      }
+
+      // Fallback para o método antigo se o novo não funcionar
+      console.warn('Endpoint /instance/disconnect falhou, tentando método antigo');
+      
       // Try logout first
       const logoutResponse = await fetch(`${API_URL}/instance/logout/${instanceId}`, {
         method: 'DELETE',
@@ -164,11 +237,11 @@ class InstanceAPI {
       });
 
       if (!logoutResponse.ok) {
-        throw new Error('Erro ao fazer logout. Tente novamente.');
+        console.warn('Logout falhou, tentando fechar diretamente');
+      } else {
+        // Wait a moment
+        await new Promise(resolve => setTimeout(resolve, 1000));
       }
-
-      // Wait a moment
-      await new Promise(resolve => setTimeout(resolve, 1000));
 
       // Then close
       const closeResponse = await fetch(`${API_URL}/instance/close/${instanceId}`, {
@@ -223,17 +296,26 @@ class InstanceAPI {
     if (!state) return 'disconnected';
     state = state.toLowerCase();
     
-    // Map various connected states
+    // Map various connected states - instância totalmente conectada
     if (['connected', 'open', 'online', 'active'].includes(state)) {
       return 'connected';
     }
     
-    // Map various connecting states
-    if (['connecting', 'loading', 'qrcode', 'starting', 'initializing'].includes(state)) {
+    // Map various connecting states - instância em processo de conexão
+    if (['connecting', 'loading', 'qrcode', 'qr', 'starting', 'initializing', 'pairing', 'authenticating'].includes(state)) {
       return 'connecting';
     }
     
-    // Everything else is considered disconnected
+    // Map disconnected states - instância desconectada ou com erro
+    if (['disconnected', 'closed', 'offline', 'inactive', 'error', 'failed', 'timeout'].includes(state)) {
+      return 'disconnected';
+    }
+    
+    // Estados específicos da UAZAPI
+    if (state === 'close') return 'disconnected';
+    if (state === 'opening') return 'connecting';
+    
+    // Everything else is considered disconnected by default
     return 'disconnected';
   }
 }

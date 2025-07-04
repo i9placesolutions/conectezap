@@ -478,33 +478,7 @@ export function ReportsPage() {
             <span className="hidden sm:inline">{loadingCampaigns ? 'Carregando...' : 'Atualizar'}</span>
           </button>
           
-          {/* Botão de verificação forçada de status */}
-          <button
-            onClick={async () => {
-              if (!selectedInstance?.token) {
-                toast.error('Nenhuma instância selecionada');
-                return;
-              }
-              
-              setIsRefreshing(true);
-              try {
-                console.log('🔍 Executando verificação forçada de status...');
-                await uazapiService.forceCampaignStatusUpdate(selectedInstance.token);
-                await fetchCampaigns(false);
-                toast.success('Verificação de status concluída');
-              } catch (error) {
-                console.error('Erro na verificação:', error);
-                toast.error('Erro ao verificar status das campanhas');
-              } finally {
-                setIsRefreshing(false);
-              }
-            }}
-            disabled={isRefreshing || loadingCampaigns || !selectedInstance}
-            className="flex items-center justify-center gap-2 px-3 lg:px-4 py-2.5 lg:py-3 bg-orange-50 border border-orange-300 rounded-lg hover:bg-orange-100 text-orange-700 text-sm lg:text-base font-medium transition-colors disabled:opacity-50"
-            title="Forçar verificação de status das campanhas"
-          >
-            🔧
-          </button>
+
           <button
             onClick={() => generatePDF(reports, dateRange)}
             disabled={reports.length === 0}

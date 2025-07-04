@@ -4,7 +4,7 @@ import { cn } from '../lib/utils';
 import { uazapiService, Chat as UazapiChat } from '../services/uazapiService';
 import { getCurrentServerConfig } from '../services/api';
 import { useInstance } from '../contexts/InstanceContext';
-import { message } from '../lib/wapi/api';
+import { message, getProfileInfo } from '../lib/wapi/api';
 import { toast } from 'react-hot-toast';
 import { SelectInstanceModal } from '../components/instance/SelectInstanceModal';
 import { useRealTimeChat } from '../hooks/useRealTimeChat';
@@ -54,59 +54,41 @@ export function ChatPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messageInputRef = useRef<HTMLTextAreaElement>(null);
 
-  // Função para analisar se uma mensagem pode ser uma resposta baseado em padrões
-  const analyzeIfCouldBeReply = (msg: any, content: string | null, apiMessages: any[]) => {
-    if (!content) return { isLikely: false };
-    
-    const contentLower = content.toLowerCase().trim();
-    
-    // Padrões que indicam resposta
-    const replyPatterns = [
-      'sim', 'não', 'ok', 'top', 'legal', 'show', 'as', 'certo', 'perfeito',
-      'obrigado', 'vlw', 'tá bom', 'entendi', 'ótimo', 'blz', 'massa'
-    ];
-    
-    // Verificar se o conteúdo é tipicamente uma resposta
-    const isReplyLikeContent = replyPatterns.includes(contentLower) || 
-                              contentLower.length <= 5 && /^[a-záéíóúâêîôûãõç]+$/.test(contentLower);
-    
-    if (isReplyLikeContent && apiMessages.length > 0) {
-      // Pegar a mensagem anterior que não seja do mesmo autor
-      const msgAuthor = msg.fromMe ? 'Você' : (msg.pushName || msg.author || 'Contato');
-      const previousMessage = apiMessages
-        .slice()
-        .reverse()
-        .find(m => {
-          const prevAuthor = m.fromMe ? 'Você' : (m.pushName || m.author || 'Contato');
-          return prevAuthor !== msgAuthor;
-        });
-      
-      if (previousMessage) {
-        // Verificar se há proximidade temporal (último 5 minutos)
-        const timeDiff = (msg.timestamp || Date.now()) - (previousMessage.timestamp || 0);
-        const isRecent = timeDiff < 5 * 60 * 1000; // 5 minutos
-        
-        if (isRecent) {
-          const prevBody = typeof previousMessage.body === 'string' 
-            ? previousMessage.body 
-            : 'Mensagem anterior';
-            
-          return {
-            isLikely: true,
-            quotedMessage: {
-              body: prevBody,
-              type: previousMessage.type || 'text',
-              pushName: previousMessage.author || previousMessage.pushName || 'Contato',
-              id: previousMessage.id || 'inferred_' + Date.now(),
-              timestamp: previousMessage.timestamp || (msg.timestamp - 60000)
-            }
-          };
-        }
-      }
+  // Cache para nomes de contatos
+  const [contactNamesCache, setContactNamesCache] = useState<Record<string, string>>({});
+
+  // Função para buscar o nome correto do contato
+  const getContactName = async (chatId: string, instanceToken?: string): Promise<string> => {
+    // Verificar cache primeiro
+    if (contactNamesCache[chatId]) {
+      return contactNamesCache[chatId];
     }
-    
-    return { isLikely: false };
+
+    try {
+      // Extrair número do chatId (remover @s.whatsapp.net se presente)
+      const number = chatId.includes('@') ? chatId.split('@')[0] : chatId;
+      
+      // Buscar informações do perfil
+      const profileInfo = await getProfileInfo(number, instanceToken);
+      
+      if (profileInfo && profileInfo.name && profileInfo.name !== number) {
+        // Atualizar cache
+        setContactNamesCache(prev => ({
+          ...prev,
+          [chatId]: profileInfo.name
+        }));
+        return profileInfo.name;
+      }
+    } catch (error) {
+      console.warn('Erro ao buscar nome do contato:', error);
+    }
+
+    // Fallback para 'Contato' se não conseguir obter o nome
+    return 'Contato';
   };
+
+  // Função para analisar se uma mensagem pode ser uma resposta baseado em padrões
+  // Função removida: analyzeIfCouldBeReply - causava detecção incorreta de respostas
 
   // Sistema de tempo real
   const { isConnected: realtimeConnected } = useRealTimeChat({
@@ -169,16 +151,7 @@ export function ChatPage() {
           
           console.log('✅ Mensagem citada processada em tempo real:', processedQuotedMsg);
         } else {
-          // Tentar inferir se é uma resposta baseado em padrões
-          setMessages(prev => {
-            const content = message.body || message.content || '';
-            const couldBeReply = analyzeIfCouldBeReply(message, content, prev);
-            if (couldBeReply.isLikely) {
-              console.log('🕵️ DETECTADA possível resposta em tempo real por análise de padrões:', couldBeReply);
-              processedQuotedMsg = couldBeReply.quotedMessage;
-            }
-            return prev;
-          });
+          console.log('ℹ️ Nenhuma mensagem citada real encontrada em tempo real para:', message.id);
         }
         
         const newMessage: ChatMessage = {
@@ -188,7 +161,7 @@ export function ChatPage() {
           timestamp: message.timestamp || Date.now(),
           fromMe: message.fromMe || false,
           type: message.type || 'text',
-          author: message.author || message.pushName,
+          author: message.author || message.pushName || (message.fromMe ? 'Você' : 'Contato'),
           mediaUrl: message.mediaUrl,
           quotedMsg: processedQuotedMsg
         };
@@ -200,6 +173,21 @@ export function ChatPage() {
           }
           return [...prev, newMessage];
         });
+        
+        // Se o autor é 'Contato', tentar buscar o nome correto
+        if (!message.fromMe && newMessage.author === 'Contato' && selectedInstance?.token) {
+          getContactName(message.chatId, selectedInstance.token)
+            .then(correctName => {
+              if (correctName !== 'Contato') {
+                setMessages(prev => prev.map(msg => 
+                  msg.id === newMessage.id ? { ...msg, author: correctName } : msg
+                ));
+              }
+            })
+            .catch(error => {
+              console.warn('Erro ao buscar nome do contato em tempo real:', error);
+            });
+        }
         
         toast.success('Nova mensagem recebida!');
       }
@@ -648,36 +636,8 @@ export function ChatPage() {
             });
           }
           
-          // DETECÇÃO ALTERNATIVA: Tentar inferir se é uma resposta baseado em padrões
-          // Usar apiMessages que já existe neste ponto
-          const couldBeReply = analyzeIfCouldBeReply(msg, content, apiMessages);
-          if (couldBeReply.isLikely) {
-            console.log('🕵️ DETECTADA possível resposta por análise de padrões:', couldBeReply);
-            processedQuotedMsg = couldBeReply.quotedMessage;
-          }
-          
-          // Adicionar simulação realista para demonstração (TEMPORÁRIO)
-          if (!processedQuotedMsg && process.env.NODE_ENV === 'development') {
-            // Simular mensagem citada em algumas mensagens para demonstração
-            const shouldSimulate = content && [
-              'ok', 'sim', 'não', 'obrigado', 'vlw', 'tá bom', 'entendi',
-              'certo', 'perfeito', 'ótimo', 'legal', 'show', 'as', 'top'
-            ].includes(content.toLowerCase().trim());
-            
-                          if (shouldSimulate && apiMessages.length > 0) {
-                console.log('🧪 SIMULANDO mensagem citada para demonstração');
-                const previousMessage = apiMessages[apiMessages.length - 1];
-                const prevMsgAny = previousMessage as any;
-                
-                processedQuotedMsg = {
-                  body: typeof prevMsgAny.body === 'string' ? prevMsgAny.body : 'Mensagem anterior',
-                  type: 'text',
-                  pushName: prevMsgAny.author || prevMsgAny.pushName || 'Contato',
-                  id: 'simulated_' + Date.now(),
-                  timestamp: msg.timestamp - 60000
-                };
-              }
-          }
+          // Mensagem citada não encontrada - manter como null
+          console.log('ℹ️ Nenhuma mensagem citada real encontrada para:', msg.id);
         }
 
         return {
@@ -688,7 +648,7 @@ export function ChatPage() {
           fromMe: msg.fromMe,
           type: messageType as 'text' | 'image' | 'video' | 'audio' | 'ptt' | 'document',
           status: msg.fromMe ? 'delivered' : undefined,
-          author: msg.author || msg.pushName || (msg.fromMe ? 'Você' : chat.name),
+          author: msg.author || msg.pushName || (msg.fromMe ? 'Você' : 'Contato'),
           mediaUrl: mediaUrl,
           quotedMsg: processedQuotedMsg
         };
@@ -722,6 +682,49 @@ export function ChatPage() {
       console.log('==========================================');
       
       setMessages(chatMessages);
+      
+      // Buscar nomes corretos dos contatos para mensagens que não têm author/pushName
+      const messagesToUpdate = chatMessages.filter(msg => 
+        !msg.fromMe && msg.author === 'Contato' && selectedInstance?.token
+      );
+      
+      if (messagesToUpdate.length > 0) {
+        console.log(`🔍 Buscando nomes corretos para ${messagesToUpdate.length} contatos...`);
+        
+        // Buscar nomes em paralelo (limitado para não sobrecarregar a API)
+        const batchSize = 5;
+        for (let i = 0; i < messagesToUpdate.length; i += batchSize) {
+          const batch = messagesToUpdate.slice(i, i + batchSize);
+          
+          const namePromises = batch.map(async (msg) => {
+            try {
+              const correctName = await getContactName(msg.chatId, selectedInstance.token);
+              return { messageId: msg.id, correctName };
+            } catch (error) {
+              console.warn(`Erro ao buscar nome para ${msg.chatId}:`, error);
+              return { messageId: msg.id, correctName: 'Contato' };
+            }
+          });
+          
+          const results = await Promise.all(namePromises);
+          
+          // Atualizar mensagens com nomes corretos
+          setMessages(prev => prev.map(msg => {
+            const result = results.find(r => r.messageId === msg.id);
+            if (result && result.correctName !== 'Contato') {
+              return { ...msg, author: result.correctName };
+            }
+            return msg;
+          }));
+          
+          // Pequena pausa entre batches para não sobrecarregar a API
+          if (i + batchSize < messagesToUpdate.length) {
+            await new Promise(resolve => setTimeout(resolve, 100));
+          }
+        }
+        
+        console.log('✅ Nomes dos contatos atualizados');
+      }
       
     } catch (error) {
       console.error('❌ Erro ao carregar mensagens:', error);
@@ -1823,7 +1826,7 @@ export function ChatPage() {
                                 {renderMessageContent(message)}
                               </div>
                             ) : (
-                              <p className="break-words">{renderMessageContent(message)}</p>
+                              <p className="break-words whitespace-pre-wrap">{renderMessageContent(message)}</p>
                             )}
                             
                             <div className="flex items-center justify-end gap-1 mt-1">
@@ -1850,7 +1853,7 @@ export function ChatPage() {
                               {renderMessageContent(message)}
                             </div>
                           ) : (
-                            <p className="break-words">{renderMessageContent(message)}</p>
+                            <p className="break-words whitespace-pre-wrap">{renderMessageContent(message)}</p>
                           )}
                           <div className="flex items-center justify-end gap-1 mt-1">
                             <span className={cn(

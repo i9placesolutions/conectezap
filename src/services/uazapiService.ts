@@ -938,27 +938,22 @@ export const uazapiService = {
         let realStatus = this.mapApiStatus(campaign.status);
         console.log('Status inicial mapeado:', realStatus);
         
-        // Verificar se a campanha deve ser marcada como concluída
-        if (this.isCampaignCompleted(campaign)) {
+        // PRIORIDADE 1: Verificar se a campanha está realmente ativa (em execução)
+        if (this.isCampaignActive(campaign)) {
+          // Se está ativa, manter como ativo independente do status da API
+          if (!['paused', 'cancelled', 'failed'].includes(realStatus)) {
+            realStatus = 'ativo';
+            console.log(`🔄 Campanha ${campaign.id} marcada como ATIVA: ${processed}/${total} mensagens processadas`);
+          }
+        }
+        // PRIORIDADE 2: Verificar se a campanha deve ser marcada como concluída
+        else if (this.isCampaignCompleted(campaign)) {
           realStatus = 'completed';
           console.log(`✅ Campanha ${campaign.id} marcada como CONCLUÍDA`);
         }
-        // Verificar se a campanha está realmente ativa
-        else if (this.isCampaignActive(campaign)) {
-          // Manter status de pausa/cancelamento se aplicável
-          if (!['paused', 'cancelled', 'failed'].includes(realStatus)) {
-          realStatus = 'ativo';
-          console.log(`🔄 Campanha ${campaign.id} marcada como ATIVA: ${processed}/${total} mensagens processadas`);
-          }
-        }
-        // Se não está ativa nem concluída, verificar outros status
-        else if (total > 0 && processed > 0) {
-          // Se tem mensagens processadas mas não está ativa, pode estar parada/falhada
-          if (!['paused', 'cancelled', 'failed', 'scheduled'].includes(realStatus)) {
-            realStatus = 'completed';
-            console.log(`🏁 Campanha ${campaign.id} marcada como CONCLUÍDA (não ativa): ${processed}/${total} mensagens processadas`);
-          }
-        }
+        // PRIORIDADE 3: Se não está ativa nem concluída, manter o status mapeado da API
+        // Não forçar conclusão prematuramente - deixar a API determinar o status
+        console.log(`📊 Campanha ${campaign.id} mantendo status da API: ${realStatus}`);
         
         console.log('Status final determinado:', realStatus);
         console.log('=== FIM DEBUG ===\n');
@@ -1023,27 +1018,44 @@ export const uazapiService = {
   
   // Helper para mapear status da API para o formato da interface
   mapApiStatus(apiStatus: string): Campaign['status'] {
-    const statusMap: Record<string, Campaign['status']> = {
-      'ativo': 'ativo',
-      'Active': 'ativo',
-      'active': 'ativo',
-      'running': 'running',
-      'paused': 'paused',
-      'completed': 'completed',
-      'Done': 'completed',
-      'done': 'completed',
-      'cancelled': 'cancelled',
-      'canceled': 'cancelled',
-      'failed': 'failed',
-      'Failed': 'failed',
-      'scheduled': 'scheduled',
-      'Scheduled': 'scheduled',
-      'Archived': 'completed',
-      'archived': 'completed'
-    };
-    
-    console.log('Status da API:', apiStatus, '-> Mapeado para:', statusMap[apiStatus] || 'running');
-    return statusMap[apiStatus] || 'running';
+    if (!apiStatus) return 'failed';
+
+    const status = apiStatus.toLowerCase();
+
+    // Status que indicam campanha ativa/em execução
+    if (['ativo', 'active', 'running', 'processing', 'sending', 'in_progress', 'executing', 'started', 'em andamento'].includes(status)) {
+      return 'ativo';
+    }
+
+    // Status que indicam campanha pausada
+    if (['paused', 'pausing', 'suspended', 'stopped', 'halted', 'parado'].includes(status)) {
+      return 'paused';
+    }
+
+    // Status que indicam campanha concluída com sucesso
+    if (['completed', 'done', 'finished', 'success', 'archived', 'finalized', 'concluido', 'finalizado'].includes(status)) {
+      return 'completed';
+    }
+
+    // Status que indicam campanha cancelada
+    if (['cancelled', 'canceled', 'aborted', 'terminated', 'stopped_by_user', 'cancelado'].includes(status)) {
+      return 'cancelled';
+    }
+
+    // Status que indicam falha na campanha
+    if (['failed', 'error', 'failed_to_send', 'error_sending', 'timeout', 'connection_error', 'falhou', 'erro'].includes(status)) {
+      return 'failed';
+    }
+
+    // Status que indicam campanha agendada
+    if (['scheduled', 'pending', 'waiting', 'queued', 'scheduled_for_later', 'agendado', 'pendente'].includes(status)) {
+      return 'scheduled';
+    }
+
+    // Status desconhecido - log para debug e assumir como scheduled para ser mais conservador
+    console.warn(`⚠️ Status desconhecido da campanha: ${apiStatus}`);
+    console.log('Status da API:', apiStatus, '-> Mapeado para: scheduled (conservador)');
+    return 'scheduled';
   },
   
   // Helper para calcular o progresso da campanha
@@ -1063,32 +1075,44 @@ export const uazapiService = {
     const processed = (campaign.log_sucess || 0) + (campaign.log_failed || 0);
     const progress = this.calculateProgress(campaign);
     
-    // Verificar se todas as mensagens foram processadas
-    const allMessagesProcessed = total > 0 && processed >= total;
-    
-    // Verificar se o progresso é 100%
-    const progressComplete = progress >= 100;
-    
-    // Verificar se a campanha é muito antiga (mais de 24 horas) e tem algum progresso
+    // Verificar se a campanha é muito recente (menos de 5 minutos)
     const campaignDate = campaign.created ? new Date(campaign.created) : new Date();
-    const hoursAgo = (new Date().getTime() - campaignDate.getTime()) / (1000 * 60 * 60);
-    const isOldWithProgress = hoursAgo > 24 && processed > 0;
+    const minutesAgo = (new Date().getTime() - campaignDate.getTime()) / (1000 * 60);
+    const hoursAgo = minutesAgo / 60;
     
-    // Verificar se o status da API já indica conclusão
-    const apiStatusComplete = ['Done', 'done', 'completed', 'Archived', 'archived'].includes(campaign.status);
+    // NUNCA marcar como concluída se for muito recente (menos de 5 minutos)
+    if (minutesAgo < 5) {
+      console.log(`🆕 Campanha ${campaign.id} muito recente (${minutesAgo.toFixed(1)} min), NÃO concluir`);
+      return false;
+    }
     
-    const shouldComplete = allMessagesProcessed || progressComplete || isOldWithProgress || apiStatusComplete;
+    // Verificar se todas as mensagens foram processadas E o progresso é 100%
+    const allMessagesProcessed = total > 0 && processed >= total && progress >= 100;
+    
+    // Verificar se a campanha é muito antiga (mais de 6 horas) e tem progresso quase completo (95%+)
+    const isOldWithHighProgress = hoursAgo > 6 && progress >= 95;
+    
+    // Verificar se o status da API já indica conclusão explícita
+    const apiStatusComplete = [
+      'Done', 'done', 'completed', 'Completed', 'COMPLETED',
+      'Archived', 'archived', 'ARCHIVED',
+      'finished', 'Finished', 'FINISHED',
+      'finalizado', 'Finalizado', 'FINALIZADO'
+    ].includes(campaign.status);
+    
+    const shouldComplete = allMessagesProcessed || isOldWithHighProgress || apiStatusComplete;
     
     console.log(`=== VERIFICAÇÃO DE CONCLUSÃO - Campanha ${campaign.id} ===`);
     console.log('Total mensagens:', total);
     console.log('Processadas:', processed);
     console.log('Progresso:', progress + '%');
+    console.log('Minutos desde criação:', minutesAgo.toFixed(1));
     console.log('Horas desde criação:', hoursAgo.toFixed(1));
     console.log('Status da API:', campaign.status);
     console.log('Verificações:');
-    console.log('  - Todas processadas:', allMessagesProcessed);
-    console.log('  - Progresso 100%:', progressComplete);
-    console.log('  - Muito antiga:', isOldWithProgress);
+    console.log('  - Muito recente (<5min):', minutesAgo < 5);
+    console.log('  - Todas processadas E 100%:', allMessagesProcessed);
+    console.log('  - Antiga com 95%+ progresso:', isOldWithHighProgress);
     console.log('  - Status API completo:', apiStatusComplete);
     console.log('RESULTADO: Deve completar?', shouldComplete);
     console.log('=== FIM VERIFICAÇÃO ===');
@@ -1101,27 +1125,62 @@ export const uazapiService = {
     const total = campaign.log_total || 0;
     const processed = (campaign.log_sucess || 0) + (campaign.log_failed || 0);
     
+    console.log(`=== VERIFICAÇÃO DE ATIVIDADE - Campanha ${campaign.id} ===`);
+    console.log('Total mensagens:', total);
+    console.log('Processadas:', processed);
+    console.log('Status da API:', campaign.status);
+    
     // Se não há mensagens, não pode estar ativa
-    if (total === 0) return false;
+    if (total === 0) {
+      console.log('❌ Não ativa: Sem mensagens');
+      return false;
+    }
     
     // Se já processou todas, não está mais ativa
-    if (processed >= total) return false;
+    if (processed >= total) {
+      console.log('❌ Não ativa: Todas mensagens processadas');
+      return false;
+    }
     
     // Verificar se a campanha não é muito antiga
     const campaignDate = campaign.created ? new Date(campaign.created) : new Date();
     const hoursAgo = (new Date().getTime() - campaignDate.getTime()) / (1000 * 60 * 60);
+    const minutesAgo = hoursAgo * 60;
     
-    // Se passou mais de 48 horas e não progrediu muito, considerar não ativa
-    if (hoursAgo > 48 && processed < (total * 0.1)) {
-      console.log(`Campanha ${campaign.id} muito antiga (${hoursAgo.toFixed(1)}h) com pouco progresso`);
+    console.log('Minutos desde criação:', minutesAgo.toFixed(1));
+    console.log('Horas desde criação:', hoursAgo.toFixed(1));
+    
+    // Verificar status da API primeiro
+    const activeStatuses = ['ativo', 'Active', 'active', 'running', 'em andamento', 'in progress', 'processing'];
+    const apiIsActive = activeStatuses.includes(campaign.status);
+    
+    console.log('Status da API indica ativo?', apiIsActive);
+    console.log('Processadas < Total?', processed < total);
+    
+    // Se a API indica que está ativa, considerar ativa (especialmente para campanhas recém-iniciadas)
+    if (apiIsActive && processed < total) {
+      console.log(`✅ ATIVA pela API: ${processed}/${total} processadas`);
+      console.log('=== FIM VERIFICAÇÃO ATIVIDADE ===');
+      return true;
+    }
+    
+    // Para campanhas recém-criadas (menos de 1 hora), ser mais permissivo
+    if (hoursAgo < 1 && processed < total) {
+      console.log(`✅ ATIVA por ser recém-criada (${hoursAgo.toFixed(1)}h)`);
+      console.log('=== FIM VERIFICAÇÃO ATIVIDADE ===');
+      return true;
+    }
+    
+    // Se passou mais de 72 horas e não progrediu muito, considerar não ativa
+    if (hoursAgo > 72 && processed < (total * 0.05)) {
+      console.log(`❌ Não ativa: Muito antiga (${hoursAgo.toFixed(1)}h) com progresso baixo`);
+      console.log('=== FIM VERIFICAÇÃO ATIVIDADE ===');
       return false;
     }
     
-    // Verificar status da API
-    const activeStatuses = ['ativo', 'Active', 'active', 'running'];
-    const apiIsActive = activeStatuses.includes(campaign.status);
-    
-    return apiIsActive && processed < total;
+    console.log('❌ Não ativa: Nenhuma condição atendida');
+    console.log('=== FIM VERIFICAÇÃO ATIVIDADE ===');
+    return false;
   },
   
   // Método para obter detalhes de uma campanha
@@ -1889,29 +1948,71 @@ export const uazapiService = {
       
       console.log(`📊 Encontradas ${campaigns.length} campanhas para verificação`);
       
-      campaigns.forEach(campaign => {
+      let updatedCount = 0;
+      
+      for (const campaign of campaigns) {
         const total = campaign.log_total || 0;
         const processed = (campaign.log_sucess || 0) + (campaign.log_failed || 0);
+        const progress = this.calculateProgress(campaign);
+        const campaignDate = campaign.created ? new Date(campaign.created) : new Date();
+        const hoursAgo = (new Date().getTime() - campaignDate.getTime()) / (1000 * 60 * 60);
         
-        if (campaign.status === 'ativo' && total > 0 && processed >= total) {
-          console.log(`⚠️ CAMPANHA TRAVADA DETECTADA: ${campaign.id}`);
-          console.log(`   Status: ${campaign.status} | Total: ${total} | Processado: ${processed}`);
-          console.log(`   Esta campanha deveria estar CONCLUÍDA!`);
+        let shouldUpdate = false;
+        let newStatus = campaign.status;
+        let reason = '';
+        
+        // Verificar se campanha deveria estar concluída
+        if (this.isCampaignCompleted(campaign) && campaign.status !== 'completed') {
+          newStatus = 'completed';
+          shouldUpdate = true;
+          reason = `Campanha concluída: ${processed}/${total} mensagens processadas, progresso ${progress}%`;
+        }
+        // Verificar se campanha está travada há muito tempo (mais conservador: 72h e <5% progresso)
+        else if (campaign.status === 'ativo' && hoursAgo > 72 && progress < 5) {
+          newStatus = 'failed';
+          shouldUpdate = true;
+          reason = `Campanha travada há ${hoursAgo.toFixed(1)} horas com progresso muito baixo (${progress}%)`;
+        }
+        // Verificar se campanha muito antiga sem nenhum progresso (mais conservador: 96h)
+        else if (campaign.status === 'ativo' && hoursAgo > 96 && processed === 0) {
+          newStatus = 'failed';
+          shouldUpdate = true;
+          reason = `Campanha muito antiga (${hoursAgo.toFixed(1)}h) sem nenhum progresso`;
         }
         
-        if (campaign.status === 'ativo') {
-          const campaignDate = campaign.created ? new Date(campaign.created) : new Date();
-          const hoursAgo = (new Date().getTime() - campaignDate.getTime()) / (1000 * 60 * 60);
+        if (shouldUpdate) {
+          console.log(`🔧 ATUALIZANDO CAMPANHA: ${campaign.id}`);
+          console.log(`   Status atual: ${campaign.status} -> Novo status: ${newStatus}`);
+          console.log(`   Motivo: ${reason}`);
+          console.log(`   Detalhes: Total=${total}, Processado=${processed}, Progresso=${progress}%, Idade=${hoursAgo.toFixed(1)}h`);
           
-          if (hoursAgo > 24) {
-            console.log(`⏰ CAMPANHA ANTIGA DETECTADA: ${campaign.id}`);
-            console.log(`   Criada há ${hoursAgo.toFixed(1)} horas | Status: ${campaign.status}`);
-            console.log(`   Total: ${total} | Processado: ${processed} | Progresso: ${campaign.progress}%`);
+          try {
+            // Tentar atualizar o status na API se houver endpoint disponível
+            // Nota: A UAZAPI pode não ter endpoint direto para atualizar status
+            // Neste caso, apenas logamos a detecção para monitoramento
+            
+            // Se a campanha deveria estar concluída, tentar pausá-la para evitar processamento desnecessário
+            if (newStatus === 'completed' && campaign.status === 'ativo') {
+              await this.pauseCampaign(instanceToken, campaign.id);
+              console.log(`   ✅ Campanha pausada para evitar processamento desnecessário`);
+            }
+            
+            updatedCount++;
+          } catch (updateError) {
+            console.error(`   ❌ Erro ao atualizar campanha ${campaign.id}:`, updateError);
           }
         }
-      });
+        // Log de campanhas que precisam de atenção mas não foram atualizadas
+        else if (campaign.status === 'ativo') {
+          if (total > 0 && processed >= total && progress >= 100) {
+            console.log(`⚠️ ATENÇÃO - Campanha ${campaign.id}: Status=${campaign.status}, mas todas as mensagens foram processadas (${processed}/${total}, ${progress}%)`);
+          } else if (hoursAgo > 48) {
+            console.log(`⏰ MONITORAMENTO - Campanha ${campaign.id}: Ativa há ${hoursAgo.toFixed(1)}h, progresso=${progress}% (${processed}/${total})`);
+          }
+        }
+      }
       
-      console.log('✅ Verificação de status concluída');
+      console.log(`✅ Verificação concluída. ${updatedCount} campanhas atualizadas.`);
     } catch (error) {
       console.error('❌ Erro ao forçar atualização de status:', error);
     }
