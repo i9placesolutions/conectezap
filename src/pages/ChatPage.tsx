@@ -17,7 +17,7 @@ import { MediaRenderer } from '../components/MediaRenderer';
 interface ChatMessage {
   id: string;
   chatId: string;
-  content: string;
+  content: string | object;
   timestamp: number;
   fromMe: boolean;
   type: 'text' | 'image' | 'video' | 'audio' | 'ptt' | 'document';
@@ -336,7 +336,7 @@ export function ChatPage() {
         console.log('📨 Primeiro chat (exemplo):', {
           name: extendedChats[0].name,
           id: extendedChats[0].id.substring(0, 10) + '...',
-          lastMessage: extendedChats[0].lastMessage?.content?.substring(0, 50) + '...',
+          lastMessage: typeof extendedChats[0].lastMessage?.content === 'string' ? extendedChats[0].lastMessage.content.substring(0, 50) + '...' : '[Mídia]',
           timestamp: new Date(extendedChats[0].lastMessage?.timestamp || 0).toLocaleString()
         });
       }
@@ -668,7 +668,8 @@ export function ChatPage() {
         const quotedMessages = chatMessages.filter(msg => msg.quotedMsg);
         console.log('📋 Lista de mensagens com citações:');
         quotedMessages.forEach((msg, index) => {
-          console.log(`   ${index + 1}. ${msg.content.substring(0, 30)}... (ID: ${msg.id})`);
+          const contentPreview = typeof msg.content === 'string' ? msg.content.substring(0, 30) : '[Mídia]';
+          console.log(`   ${index + 1}. ${contentPreview}... (ID: ${msg.id})`);
         });
         console.log('🎨 ✅ ESSAS MENSAGENS APARECERÃO COM VISUAL DE RESPOSTA NO WHATSAPP!');
         console.log('🔍 Detalhes das primeiras citações:', quotedMessages.slice(0, 2));
@@ -1165,31 +1166,11 @@ export function ChatPage() {
 
   // Função para renderizar conteúdo de mensagens com suporte a mídia
   const renderMessageContent = (message: ChatMessage) => {
-    // Debug da mensagem sendo renderizada
-    console.log('🎨 Renderizando conteúdo da mensagem:', {
-      messageId: message.id,
-      type: message.type,
-      hasContent: !!message.content,
-      contentType: typeof message.content,
-      hasMediaUrl: !!message.mediaUrl,
-      fromMe: message.fromMe
-    });
-    
     // Verificar se é uma mensagem de mídia
     const isMediaMessage = ['image', 'video', 'audio', 'ptt', 'document'].includes(message.type);
     
-    console.log('🔍 Verificação de mídia:', {
-      messageType: message.type,
-      isMediaMessage: isMediaMessage,
-      hasInstanceToken: !!selectedInstance?.token,
-      willUseMediaRenderer: isMediaMessage && !!selectedInstance?.token
-    });
-    
     // Se é mídia E temos token da instância, usar MediaRenderer
     if (isMediaMessage && selectedInstance?.token) {
-      console.log('🎬 Usando MediaRenderer para mensagem:', message.id);
-      const instanceToken = selectedInstance.token;
-      // Renderizar mídia usando o MediaRenderer
       return (
         <MediaRenderer
           message={{
@@ -1199,56 +1180,43 @@ export function ChatPage() {
             mediaUrl: message.mediaUrl,
             fromMe: message.fromMe
           }}
-          instanceToken={instanceToken}
+          instanceToken={selectedInstance.token}
         />
       );
     }
     
-    // Para mensagens de texto, tratar conteúdo de forma segura
-    let content = message.content;
+    // Para mensagens de texto ou quando não há token
+    if (typeof message.content === 'string') {
+      return message.content;
+    }
     
-    // Se content é um objeto, tentar extrair texto
-    if (typeof content === 'object' && content !== null) {
-      console.warn('⚠️ Objeto detectado em message.content:', content);
+    // Se content é objeto (mídia sem token)
+    if (typeof message.content === 'object' && message.content !== null) {
+      const mediaObj = message.content as any;
       
-      const mediaObj = content as any; // Cast seguro para acessar propriedades dinâmicas
-      
-      // Tentar extrair campos de texto comuns
+      // Priorizar legenda se disponível
       if (mediaObj.caption) {
-        return String(mediaObj.caption);
+        return mediaObj.caption;
       }
+      
+      // Fallback para nome do arquivo
       if (mediaObj.fileName) {
         return `📁 ${mediaObj.fileName}`;
       }
-      if (mediaObj.title) {
-        return String(mediaObj.title);
-      }
       
-      // Para diferentes tipos de mídia, mostrar indicadores apropriados
-      if (mediaObj.mimetype) {
-        const mimetype = String(mediaObj.mimetype);
-        if (mimetype.startsWith('image/')) {
-          return '🖼️ Imagem';
-        } else if (mimetype.startsWith('video/')) {
-          return '🎥 Vídeo';
-        } else if (mimetype.startsWith('audio/')) {
-          return '🎵 Áudio';
-        } else {
-          return '📎 Arquivo';
-        }
-      }
+      // Indicador genérico por tipo
+      const typeNames: { [key: string]: string } = {
+        'image': '🖼️ Imagem',
+        'video': '🎥 Vídeo',
+        'audio': '🎵 Áudio',
+        'ptt': '🎤 Áudio',
+        'document': '📄 Documento'
+      };
       
-      // Se tudo falhar, mostrar tipo de mensagem genérico
-      return `📎 ${message.type || 'Mídia'}`;
+      return typeNames[message.type] || '📎 Mídia';
     }
     
-    // Se já é string ou pode ser convertido, retornar como string
-    if (content !== null && content !== undefined) {
-      return String(content);
-    }
-    
-    // Fallback final
-    return 'Mensagem sem conteúdo';
+    return 'Mensagem';
   };
 
   const filteredChats = chats.filter(chat => {
@@ -1275,7 +1243,7 @@ export function ChatPage() {
       }
 
       console.log('🔧 ===== DEBUG DE CONVERSAS CONECTEZAP =====');
-      console.log('🔧 Token:', instanceToken.substring(0, 10) + '...');
+      console.log('🔧 Token:', instanceToken.slice(0, 10) + '...');
       console.log('🔧 Instância selecionada:', selectedInstance?.name || 'Nenhuma');
       console.log('🔧 URL do servidor:', getCurrentServerConfig()?.url || 'Não definido');
       
@@ -1887,7 +1855,7 @@ export function ChatPage() {
                     <div className="bg-white rounded-lg p-3 border-l-4 border-primary-600">
                       <p className="text-sm text-gray-600 line-clamp-2">
                         {replyingToMessage.type === 'text' 
-                          ? replyingToMessage.content 
+                          ? (typeof replyingToMessage.content === 'string' ? replyingToMessage.content : '[Mensagem]')
                           : `📎 ${replyingToMessage.type.charAt(0).toUpperCase() + replyingToMessage.type.slice(1)}`
                         }
                       </p>

@@ -2512,20 +2512,58 @@ export const uazapiService = {
         console.log('📨 Campos disponíveis:', Object.keys(messagesArray[0] || {}));
       }
       
-      const mappedMessages = messagesArray.map((message: any) => ({
-        id: message.id || message._id || Date.now().toString(),
-        chatId: message.chatId || message.from || message.remoteJid || filters.chatid || '',
-        fromMe: message.fromMe || false,
-        timestamp: message.timestamp || message.messageTimestamp || message.t || Date.now(),
-        body: message.body || message.text || message.content || message.conversation || '',
-        type: message.type || 'text',
-        mediaUrl: message.mediaUrl || message.media || '',
-        quotedMsg: message.quotedMsg || message.contextInfo?.quotedMessage || null,
-        isForwarded: message.isForwarded || false,
-        author: message.author || message.pushName || message.participant || '',
-        pushName: message.pushName || '',
-        status: message.status || 'sent'
-      }));
+      const mappedMessages = messagesArray.map((message: any) => {
+        // Processar body de forma inteligente para preservar estrutura de mídia
+        let processedBody;
+        
+        // Se message.body é um objeto (mídia com metadados), preservar
+        if (message.body && typeof message.body === 'object') {
+          processedBody = message.body;
+          console.log('📎 Preservando objeto de mídia no body:', {
+            messageId: message.id,
+            bodyKeys: Object.keys(message.body),
+            fullBody: message.body,
+            hasCaption: !!message.body.caption,
+            hasUrl: !!message.body.url,
+            hasMimetype: !!message.body.mimetype,
+            messageType: message.type,
+            hasMediaUrl: !!message.mediaUrl
+          });
+        } else {
+          // Para mensagens de texto, usar fallback normal
+          processedBody = message.body || message.text || message.content || message.conversation || '';
+        }
+        
+        // Mapear mediaUrl de múltiplas fontes possíveis
+        const mediaUrl = message.fileURL || message.mediaUrl || message.media || message.url || '';
+        
+        console.log('🔍 MAPEAMENTO DE MÍDIA:', {
+          messageId: message.id,
+          messageType: message.messageType || message.type,
+          hasFileURL: !!message.fileURL,
+          hasMediaUrl: !!message.mediaUrl,
+          hasMedia: !!message.media,
+          hasUrl: !!message.url,
+          finalMediaUrl: mediaUrl,
+          content: message.content,
+          text: message.text
+        });
+        
+        return {
+          id: message.id || message._id || Date.now().toString(),
+          chatId: message.chatId || message.from || message.remoteJid || filters.chatid || '',
+          fromMe: message.fromMe || false,
+          timestamp: message.timestamp || message.messageTimestamp || message.t || Date.now(),
+          body: processedBody,
+          type: message.messageType || message.type || 'text',
+          mediaUrl: mediaUrl,
+          quotedMsg: message.quotedMsg || message.contextInfo?.quotedMessage || null,
+          isForwarded: message.isForwarded || false,
+          author: message.author || message.pushName || message.participant || '',
+          pushName: message.pushName || '',
+          status: message.status || 'sent'
+        };
+      });
       
       // Filtrar mensagens válidas
       const validMessages = mappedMessages.filter(msg => 

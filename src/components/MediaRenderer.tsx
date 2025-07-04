@@ -1,6 +1,5 @@
-import React, { useState, useRef } from 'react';
+import { useState, useRef } from 'react';
 import { Download, Play, Pause, Volume2, VolumeX, FileText, Image as ImageIcon, Video, Music } from 'lucide-react';
-import { cn } from '../lib/utils';
 import { toast } from 'react-hot-toast';
 import { uazapiService } from '../services/uazapiService';
 
@@ -8,7 +7,7 @@ interface MediaRendererProps {
   message: {
     id: string;
     type: string;
-    content: string;
+    content: string | object;
     mediaUrl?: string;
     fromMe: boolean;
   };
@@ -33,8 +32,22 @@ export function MediaRenderer({ message, instanceToken }: MediaRendererProps) {
     mediaUrl: message.mediaUrl?.substring(0, 50) + '...',
     hasInstanceToken: !!instanceToken,
     fromMe: message.fromMe,
-    content: typeof message.content === 'string' ? message.content.substring(0, 50) + '...' : message.content
+    content: typeof message.content === 'string' ? message.content.substring(0, 50) + '...' : message.content,
+    contentType: typeof message.content,
+    contentKeys: typeof message.content === 'object' && message.content ? Object.keys(message.content) : null
   });
+  
+  // Debug específico para mídia
+  if (typeof message.content === 'object' && message.content) {
+    console.log('📎 DETALHES DO OBJETO DE MÍDIA:', {
+      messageId: message.id,
+      fullContent: message.content,
+      hasCaption: !!(message.content as any).caption,
+      hasUrl: !!(message.content as any).url,
+      hasMimetype: !!(message.content as any).mimetype,
+      hasFileName: !!(message.content as any).fileName
+    });
+  }
 
   // Função para baixar mídia
   const handleDownload = async () => {
@@ -178,17 +191,7 @@ export function MediaRenderer({ message, instanceToken }: MediaRendererProps) {
     setIsMuted(!isMuted);
   };
 
-  // Controles de vídeo
-  const toggleVideoPlay = () => {
-    if (!videoRef.current) return;
-    
-    if (isPlaying) {
-      videoRef.current.pause();
-    } else {
-      videoRef.current.play();
-    }
-    setIsPlaying(!isPlaying);
-  };
+  // Controles de vídeo removidos - não utilizados
 
   const handleVideoProgress = () => {
     if (!videoRef.current) return;
@@ -205,6 +208,15 @@ export function MediaRenderer({ message, instanceToken }: MediaRendererProps) {
   // Renderizar diferentes tipos de mídia
   const renderMediaContent = () => {
     const hasUrl = message.mediaUrl || downloadedUrl;
+    
+    console.log('🎬 renderMediaContent chamado:', {
+      messageId: message.id,
+      messageType: message.type,
+      hasUrl,
+      downloadedUrl: downloadedUrl?.substring(0, 50) + '...',
+      mediaUrl: message.mediaUrl?.substring(0, 50) + '...',
+      isDownloading
+    });
 
     switch (message.type) {
       case 'image':
@@ -420,9 +432,53 @@ export function MediaRenderer({ message, instanceToken }: MediaRendererProps) {
     }
   };
 
+  // Extrair legenda e outros dados do conteúdo da mensagem
+  const getMediaData = () => {
+    console.log('📊 getMediaData chamada para mensagem:', message.id);
+    console.log('📊 Tipo do content:', typeof message.content);
+    console.log('📊 Content completo:', message.content);
+    
+    if (typeof message.content === 'object' && message.content !== null) {
+      const mediaObj = message.content as any;
+      const result = {
+        caption: mediaObj.caption || null,
+        fileName: mediaObj.fileName || null,
+        mimetype: mediaObj.mimetype || null,
+        url: mediaObj.url || null
+      };
+      
+      console.log('📊 Dados extraídos da mídia:', result);
+      return result;
+    }
+    
+    console.log('📊 Content não é objeto, retornando dados vazios');
+    return {
+      caption: null,
+      fileName: null,
+      mimetype: null,
+      url: null
+    };
+  };
+
+  const mediaData = getMediaData();
+  const caption = mediaData.caption;
+  const fileName = mediaData.fileName;
+
   return (
     <div className="relative">
       {renderMediaContent()}
+      
+      {/* Legenda e informações da mídia */}
+      {(caption || fileName) && (
+        <div className="mt-2 space-y-1">
+          {caption && (
+            <p className="text-sm whitespace-pre-wrap break-words">{caption}</p>
+          )}
+          {fileName && !caption && (
+            <p className="text-sm text-gray-600 font-medium">{fileName}</p>
+          )}
+        </div>
+      )}
       
       {/* Indicador de download */}
       {isDownloading && (
@@ -435,4 +491,4 @@ export function MediaRenderer({ message, instanceToken }: MediaRendererProps) {
       )}
     </div>
   );
-} 
+}
