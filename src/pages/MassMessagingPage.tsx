@@ -15,7 +15,8 @@ import {
   FileUp, 
   X, 
   Loader2,
-  BarChart2
+  BarChart2,
+  MessageCircle
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { InstanceModal } from '../components/InstanceModal';
@@ -24,11 +25,12 @@ import { toast } from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
 import { ContactSelectionModal } from '../components/mass/ContactSelectionModal';
 import { GroupSelectionModal } from '../components/mass/GroupSelectionModal';
+import { ChatSelectionModal } from '../components/mass/ChatSelectionModal';
 import { useAuth } from '../contexts/AuthContext';
 import { filterValidNumbers, getBlacklistStats } from '../lib/blacklist';
 
 // Importando o serviço UAZAPI e seus tipos para garantir compatibilidade
-import { Group, Contact, uazapiService } from '../services/uazapiService';
+import { Group, Contact, Chat, uazapiService } from '../services/uazapiService';
 
 // Importando funções do Supabase
 import { 
@@ -79,6 +81,7 @@ export function MassMessagingPage() {
   const [isSubmitting, setIsSubmitting] = useState(false); // Indica se está enviando a campanha
   const [showContactModal, setShowContactModal] = useState(false); // Controla exibição do modal de seleção de contatos
   const [showGroupModal, setShowGroupModal] = useState(false); // Controla exibição do modal de seleção de grupos
+  const [showChatModal, setShowChatModal] = useState(false); // Controla exibição do modal de seleção de chats
   const [uploadingMedia, setUploadingMedia] = useState<string | null>(null); // Estado do upload de mídia
   const [currentCampaign, setCurrentCampaign] = useState<MassCampaign | null>(null); // Dados da campanha atual
   
@@ -113,6 +116,7 @@ export function MassMessagingPage() {
   // Estado de seleção de destinatários
   const [selectedContacts, setSelectedContacts] = useState<Contact[]>([]); // Lista de contatos individuais selecionados
   const [selectedGroups, setSelectedGroups] = useState<Group[]>([]); // Lista de grupos selecionados
+  const [selectedChats, setSelectedChats] = useState<Chat[]>([]); // Lista de chats selecionados
   
   // Configurações anti-spam avançadas
   const [antiSpamConfig, setAntiSpamConfig] = useState<AntiSpamConfig>({
@@ -317,7 +321,7 @@ export function MassMessagingPage() {
   
   // Função para calcular o total de destinatários selecionados
   const getTotalRecipients = (): number => {
-    return selectedContacts.length + selectedGroups.length;
+    return selectedContacts.length + selectedGroups.length + selectedChats.length;
   };
 
 
@@ -347,44 +351,70 @@ export function MassMessagingPage() {
   
   // Função principal para envio da campanha de mensagens
   const handleSubmit = async () => {
+    console.log('🚀 INÍCIO DO HANDLESUBMIT');
+    console.log('📱 Instância selecionada:', selectedInstance);
+    console.log('👤 Usuário:', user);
+    console.log('📝 Mensagem:', messageData);
+    console.log('👥 Contatos selecionados:', selectedContacts.length);
+    console.log('🔗 Grupos selecionados:', selectedGroups.length);
+    
     try {
       setIsSubmitting(true);
+      console.log('⏳ isSubmitting definido como true');
       
       // Verificar se a instância está selecionada
       if (!selectedInstance || !selectedInstance.token) {
+        console.error('❌ Instância inválida:', { selectedInstance });
         toast.error('Selecione uma instância válida');
         return;
       }
+      console.log('✅ Instância válida confirmada');
       
       // Verificar se o usuário está autenticado
       if (!user?.id) {
+        console.error('❌ Usuário não autenticado:', { user });
         toast.error('Usuário não autenticado');
         return;
       }
+      console.log('✅ Usuário autenticado confirmado');
       
       // Preparar dados para o envio
       let numbers: string[] = [];
+      console.log('📋 Iniciando preparação dos números...');
       
       // Adicionar números de contatos individuais
+      console.log('👥 Processando contatos individuais:', selectedContacts.length);
       selectedContacts.forEach(contact => {
         // Garantir que o número está no formato correto (apenas números)
         const cleanNumber = contact.number.replace(/\D/g, '');
-        if (cleanNumber) numbers.push(cleanNumber);
+        if (cleanNumber) {
+          numbers.push(cleanNumber);
+          console.log('✅ Contato adicionado:', cleanNumber);
+        } else {
+          console.warn('⚠️ Contato inválido:', contact);
+        }
       });
       
       // Adicionar JIDs dos grupos selecionados
+      console.log('🔗 Processando grupos:', selectedGroups.length);
       selectedGroups.forEach(group => {
         // Verificar se tem o JID (ID do WhatsApp) do grupo
         if (group.jid) {
           // O ID do grupo já está no formato correto (@g.us)
           numbers.push(group.jid);
+          console.log('✅ Grupo adicionado (JID):', group.jid);
         } else if (group.id) {
           // Usar o ID como alternativa
           numbers.push(group.id);
+          console.log('✅ Grupo adicionado (ID):', group.id);
+        } else {
+          console.warn('⚠️ Grupo inválido:', group);
         }
       });
       
+      console.log('📊 Total de números preparados:', numbers.length);
       if (numbers.length === 0) {
+        console.error('❌ Nenhum número válido encontrado');
         toast.error('Nenhum número válido encontrado nos destinatários selecionados');
         return;
       }
@@ -911,6 +941,14 @@ export function MassMessagingPage() {
         selectedGroups={selectedGroups}
       />
       
+      <ChatSelectionModal 
+        isOpen={showChatModal}
+        onClose={() => setShowChatModal(false)}
+        onSelect={setSelectedChats}
+        instanceToken={selectedInstance?.token || ''}
+        selectedChats={selectedChats}
+      />
+      
       {/* Cabeçalho e botão para visualizar histórico */}
       {selectedInstance && (
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
@@ -1028,7 +1066,7 @@ export function MassMessagingPage() {
               <div className="p-4 sm:p-6">
                 <h2 className="text-lg sm:text-xl font-semibold text-gray-900 mb-4 sm:mb-6">Selecione os Destinatários</h2>
                 
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
                   {/* Contatos */}
                   <div className="bg-gray-50 rounded-lg p-4 sm:p-5 border border-gray-200">
                     <div className="flex items-start sm:items-center justify-between mb-4 gap-2">
@@ -1111,6 +1149,52 @@ export function MassMessagingPage() {
                           <div key={group.id} className="py-1 px-2 text-xs sm:text-sm flex items-center justify-between gap-2">
                             <span className="font-medium truncate">{group.name}</span>
                             <span className="text-gray-500 text-xs whitespace-nowrap">{group.participantsCount} part.</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Chats */}
+                  <div className="bg-gray-50 rounded-lg p-4 sm:p-5 border border-gray-200">
+                    <div className="flex items-start sm:items-center justify-between mb-4 gap-2">
+                      <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+                        <div className="h-8 w-8 sm:h-10 sm:w-10 rounded-full bg-primary-100 flex items-center justify-center flex-shrink-0">
+                          <MessageCircle className="h-4 w-4 sm:h-5 sm:w-5 text-primary-600" />
+                        </div>
+                        <div className="min-w-0">
+                          <h3 className="text-base sm:text-lg font-medium truncate">Chats</h3>
+                          <p className="text-xs sm:text-sm text-gray-500 hidden sm:block">Selecione conversas individuais</p>
+                        </div>
+                      </div>
+                      <span className="bg-primary-100 text-primary-700 text-xs font-medium px-2 sm:px-2.5 py-1 rounded-full whitespace-nowrap">
+                        {selectedChats.length}
+                      </span>
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-2 mb-4">
+                      <button 
+                        onClick={() => setSelectedChats([])}
+                        className="p-2 text-center rounded-lg border border-gray-200 hover:border-primary-200 hover:bg-primary-50 text-xs sm:text-sm font-medium"
+                      >
+                        Nenhum
+                      </button>
+                      <button 
+                        onClick={() => setShowChatModal(true)}
+                        className="p-2 text-center rounded-lg border border-gray-200 hover:border-primary-200 hover:bg-primary-50 text-xs sm:text-sm font-medium"
+                      >
+                        Selecionar
+                      </button>
+                    </div>
+                    
+                    {selectedChats.length > 0 && (
+                      <div className="max-h-32 sm:max-h-40 overflow-y-auto border border-gray-200 rounded-lg p-2 bg-white">
+                        {selectedChats.map(chat => (
+                          <div key={chat.id} className="py-1 px-2 text-xs sm:text-sm flex items-center justify-between gap-2">
+                            <span className="font-medium truncate">{chat.name}</span>
+                            <span className="text-gray-500 text-xs whitespace-nowrap">
+                              {chat.unreadCount > 0 ? `${chat.unreadCount} não lidas` : 'Lida'}
+                            </span>
                           </div>
                         ))}
                       </div>

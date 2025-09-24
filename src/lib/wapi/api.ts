@@ -1336,13 +1336,22 @@ export const message = {
   },
 
   // Responder a uma mensagem
-  reply: async (instanceId: string, chatId: string, text: string, messageId: string, options: any = {}, instanceToken?: string) => {
+  reply: async (chatId: string, text: string, messageId: string, options: any = {}, instanceToken?: string) => {
     try {
       const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
-      const response = await client.post('/message/reply', {
-        chatId, text, messageId, ...options
+      
+      // Usar endpoint /send/text com replyid conforme documentação UAZAPI
+      const response = await client.post('/send/text', {
+        number: chatId,
+        text: text,
+        replyid: messageId,
+        readchat: true,
+        delay: 0,
+        ...options
       }, {
-        params: { instanceId }
+        headers: {
+          'token': instanceToken
+        }
       });
       return response.data;
     } catch (error) {

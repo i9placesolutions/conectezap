@@ -25,6 +25,7 @@ interface ChatMessage {
   author?: string;
   mediaUrl?: string;
   quotedMsg?: any;
+  reactions?: { [emoji: string]: string[] }; // emoji -> array de usuários que reagiram
 }
 
 interface ExtendedChat extends Omit<UazapiChat, 'lastMessage'> {
@@ -50,6 +51,8 @@ export function ChatPage() {
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [showMediaModal, setShowMediaModal] = useState(false);
   const [replyingToMessage, setReplyingToMessage] = useState<ChatMessage | null>(null);
+  const [showEmojiPicker, setShowEmojiPicker] = useState<string | null>(null); // ID da mensagem para mostrar picker
+  const [reactingToMessage, setReactingToMessage] = useState<string | null>(null); // ID da mensagem sendo reagida
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messageInputRef = useRef<HTMLTextAreaElement>(null);
@@ -254,6 +257,20 @@ export function ChatPage() {
       return () => clearInterval(interval);
     }
   }, [selectedInstance]);
+
+  // Fechar seletor de emojis ao clicar fora
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (showEmojiPicker && !(event.target as Element).closest('.emoji-picker')) {
+        setShowEmojiPicker(null);
+      }
+    };
+
+    if (showEmojiPicker) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [showEmojiPicker]);
 
   const loadChats = async () => {
     if (!selectedInstance?.token) return;
@@ -839,7 +856,6 @@ export function ChatPage() {
         
         // Usar a função reply da API
         await message.reply(
-          selectedInstance.id || 'default',
           selectedChat.id,
           messageContent,
           replyingToMessage.id,
@@ -910,7 +926,67 @@ export function ChatPage() {
     setReplyingToMessage(null);
   };
 
+  // Funções para reações
+  const handleReactToMessage = async (messageId: string, emoji: string) => {
+    if (!selectedInstance?.token || !selectedChat) {
+      toast.error('Instância ou chat não selecionado');
+      return;
+    }
 
+    setReactingToMessage(messageId);
+    
+    try {
+      const success = await uazapiService.reactToMessage(
+        selectedInstance.token,
+        selectedChat.id,
+        messageId,
+        emoji
+      );
+
+      if (success) {
+        // Atualizar localmente a reação
+        setMessages(prevMessages => 
+          prevMessages.map(msg => {
+            if (msg.id === messageId) {
+              const reactions = { ...msg.reactions };
+              if (!reactions[emoji]) {
+                reactions[emoji] = [];
+              }
+              
+              // Verificar se o usuário já reagiu com este emoji
+              const userIndex = reactions[emoji].indexOf('Você');
+              if (userIndex === -1) {
+                reactions[emoji].push('Você');
+              } else {
+                // Se já reagiu, remover a reação
+                reactions[emoji].splice(userIndex, 1);
+                if (reactions[emoji].length === 0) {
+                  delete reactions[emoji];
+                }
+              }
+              
+              return { ...msg, reactions };
+            }
+            return msg;
+          })
+        );
+        
+        toast.success('Reação enviada!');
+      } else {
+        toast.error('Erro ao enviar reação');
+      }
+    } catch (error) {
+      console.error('Erro ao reagir à mensagem:', error);
+      toast.error('Erro ao enviar reação');
+    } finally {
+      setReactingToMessage(null);
+      setShowEmojiPicker(null);
+    }
+  };
+
+  const toggleEmojiPicker = (messageId: string) => {
+    setShowEmojiPicker(showEmojiPicker === messageId ? null : messageId);
+  };
 
   const formatTime = (timestamp: number) => {
     const date = new Date(timestamp);
@@ -1834,6 +1910,60 @@ export function ChatPage() {
                           </div>
                         </>
                       )}
+                    </div>
+
+                    {/* Reações */}
+                    <div className="mt-1 relative">
+                      {/* Exibir reações existentes */}
+                      {message.reactions && Object.keys(message.reactions).length > 0 && (
+                        <div className="flex flex-wrap gap-1 mb-1">
+                          {Object.entries(message.reactions).map(([emoji, users]) => (
+                            <button
+                              key={emoji}
+                              onClick={() => handleReactToMessage(message.id, emoji)}
+                              className={cn(
+                                "inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs border transition-colors",
+                                users.includes('Você')
+                                  ? "bg-primary-100 border-primary-300 text-primary-700"
+                                  : "bg-gray-100 border-gray-300 text-gray-700 hover:bg-gray-200"
+                              )}
+                              title={`${users.join(', ')} reagiu${users.length > 1 ? 'ram' : ''} com ${emoji}`}
+                            >
+                              <span>{emoji}</span>
+                              <span>{users.length}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Botão para adicionar reação */}
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => toggleEmojiPicker(message.id)}
+                          className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded-full hover:bg-gray-200 text-gray-500 hover:text-gray-700"
+                          title="Adicionar reação"
+                        >
+                          <span className="text-sm">😊</span>
+                        </button>
+
+                        {/* Seletor de emojis */}
+                         {showEmojiPicker === message.id && (
+                           <div className="emoji-picker absolute bottom-full left-0 mb-2 bg-white border border-gray-200 rounded-lg shadow-lg p-2 z-10">
+                            <div className="grid grid-cols-6 gap-1">
+                              {['👍', '❤️', '😂', '😮', '😢', '😡', '👏', '🙏', '🔥', '💯', '🎉', '✅'].map((emoji) => (
+                                <button
+                                  key={emoji}
+                                  onClick={() => handleReactToMessage(message.id, emoji)}
+                                  className="p-2 hover:bg-gray-100 rounded text-lg transition-colors"
+                                  disabled={reactingToMessage === message.id}
+                                >
+                                  {emoji}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
                 ))
