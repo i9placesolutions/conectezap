@@ -1,9 +1,40 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL!;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY!;
+// Verificação explícita de configuração do Supabase
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+if (!supabaseUrl || !supabaseAnonKey) {
+  // Falha rápida com mensagem clara para evitar requisições sem apikey
+  console.error('Supabase não configurado: defina VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY no arquivo .env');
+  throw new Error('Variáveis de ambiente do Supabase não configuradas');
+}
+
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    persistSession: true,
+    autoRefreshToken: true,
+    detectSessionInUrl: true
+  },
+  global: {
+    // Evitar cache que pode causar ERR_CACHE_RACE
+    fetch: (url, init) => {
+      const nextInit: RequestInit = {
+        ...init,
+        cache: 'no-store',
+        headers: new Headers(init?.headers || {})
+      };
+      const headers = nextInit.headers as Headers;
+      // Garantir que o header apikey esteja presente em todas as requisições
+      if (!headers.has('apikey')) headers.set('apikey', supabaseAnonKey);
+      return fetch(url, nextInit);
+    },
+    // Headers globais adicionais (supabase-js já adiciona, mas reforçamos)
+    headers: {
+      apikey: supabaseAnonKey
+    }
+  }
+});
 
 // Tipos
 export interface User {

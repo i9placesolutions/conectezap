@@ -378,6 +378,21 @@ export function MassMessagingPage() {
       }
       console.log('✅ Usuário autenticado confirmado');
       
+      // Função para limpar números do WhatsApp removendo sufixos
+      const cleanWhatsAppNumber = (number: string): string => {
+        if (!number) return '';
+        
+        // Remover sufixos do WhatsApp
+        let cleaned = number.replace(/@s\.whatsapp\.net$/, '').replace(/@g\.us$/, '');
+        
+        // Para números individuais, manter apenas dígitos
+        if (!cleaned.includes('@')) {
+          cleaned = cleaned.replace(/\D/g, '');
+        }
+        
+        return cleaned;
+      };
+
       // Preparar dados para o envio
       let numbers: string[] = [];
       console.log('📋 Iniciando preparação dos números...');
@@ -385,37 +400,81 @@ export function MassMessagingPage() {
       // Adicionar números de contatos individuais
       console.log('👥 Processando contatos individuais:', selectedContacts.length);
       selectedContacts.forEach(contact => {
-        // Garantir que o número está no formato correto (apenas números)
-        const cleanNumber = contact.number.replace(/\D/g, '');
-        if (cleanNumber) {
-          numbers.push(cleanNumber);
-          console.log('✅ Contato adicionado:', cleanNumber);
+        console.log('🔍 Analisando contato:', contact);
+        
+        // Verificar se o contato tem número válido
+        if (contact.number) {
+          // Limpar o número removendo sufixos do WhatsApp
+          const cleanNumber = cleanWhatsAppNumber(contact.number);
+          if (cleanNumber && cleanNumber.length >= 10) { // Mínimo 10 dígitos para número válido
+            numbers.push(cleanNumber);
+            console.log('✅ Contato adicionado:', cleanNumber);
+          } else {
+            console.warn('⚠️ Número muito curto ou inválido:', contact.number);
+          }
+        } else if (contact.jid) {
+          // Se não tem número mas tem JID, limpar o JID
+          const cleanJid = cleanWhatsAppNumber(contact.jid);
+          if (cleanJid) {
+            numbers.push(cleanJid);
+            console.log('✅ Contato adicionado via JID:', cleanJid);
+          }
         } else {
-          console.warn('⚠️ Contato inválido:', contact);
+          console.warn('⚠️ Contato sem número ou JID válido:', contact);
         }
       });
       
       // Adicionar JIDs dos grupos selecionados
       console.log('🔗 Processando grupos:', selectedGroups.length);
       selectedGroups.forEach(group => {
+        console.log('🔍 Analisando grupo:', group);
+        
         // Verificar se tem o JID (ID do WhatsApp) do grupo
         if (group.jid) {
-          // O ID do grupo já está no formato correto (@g.us)
-          numbers.push(group.jid);
-          console.log('✅ Grupo adicionado (JID):', group.jid);
+          // Limpar o JID do grupo removendo sufixos
+          const cleanJid = cleanWhatsAppNumber(group.jid);
+          if (cleanJid) {
+            numbers.push(cleanJid);
+            console.log('✅ Grupo adicionado (JID):', cleanJid);
+          }
         } else if (group.id) {
-          // Usar o ID como alternativa
-          numbers.push(group.id);
-          console.log('✅ Grupo adicionado (ID):', group.id);
+          // Limpar o ID como alternativa
+          const cleanId = cleanWhatsAppNumber(group.id);
+          if (cleanId) {
+            numbers.push(cleanId);
+            console.log('✅ Grupo adicionado (ID):', cleanId);
+          }
         } else {
-          console.warn('⚠️ Grupo inválido:', group);
+          console.warn('⚠️ Grupo sem ID ou JID válido:', group);
+        }
+      });
+      
+      // Adicionar chats selecionados
+      console.log('💬 Processando chats:', selectedChats.length);
+      selectedChats.forEach(chat => {
+        console.log('🔍 Analisando chat:', chat);
+        
+        if (chat.id) {
+          // Limpar o ID do chat removendo sufixos
+          const cleanId = cleanWhatsAppNumber(chat.id);
+          if (cleanId) {
+            numbers.push(cleanId);
+            console.log('✅ Chat adicionado:', cleanId);
+          }
+        } else {
+          console.warn('⚠️ Chat sem ID válido:', chat);
         }
       });
       
       console.log('📊 Total de números preparados:', numbers.length);
+      console.log('📋 Lista completa de números:', numbers);
+      
       if (numbers.length === 0) {
         console.error('❌ Nenhum número válido encontrado');
-        toast.error('Nenhum número válido encontrado nos destinatários selecionados');
+        console.log('🔍 Debug - Contatos selecionados:', selectedContacts);
+        console.log('🔍 Debug - Grupos selecionados:', selectedGroups);
+        console.log('🔍 Debug - Chats selecionados:', selectedChats);
+        toast.error('Nenhum número válido encontrado nos destinatários selecionados. Verifique se você selecionou contatos, grupos ou chats válidos.');
         return;
       }
 

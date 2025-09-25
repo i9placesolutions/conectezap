@@ -515,6 +515,10 @@ export const getMessageStats = async (instanceToken?: string) => {
     // Buscar todos os chats primeiro
     const chatsResponse = await client.post('/chat/find', {
       limit: 1000 // Buscar muitos chats para ter uma visão geral
+    }, {
+      headers: instanceToken ? {
+        'token': instanceToken
+      } : {}
     });
     
     if (!chatsResponse.data || !Array.isArray(chatsResponse.data)) {
@@ -535,6 +539,10 @@ export const getMessageStats = async (instanceToken?: string) => {
         const messagesResponse = await client.post('/message/find', {
           chatid: chat.id,
           limit: 50 // Buscar últimas 50 mensagens de cada chat
+        }, {
+          headers: instanceToken ? {
+            'token': instanceToken
+          } : {}
         });
         
         if (messagesResponse.data && Array.isArray(messagesResponse.data)) {
@@ -570,8 +578,26 @@ export const getMessageStats = async (instanceToken?: string) => {
       totalChats: chats.length,
       activeChatsSample: sampleSize
     };
-  } catch (error) {
+  } catch (error: any) {
     console.error('Erro ao buscar estatísticas de mensagens:', error);
+    
+    // Verificar se é erro de autenticação
+    if (error.response?.status === 401) {
+      console.error('❌ Erro de autenticação (401). Verifique se:', {
+        hasInstanceToken: !!instanceToken,
+        instanceToken: instanceToken ? instanceToken.substring(0, 10) + '...' : 'não fornecido',
+        apiUrl: getCurrentServerConfig().url,
+        adminToken: getCurrentServerConfig().adminToken ? getCurrentServerConfig().adminToken.substring(0, 10) + '...' : 'não configurado'
+      });
+      throw new Error('Erro de autenticação: Token inválido ou expirado');
+    }
+    
+    // Verificar se é erro de rede
+    if (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND') {
+      console.error('❌ Erro de conexão com a API:', error.message);
+      throw new Error('Erro de conexão: Não foi possível conectar com o servidor da API');
+    }
+    
     throw error;
   }
 };
@@ -1348,10 +1374,6 @@ export const message = {
         readchat: true,
         delay: 0,
         ...options
-      }, {
-        headers: {
-          'token': instanceToken
-        }
       });
       return response.data;
     } catch (error) {

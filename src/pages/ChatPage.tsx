@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
-import { Search, Plus, MessageSquare, Phone, Send, Paperclip, MoreVertical, Clock, Check, CheckCheck, Smartphone, RefreshCw, Archive, User, Wifi, WifiOff, FileText } from 'lucide-react';
+import { Search, Plus, MessageSquare, Phone, Send, Paperclip, MoreVertical, Clock, Check, CheckCheck, Smartphone, RefreshCw, Archive, User, Wifi, WifiOff, FileText, Users, Tag, X, Filter, UserCheck, UserX, CheckCircle } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { uazapiService, Chat as UazapiChat } from '../services/uazapiService';
 import { getCurrentServerConfig } from '../services/api';
 import { useInstance } from '../contexts/InstanceContext';
+import { useMultiAttendance } from '../contexts/MultiAttendanceContext';
 import { message, getProfileInfo } from '../lib/wapi/api';
 import { toast } from 'react-hot-toast';
 import { SelectInstanceModal } from '../components/instance/SelectInstanceModal';
@@ -13,6 +14,7 @@ import { NotesPanel } from '../components/NotesPanel';
 import { AssignAgentModal } from '../components/AssignAgentModal';
 import { MediaUploadModal } from '../components/MediaUploadModal';
 import { MediaRenderer } from '../components/MediaRenderer';
+import { LabelsModal } from '../components/LabelsModal';
 
 interface ChatMessage {
   id: string;
@@ -36,6 +38,23 @@ interface ExtendedChat extends Omit<UazapiChat, 'lastMessage'> {
 
 export function ChatPage() {
   const { selectedInstance, setSelectedInstance } = useInstance();
+  const { 
+    currentUserRole, 
+    isAdministrator, 
+    isAgent,
+    agents,
+    assignments,
+    assignChat,
+    unassignChat,
+    closeChat,
+    reopenChat,
+    filterByAgent,
+    filterByStatus,
+    setFilterByAgent,
+    setFilterByStatus,
+    loadAgents
+  } = useMultiAttendance();
+  
   const [chats, setChats] = useState<ExtendedChat[]>([]);
   const [selectedChat, setSelectedChat] = useState<ExtendedChat | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -50,9 +69,13 @@ export function ChatPage() {
   const [showNotesPanel, setShowNotesPanel] = useState(false);
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [showMediaModal, setShowMediaModal] = useState(false);
+  const [showLabelsModal, setShowLabelsModal] = useState(false);
+  const [showFiltersPanel, setShowFiltersPanel] = useState(false);
   const [replyingToMessage, setReplyingToMessage] = useState<ChatMessage | null>(null);
   const [showEmojiPicker, setShowEmojiPicker] = useState<string | null>(null); // ID da mensagem para mostrar picker
   const [reactingToMessage, setReactingToMessage] = useState<string | null>(null); // ID da mensagem sendo reagida
+  const [labels, setLabels] = useState<any[]>([]);
+  const [labelsLoading, setLabelsLoading] = useState(false);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messageInputRef = useRef<HTMLTextAreaElement>(null);
@@ -272,6 +295,136 @@ export function ChatPage() {
     }
   }, [showEmojiPicker]);
 
+  // Carregar agentes quando o componente monta
+  useEffect(() => {
+    if (selectedInstance) {
+      loadAgents();
+    }
+  }, [selectedInstance, loadAgents]);
+
+  // Funções para gerenciar etiquetas
+  const loadLabels = async () => {
+    if (!selectedInstance?.token) return;
+    
+    setLabelsLoading(true);
+    try {
+      const labelsData = await uazapiService.getLabels(selectedInstance.token);
+      setLabels(labelsData);
+    } catch (error) {
+      console.error('Erro ao carregar etiquetas:', error);
+      toast.error('Erro ao carregar etiquetas');
+    } finally {
+      setLabelsLoading(false);
+    }
+  };
+
+  const handleCreateLabel = async (name: string, color: string) => {
+    if (!selectedInstance?.token) return;
+    
+    try {
+      await uazapiService.createLabel(selectedInstance.token, name, parseInt(color.replace('#', ''), 16));
+      toast.success('Etiqueta criada com sucesso');
+      loadLabels();
+    } catch (error) {
+      console.error('Erro ao criar etiqueta:', error);
+      toast.error('Erro ao criar etiqueta');
+    }
+  };
+
+  const handleDeleteLabel = async (labelId: string) => {
+    if (!selectedInstance?.token) return;
+    
+    try {
+      await uazapiService.deleteLabel(selectedInstance.token, labelId);
+      toast.success('Etiqueta excluída com sucesso');
+      loadLabels();
+    } catch (error) {
+      console.error('Erro ao excluir etiqueta:', error);
+      toast.error('Erro ao excluir etiqueta');
+    }
+  };
+
+  // Funções para gerenciar atribuições
+  const handleAssignAgent = async (agentId: string, agentName: string) => {
+    if (!selectedChat) return;
+    
+    try {
+      await assignChat(selectedChat.id, agentId);
+      
+      // Atualizar o chat local
+      setChats(prev => prev.map(chat => 
+        chat.id === selectedChat.id 
+          ? { ...chat, agent: agentName, status: 'assigned' as const }
+          : chat
+      ));
+      
+      setSelectedChat(prev => prev ? { ...prev, agent: agentName, status: 'assigned' } : null);
+      setShowAssignModal(false);
+    } catch (error) {
+      console.error('Erro ao atribuir agente:', error);
+    }
+  };
+
+  const handleUnassignChat = async () => {
+    if (!selectedChat) return;
+    
+    try {
+      await unassignChat(selectedChat.id);
+      
+      // Atualizar o chat local
+      setChats(prev => prev.map(chat => 
+        chat.id === selectedChat.id 
+          ? { ...chat, agent: undefined, status: 'unassigned' as const }
+          : chat
+      ));
+      
+      setSelectedChat(prev => prev ? { ...prev, agent: undefined, status: 'unassigned' } : null);
+      toast.success('Chat desatribuído com sucesso');
+    } catch (error) {
+      console.error('Erro ao desatribuir chat:', error);
+    }
+  };
+
+  const handleCloseChat = async () => {
+    if (!selectedChat) return;
+    
+    try {
+      await closeChat(selectedChat.id, 'Atendimento finalizado');
+      
+      // Atualizar o chat local
+      setChats(prev => prev.map(chat => 
+        chat.id === selectedChat.id 
+          ? { ...chat, status: 'closed' as const }
+          : chat
+      ));
+      
+      setSelectedChat(prev => prev ? { ...prev, status: 'closed' } : null);
+      toast.success('Atendimento finalizado com sucesso');
+    } catch (error) {
+      console.error('Erro ao fechar atendimento:', error);
+    }
+  };
+
+  const handleReopenChat = async () => {
+    if (!selectedChat) return;
+    
+    try {
+      await reopenChat(selectedChat.id);
+      
+      // Atualizar o chat local
+      setChats(prev => prev.map(chat => 
+        chat.id === selectedChat.id 
+          ? { ...chat, status: 'unassigned' as const }
+          : chat
+      ));
+      
+      setSelectedChat(prev => prev ? { ...prev, status: 'unassigned' } : null);
+      toast.success('Atendimento reaberto com sucesso');
+    } catch (error) {
+      console.error('Erro ao reabrir atendimento:', error);
+    }
+  };
+
   const loadChats = async () => {
     if (!selectedInstance?.token) return;
 
@@ -305,18 +458,23 @@ export function ChatPage() {
 
       // Usar dados REAIS da API, não fictícios
       const extendedChats: ExtendedChat[] = apiChats.map(chat => {
-        // Determinar status baseado em dados reais ou padrão
+        // Verificar se existe atribuição para este chat
+        const assignment = assignments.find(a => a.chatId === chat.id && a.status !== 'closed');
+        const agent = assignment ? agents.find(a => a.id === assignment.agentId) : undefined;
+        
+        // Determinar status baseado nas atribuições
         let status: 'unassigned' | 'assigned' | 'closed' = 'unassigned';
-        if (chat.unreadCount > 0) {
-          status = 'unassigned'; // Se tem mensagens não lidas, não está atribuído
-        } else {
-          status = 'assigned'; // Se não tem mensagens pendentes, pode estar atribuído
+        if (assignment) {
+          status = assignment.status;
+        } else if (chat.unreadCount === 0) {
+          // Se não tem mensagens não lidas e não está atribuído, pode estar fechado
+          status = 'unassigned';
         }
 
         return {
           ...chat,
           status,
-          agent: undefined, // Sem agente atribuído por padrão
+          agent: agent?.name, // Nome do agente atribuído
           // Se a API não retornou lastMessage, criar uma baseada no timestamp
           lastMessage: chat.lastMessage ? {
             id: chat.lastMessage.id,
@@ -490,172 +648,28 @@ export function ChatPage() {
           hasMediaUrl: !!mediaUrl
         });
 
-        // Processar mensagem citada se existir - verificar diferentes campos
+        // Processar mensagem citada de forma simplificada
         let processedQuotedMsg = null;
         
-        // Verificar todos os campos possíveis onde mensagens citadas podem estar
-        const msgAny = msg as any; // Cast para evitar erros TypeScript
-        
-        // Expandir busca MÁXIMA para capturar QUALQUER estrutura da API UAZAPI
-        const quotedSource = msg.quotedMsg || 
-                           msgAny.quoted || 
-                           msgAny.quotedMessage || 
-                           msgAny.contextInfo?.quotedMessage ||
-                           msgAny.message?.extendedTextMessage?.contextInfo?.quotedMessage ||
-                           msgAny.message?.conversation?.contextInfo?.quotedMessage ||
-                           msgAny.key?.contextInfo?.quotedMessage ||
-                           msgAny.quotedStanzaId || 
-                           msgAny.quotedParticipant || 
-                           msgAny.quotedStanza || 
-                           msgAny.extendedTextMessage?.contextInfo?.quotedMessage ||
-                           // Estruturas aninhadas
-                           (msgAny.body && typeof msgAny.body === 'object' && msgAny.body.quotedMessage) ||
-                           // Campos alternativos que podem existir
-                           msgAny.replyTo ||
-                           msgAny.repliedTo ||
-                           msgAny.inReplyTo ||
-                           msgAny.quotedContent ||
-                           msgAny.quotedText ||
-                           msgAny.quotedBody ||
-                           msgAny.reference ||
-                           msgAny.messageRef ||
-                           msgAny.quotedMessageId ||
-                           msgAny.originalMessage ||
-                           msgAny.parentMessage ||
-                           // Verificar em níveis mais profundos
-                           msgAny.message?.quotedMessage ||
-                           msgAny.message?.quoted ||
-                           msgAny.message?.contextInfo ||
-                           // Campos específicos do protocolo WhatsApp
-                           msgAny.stanzaId ||
-                           msgAny.participant ||
-                           msgAny.quotedStanzaId ||
-                           // Estruturas complexas
-                           (msgAny.key && msgAny.key.participant && msgAny.key.id) ||
-                           // Busca em qualquer objeto que tenha 'quoted' no nome
-                           Object.keys(msgAny).find(key => 
-                             key.toLowerCase().includes('quot') && 
-                             msgAny[key] && 
-                             typeof msgAny[key] === 'object'
-                           ) && msgAny[Object.keys(msgAny).find(key => 
-                             key.toLowerCase().includes('quot') && 
-                             msgAny[key] && 
-                             typeof msgAny[key] === 'object'
-                           )!];
-        
-        // Log ULTRA DETALHADO para mensagens suspeitas de serem respostas
-        if (content && (
-          content.toLowerCase().trim() === 'top' ||
-          content.toLowerCase().trim() === 'ok' ||
-          content.toLowerCase().trim() === 'as' ||
-          content.toLowerCase().trim() === 'sim' ||
-          content.toLowerCase().trim() === 'não'
-        )) {
-          console.log('🔍 ===== ANÁLISE COMPLETA DE POSSÍVEL RESPOSTA =====');
-          console.log('📋 MENSAGEM ORIGINAL COMPLETA:', JSON.stringify(msg, null, 2));
-          console.log('🔍 TODOS OS CAMPOS RAIZ:', Object.keys(msgAny));
-          console.log('🔍 ESTRUTURA NIVEL 1:', msgAny);
-          
-          // Análise profunda de estruturas que podem conter citações
-          if (msgAny.message) {
-            console.log('🔍 ESTRUTURA msg.message:', Object.keys(msgAny.message));
-            console.log('🔍 CONTEÚDO msg.message:', msgAny.message);
-          }
-          
-          if (msgAny.contextInfo) {
-            console.log('🔍 ESTRUTURA msg.contextInfo:', Object.keys(msgAny.contextInfo));
-            console.log('🔍 CONTEÚDO msg.contextInfo:', msgAny.contextInfo);
-          }
-          
-          if (msgAny.body && typeof msgAny.body === 'object') {
-            console.log('🔍 ESTRUTURA msg.body (object):', Object.keys(msgAny.body));
-            console.log('🔍 CONTEÚDO msg.body (object):', msgAny.body);
-          }
-          
-          // Buscar QUALQUER campo que contenha 'quot', 'reply', 'ref', 'parent'
-          const suspiciousFields = Object.keys(msgAny).filter(key => {
-            const lowerKey = key.toLowerCase();
-            return lowerKey.includes('quot') || 
-                   lowerKey.includes('reply') || 
-                   lowerKey.includes('ref') || 
-                   lowerKey.includes('parent') ||
-                   lowerKey.includes('context');
+        // Usar diretamente o campo quotedMsg que já vem processado do serviço
+        if (msg.quotedMsg) {
+          console.log('📋 ✅ MENSAGEM CITADA ENCONTRADA:', {
+            messageId: msg.id,
+            quotedMsg: msg.quotedMsg
           });
           
-          if (suspiciousFields.length > 0) {
-            console.log('🕵️ CAMPOS SUSPEITOS ENCONTRADOS:', suspiciousFields);
-            suspiciousFields.forEach(field => {
-              console.log(`🔍 ${field}:`, msgAny[field]);
-            });
-          }
-          
-          console.log('====================================================');
-        }
-        
-        // Log mais detalhado para debug
-        console.log('🔍 DEBUG MENSAGEM CITADA - Verificando campos expandidos:', {
-          msgId: msg.id,
-          content: content?.toString().substring(0, 50) + '...',
-          msgKeys: Object.keys(msgAny),
-          // Campos básicos
-          hasQuotedMsg: !!msg.quotedMsg,
-          hasQuoted: !!msgAny.quoted,
-          hasQuotedMessage: !!msgAny.quotedMessage,
-          // Context Info
-          hasContextInfo: !!msgAny.contextInfo,
-          contextInfoKeys: msgAny.contextInfo ? Object.keys(msgAny.contextInfo) : null,
-          quotedInContextInfo: !!(msgAny.contextInfo?.quotedMessage),
-          // Campos específicos da API
-          hasQuotedStanzaId: !!msgAny.quotedStanzaId,
-          hasQuotedParticipant: !!msgAny.quotedParticipant,
-          hasExtendedTextMessage: !!msgAny.extendedTextMessage,
-          // Estrutura de mensagem
-          messageKeys: msgAny.message ? Object.keys(msgAny.message) : null,
-          bodyType: typeof msgAny.body,
-          bodyHasQuoted: msgAny.body && typeof msgAny.body === 'object' && !!msgAny.body.quotedMessage
-        });
-        
-        if (quotedSource) {
-          console.log('📋 ✅ ENCONTROU mensagem citada! Processando:', quotedSource);
-          
-          // A mensagem citada pode estar em diferentes estruturas
-          const quotedData = quotedSource.quotedMessage || quotedSource;
-          
           processedQuotedMsg = {
-            ...quotedData,
-            // Garantir que temos os campos básicos
-            body: quotedData.body || quotedData.text || quotedData.conversation,
-            type: quotedData.type || 'text',
-            pushName: quotedData.pushName || quotedData.participant || quotedData.author,
-            // Preservar outros campos importantes
-            id: quotedData.id || quotedData.messageId,
-            timestamp: quotedData.timestamp || quotedData.messageTimestamp
+            id: msg.quotedMsg.id || 'quoted_' + Date.now(),
+            body: msg.quotedMsg.body || msg.quotedMsg.text || msg.quotedMsg.conversation || 'Mensagem citada',
+            type: msg.quotedMsg.type || 'text',
+            pushName: msg.quotedMsg.pushName || msg.quotedMsg.participant || msg.quotedMsg.author || 'Contato',
+            fromMe: msg.quotedMsg.fromMe || false,
+            timestamp: msg.quotedMsg.timestamp || msg.quotedMsg.messageTimestamp || Date.now()
           };
           
-          console.log('✅ Mensagem citada processada com sucesso:', processedQuotedMsg);
-          console.log('🎯 Esta mensagem será renderizada com visual de resposta!');
-          
-        } else {
-          console.log('❌ Nenhuma mensagem citada encontrada para:', msg.id);
-          
-          // Análise mais detalhada para debug
-          if (Object.keys(msgAny).length > 8) {
-            console.log('🔍 Mensagem complexa com muitos campos - analisando estrutura:', {
-              totalFields: Object.keys(msgAny).length,
-              mainFields: Object.keys(msgAny).slice(0, 10),
-              hasNestedMessage: !!msgAny.message,
-              hasNestedBody: msgAny.body && typeof msgAny.body === 'object',
-              possibleQuotedFields: Object.keys(msgAny).filter(key => 
-                key.toLowerCase().includes('quot') || 
-                key.toLowerCase().includes('reply') ||
-                key.toLowerCase().includes('ref')
-              )
-            });
-          }
-          
-          // Mensagem citada não encontrada - manter como null
-          console.log('ℹ️ Nenhuma mensagem citada real encontrada para:', msg.id);
+          console.log('✅ Mensagem citada processada:', processedQuotedMsg);
         }
+
 
         return {
           id: msg.id,
@@ -1428,6 +1442,25 @@ export function ChatPage() {
           <div className="flex items-center justify-between mb-4">
             <h1 className="text-lg font-semibold text-gray-900">Multiatendimento</h1>
             <div className="flex items-center gap-2">
+              {isAdministrator && (
+                <button
+                  onClick={() => setShowLabelsModal(true)}
+                  className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
+                  title="Gerenciar Etiquetas"
+                >
+                  <Tag className="h-5 w-5" />
+                </button>
+              )}
+              <button
+                onClick={() => setShowFiltersPanel(!showFiltersPanel)}
+                className={cn(
+                  "p-2 rounded-lg hover:bg-gray-100",
+                  showFiltersPanel ? "text-primary-600 bg-primary-50" : "text-gray-400 hover:text-gray-600"
+                )}
+                title="Filtros Avançados"
+              >
+                <Filter className="h-5 w-5" />
+              </button>
               <button
                 onClick={() => setShowInstanceModal(true)}
                 className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
@@ -1502,6 +1535,54 @@ export function ChatPage() {
               className="w-full pl-10 pr-4 py-2 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
             />
           </div>
+
+          {/* Advanced Filters Panel */}
+          {showFiltersPanel && (
+            <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-medium text-gray-900">Filtros Avançados</h3>
+                <button
+                  onClick={() => {
+                    setFilterByAgent(null);
+                    setFilterByStatus(null);
+                  }}
+                  className="text-xs text-gray-500 hover:text-gray-700"
+                >
+                  Limpar
+                </button>
+              </div>
+              
+              {/* Filter by Agent */}
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Por Agente</label>
+                <select
+                  value={filterByAgent || ''}
+                  onChange={(e) => setFilterByAgent(e.target.value || null)}
+                  className="w-full text-xs border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                >
+                  <option value="">Todos os agentes</option>
+                  {agents.map(agent => (
+                    <option key={agent.id} value={agent.id}>{agent.name}</option>
+                  ))}
+                </select>
+              </div>
+              
+              {/* Filter by Status */}
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Por Status</label>
+                <select
+                  value={filterByStatus || ''}
+                  onChange={(e) => setFilterByStatus(e.target.value as any || null)}
+                  className="w-full text-xs border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                >
+                  <option value="">Todos os status</option>
+                  <option value="unassigned">Não atribuído</option>
+                  <option value="assigned">Atribuído</option>
+                  <option value="closed">Fechado</option>
+                </select>
+              </div>
+            </div>
+          )}
 
           {/* Filter Tabs */}
           <div className="flex rounded-lg bg-gray-100 p-1">
@@ -1705,14 +1786,44 @@ export function ChatPage() {
                           : chat.lastMessage?.content || 'Sem mensagens'}
                       </p>
                       <div className="flex items-center gap-1 flex-shrink-0">
-                                                 {chat.status === 'unassigned' && (
-                           <div className="w-2 h-2 bg-orange-400 rounded-full" />
-                         )}
-                                                 {chat.agent && (
-                           <User className="h-3 w-3 text-gray-400" />
-                         )}
+                        {/* Status indicator */}
+                        {chat.status === 'unassigned' && (
+                          <div className="w-2 h-2 bg-orange-400 rounded-full" title="Não atribuído" />
+                        )}
+                        {chat.status === 'assigned' && (
+                          <div className="w-2 h-2 bg-green-400 rounded-full" title="Atribuído" />
+                        )}
+                        {chat.status === 'closed' && (
+                          <div className="w-2 h-2 bg-gray-400 rounded-full" title="Fechado" />
+                        )}
+                        
+                        {/* Agent indicator */}
+                        {chat.agent && (
+                          <User className="h-3 w-3 text-gray-400" title={`Agente: ${chat.agent}`} />
+                        )}
                       </div>
                     </div>
+                    
+                    {/* Agent name and status */}
+                    {(chat.agent || chat.status !== 'unassigned') && (
+                      <div className="flex items-center gap-2 mt-1">
+                        {chat.agent && (
+                          <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded">
+                            {chat.agent}
+                          </span>
+                        )}
+                        <span className={cn(
+                          "text-xs px-2 py-0.5 rounded",
+                          chat.status === 'unassigned' && "bg-orange-100 text-orange-700",
+                          chat.status === 'assigned' && "bg-green-100 text-green-700",
+                          chat.status === 'closed' && "bg-gray-100 text-gray-700"
+                        )}>
+                          {chat.status === 'unassigned' && 'Não atribuído'}
+                          {chat.status === 'assigned' && 'Atribuído'}
+                          {chat.status === 'closed' && 'Fechado'}
+                        </span>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -1745,38 +1856,49 @@ export function ChatPage() {
                   </div>
                 </div>
                                 <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => {
-                      console.log('🔧 Debug forçado - adicionando mensagem citada para teste');
-                      if (selectedChat) {
-                        const testMessage: ChatMessage = {
-                          id: 'test_quoted_' + Date.now(),
-                          chatId: selectedChat.id,
-                          content: 'Esta é uma resposta de teste que deveria mostrar a citação',
-                          timestamp: Date.now(),
-                          fromMe: false,
-                          type: 'text',
-                          author: 'Sistema',
-                          quotedMsg: {
-                            body: 'Mensagem original simulada para teste',
-                            type: 'text',
-                            pushName: 'Rafael Mendes',
-                            id: 'test_original',
-                            timestamp: Date.now() - 60000
-                          }
-                        };
-                        setMessages(prev => [...prev, testMessage]);
-                        console.log('✅ Mensagem de teste com citação adicionada!');
-                        
-                        // Scroll para o final
-                        setTimeout(scrollToBottom, 100);
-                      }
-                    }}
-                    className="p-2 text-orange-500 hover:text-orange-600 rounded-lg hover:bg-orange-50"
-                    title="🧪 Testar Mensagem Citada (Debug)"
-                  >
-                    <span className="text-xs">🧪</span>
-                  </button>
+                  {/* Controles de Multiatendimento */}
+                  {isAgent && (
+                    <>
+                      {selectedChat.status === 'unassigned' && (
+                        <button
+                          onClick={() => setShowAssignModal(true)}
+                          className="p-2 text-blue-500 hover:text-blue-600 rounded-lg hover:bg-blue-50"
+                          title="Atribuir Agente"
+                        >
+                          <UserCheck className="h-5 w-5" />
+                        </button>
+                      )}
+                      
+                      {selectedChat.status === 'assigned' && selectedChat.agent && (
+                        <>
+                          <button
+                            onClick={handleUnassignChat}
+                            className="p-2 text-orange-500 hover:text-orange-600 rounded-lg hover:bg-orange-50"
+                            title="Desatribuir"
+                          >
+                            <UserX className="h-5 w-5" />
+                          </button>
+                          <button
+                            onClick={handleCloseChat}
+                            className="p-2 text-green-500 hover:text-green-600 rounded-lg hover:bg-green-50"
+                            title="Finalizar Atendimento"
+                          >
+                            <CheckCircle className="h-5 w-5" />
+                          </button>
+                        </>
+                      )}
+                      
+                      {selectedChat.status === 'closed' && (
+                        <button
+                          onClick={handleReopenChat}
+                          className="p-2 text-blue-500 hover:text-blue-600 rounded-lg hover:bg-blue-50"
+                          title="Reabrir Atendimento"
+                        >
+                          <RefreshCw className="h-5 w-5" />
+                        </button>
+                      )}
+                    </>
+                  )}
                   <button
                     onClick={() => setShowNotesPanel(true)}
                     className="p-2 text-gray-400 hover:text-primary-600 rounded-lg hover:bg-gray-100"
@@ -2093,12 +2215,20 @@ export function ChatPage() {
           chatId={selectedChat?.id || ''}
           chatName={selectedChat?.name || 'Chat'}
           currentAgent={selectedChat?.agent}
-          onAssign={(agent) => {
-            console.log('Agente atribuído:', agent);
-            setShowAssignModal(false);
-          }}
+          onAssign={handleAssignAgent}
         />
       )}
+
+      {/* Labels Modal */}
+      <LabelsModal
+        isOpen={showLabelsModal}
+        onClose={() => setShowLabelsModal(false)}
+        labels={labels}
+        onLoadLabels={loadLabels}
+        onCreateLabel={handleCreateLabel}
+        onDeleteLabel={handleDeleteLabel}
+        loading={labelsLoading}
+      />
 
       {/* Modal de Upload de Mídia */}
       <MediaUploadModal

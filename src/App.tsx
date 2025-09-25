@@ -4,6 +4,7 @@ import { NotificationProvider } from './contexts/NotificationContext';
 import { AuthProvider } from './contexts/AuthContext';
 import { InstanceProvider } from './contexts/InstanceContext';
 import { ServerProvider } from './contexts/ServerContext';
+import { MultiAttendanceProvider } from './contexts/MultiAttendanceContext';
 import { AppRoutes } from './routes';
 
 function App() {
@@ -12,10 +13,12 @@ function App() {
       <ServerProvider>
         <NotificationProvider>
           <AuthProvider>
-            <InstanceProvider>
-              <AppRoutes />
-              <Toaster position="top-right" />
-            </InstanceProvider>
+            <MultiAttendanceProvider>
+              <InstanceProvider>
+                <AppRoutes />
+                <Toaster position="top-right" />
+              </InstanceProvider>
+            </MultiAttendanceProvider>
           </AuthProvider>
         </NotificationProvider>
       </ServerProvider>

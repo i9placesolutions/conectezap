@@ -2557,7 +2557,7 @@ export const uazapiService = {
           body: processedBody,
           type: message.messageType || message.type || 'text',
           mediaUrl: mediaUrl,
-          quotedMsg: message.quotedMsg || message.contextInfo?.quotedMessage || null,
+          quotedMsg: message.quotedMsg || message.contextInfo?.quotedMessage || message.quoted || message.quotedMessage || null,
           isForwarded: message.isForwarded || false,
           author: message.author || message.pushName || message.participant || '',
           pushName: message.pushName || '',
