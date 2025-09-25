@@ -1597,13 +1597,26 @@ export function MassMessagingPage() {
                 <div className="mb-4 sm:mb-6">
                   <h3 className="text-sm sm:text-base font-medium text-gray-800 mb-3 sm:mb-4">Intervalo entre mensagens</h3>
                   
+                  {/* Aviso quando delay inteligente está ativo */}
+                  {antiSpamConfig.smartDelays && (
+                    <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg">
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                        <p className="text-sm font-medium text-green-800">Delays Inteligentes Ativados</p>
+                      </div>
+                      <p className="text-xs text-green-700 mt-1">
+                        Os delays serão calculados automaticamente de forma inteligente. Os controles manuais abaixo estão desabilitados.
+                      </p>
+                    </div>
+                  )}
+                  
                   {/* Delay mínimo */}
                   <div className="mb-4">
                     <div className="flex flex-col xs:flex-row xs:items-center justify-between gap-1 mb-2">
-                      <label className="block text-sm font-medium text-gray-700">
+                      <label className={`block text-sm font-medium ${antiSpamConfig.smartDelays ? 'text-gray-400' : 'text-gray-700'}`}>
                         Delay mínimo (segundos)
                       </label>
-                      <span className="text-sm font-medium text-primary-600">
+                      <span className={`text-sm font-medium ${antiSpamConfig.smartDelays ? 'text-gray-400' : 'text-primary-600'}`}>
                         {minDelay}s
                       </span>
                     </div>
@@ -1612,6 +1625,7 @@ export function MassMessagingPage() {
                       min="1"
                       max="20"
                       value={minDelay}
+                      disabled={antiSpamConfig.smartDelays}
                       onChange={(e) => {
                         const value = Number(e.target.value);
                         setMinDelay(value);
@@ -1620,7 +1634,7 @@ export function MassMessagingPage() {
                           setMaxDelay(value);
                         }
                       }}
-                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-primary-600"
+                      className={`w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-primary-600 ${antiSpamConfig.smartDelays ? 'opacity-50 cursor-not-allowed' : ''}`}
                     />
                     <div className="flex justify-between text-xs text-gray-500 mt-1">
                       <span>Rápido: 1s</span>
@@ -1631,10 +1645,10 @@ export function MassMessagingPage() {
                   {/* Delay máximo */}
                   <div className="mb-3">
                     <div className="flex flex-col xs:flex-row xs:items-center justify-between gap-1 mb-2">
-                      <label className="block text-sm font-medium text-gray-700">
+                      <label className={`block text-sm font-medium ${antiSpamConfig.smartDelays ? 'text-gray-400' : 'text-gray-700'}`}>
                         Delay máximo (segundos)
                       </label>
-                      <span className="text-sm font-medium text-primary-600">
+                      <span className={`text-sm font-medium ${antiSpamConfig.smartDelays ? 'text-gray-400' : 'text-primary-600'}`}>
                         {maxDelay}s
                       </span>
                     </div>
@@ -1643,8 +1657,9 @@ export function MassMessagingPage() {
                       min={minDelay}
                       max="60"
                       value={maxDelay}
+                      disabled={antiSpamConfig.smartDelays}
                       onChange={(e) => setMaxDelay(Number(e.target.value))}
-                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-primary-600"
+                      className={`w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-primary-600 ${antiSpamConfig.smartDelays ? 'opacity-50 cursor-not-allowed' : ''}`}
                     />
                     <div className="flex justify-between text-xs text-gray-500 mt-1">
                       <span>Mínimo: {minDelay}s</span>
@@ -1652,9 +1667,12 @@ export function MassMessagingPage() {
                     </div>
                   </div>
                   
-                  <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                    <p className="text-xs text-blue-700">
-                      💡 O delay aleatório entre mensagens ajuda a evitar detecção de spam pelo WhatsApp.
+                  <div className={`p-3 ${antiSpamConfig.smartDelays ? 'bg-green-50 border-green-200' : 'bg-blue-50 border-blue-200'} border rounded-lg`}>
+                    <p className={`text-xs ${antiSpamConfig.smartDelays ? 'text-green-700' : 'text-blue-700'}`}>
+                      {antiSpamConfig.smartDelays 
+                        ? '🤖 Os delays inteligentes ajustam automaticamente os intervalos baseados em padrões naturais de conversação.'
+                        : '💡 O delay aleatório entre mensagens ajuda a evitar detecção de spam pelo WhatsApp.'
+                      }
                     </p>
                   </div>
                 </div>
