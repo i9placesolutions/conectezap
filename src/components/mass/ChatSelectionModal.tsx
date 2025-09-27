@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { X, Search, Check, AlertTriangle, MessageCircle, Users } from 'lucide-react';
 import { uazapiService, Chat } from '../../services/uazapiService';
-import { toast } from 'react-hot-toast';
 
 interface ChatSelectionModalProps {
   isOpen: boolean;
@@ -29,6 +28,7 @@ export function ChatSelectionModal({
 
   // Carregar chats da API
   useEffect(() => {
+    console.log('🔄 ChatSelectionModal useEffect:', { isOpen, instanceToken });
     if (isOpen && instanceToken) {
       loadChats();
     }
@@ -40,23 +40,51 @@ export function ChatSelectionModal({
   }, [selectedChats]);
 
   const loadChats = async () => {
+    if (!instanceToken) {
+      console.warn('⚠️ Token da instância não encontrado');
+      return;
+    }
+
+    console.log('🚀 Iniciando carregamento de chats com token:', instanceToken.substring(0, 10) + '...');
     setLoading(true);
     setError(null);
+
     try {
-      // Buscar chats reais da API UAZAPI usando o endpoint /chat/find
-      const chatsData = await uazapiService.searchChats(instanceToken, {
-        limit: 100, // Buscar mais chats para ter uma boa seleção
-        wa_isGroup: false // Filtrar apenas conversas individuais (não grupos)
-      });
-      setChats(chatsData);
+      console.log('🔍 Iniciando busca de TODOS os chats (individuais + grupos)...');
       
-      if (chatsData.length === 0) {
-        setError('Nenhum chat encontrado. Verifique se existem conversas nesta instância.');
+      // Verificar se instanceToken está válido
+      if (!instanceToken) {
+        setError('Token da instância não encontrado.');
+        return;
       }
+      console.log('🔑 Token da instância:', instanceToken.substring(0, 10) + '...');
+      
+      // Buscar TODOS os chats sem limite
+      console.log('🔍 Buscando TODOS os chats disponíveis...');
+      console.log('🔍 Filtros aplicados: {} (sem filtros)');
+      
+      const startTime = Date.now();
+      const allChatsResult = await uazapiService.getAllChats(instanceToken, {});
+      const endTime = Date.now();
+      
+      const individualChats = allChatsResult.filter(chat => !chat.isGroup);
+       const groupChats = allChatsResult.filter(chat => chat.isGroup);
+      
+      console.log('✅ BUSCA COMPLETA!');
+      console.log('📊 Total de chats encontrados:', allChatsResult.length);
+      console.log('📊 Chats individuais:', individualChats.length);
+      console.log('📊 Grupos:', groupChats.length);
+      console.log('⏱️ Tempo de busca:', (endTime - startTime) / 1000, 'segundos');
+      console.log('📋 Primeiros 3 chats:', allChatsResult.slice(0, 3));
+      
+      if (allChatsResult.length < 1000) {
+        console.warn('⚠️ ATENÇÃO: Menos de 1000 chats encontrados. Esperado: 1500+');
+      }
+      
+      setChats(allChatsResult);
     } catch (error) {
-      console.error('Erro ao carregar chats:', error);
-      setError('Não foi possível carregar os chats. Tente novamente.');
-      toast.error('Erro ao carregar chats');
+      console.error('❌ Erro ao carregar chats:', error);
+      setError('Erro ao carregar chats. Tente novamente.');
     } finally {
       setLoading(false);
     }
@@ -94,6 +122,14 @@ export function ChatSelectionModal({
   );
 
   if (!isOpen) return null;
+
+  console.log('🎭 ChatSelectionModal renderizando:', { 
+    isOpen, 
+    instanceToken: instanceToken ? 'presente' : 'ausente',
+    chatsCount: chats.length,
+    loading,
+    error 
+  });
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
@@ -139,9 +175,10 @@ export function ChatSelectionModal({
         {/* Content */}
         <div className="flex-1 overflow-y-auto">
           {loading ? (
-            <div className="flex items-center justify-center py-12">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-              <span className="ml-3 text-gray-600">Carregando chats...</span>
+            <div className="flex flex-col items-center justify-center py-12">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mb-4"></div>
+              <span className="text-gray-600 font-medium">Buscando todos os chats...</span>
+              <span className="text-sm text-gray-500 mt-2">Isso pode levar alguns segundos</span>
             </div>
           ) : error ? (
             <div className="flex flex-col items-center justify-center py-12 px-6">

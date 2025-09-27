@@ -1347,7 +1347,7 @@ export const uazapiService = {
       // Estrutura baseada no endpoint POST /chat/find
       const requestBody = {
         sort: "-wa_lastMsgTimestamp", // Ordenar por última mensagem (mais recentes primeiro)
-        limit: filters.limit || 50,
+        limit: filters.limit || 999999, // ILIMITADO - carregar TODOS os chats sem exceção
         offset: filters.offset || 0,
         // Filtros adicionais podem ser adicionados aqui conforme necessário
         // wa_isGroup: false, // Para filtrar apenas conversas individuais
@@ -1451,14 +1451,13 @@ export const uazapiService = {
         return mappedChat;
       });
       
-      // Filtrar chats válidos (com ID válido)
+      // ILIMITADO - Aceitar TODOS os chats (apenas filtrar por ID válido)
       const validChats = mappedChats.filter((chat: any) => {
         const hasValidId = chat.id && chat.id.length > 0;
-        const hasValidName = chat.name && chat.name !== 'Sem nome';
-        return hasValidId && hasValidName;
+        return hasValidId; // Remover filtro de nome para carregar TODOS os chats
       });
       
-      console.log(`✅ SUCESSO: ${validChats.length} de ${mappedChats.length} conversas válidas encontradas`);
+      console.log(`✅ SUCESSO: ${validChats.length} de ${mappedChats.length} conversas carregadas (TODAS sem filtros)`);
       
       if (response.data?.totalChatsStats) {
         console.log('📊 Estatísticas da API:', response.data.totalChatsStats);
@@ -1487,6 +1486,60 @@ export const uazapiService = {
         console.warn('⚠️ Erro do servidor: Problema interno da API UAZAPI');
       }
       
+      return [];
+    }
+  },
+
+  // Método para buscar TODOS os chats usando paginação
+  async getAllChats(instanceToken: string, filters: any = {}): Promise<Chat[]> {
+    try {
+      console.log('🔍 BUSCANDO TODOS OS CHATS - Token:', instanceToken?.substring(0, 10) + '...');
+      console.log('🔍 Filtros recebidos:', filters);
+      
+      const allChats: Chat[] = [];
+      let offset = 0;
+      const limit = 999999; // ILIMITADO - buscar TODOS os chats de uma vez
+      let hasMoreChats = true;
+      let pageCount = 0;
+      
+      while (hasMoreChats) { // SEM LIMITE de páginas
+        pageCount++;
+        console.log(`📄 Buscando página ${pageCount} (offset: ${offset}, limit: ${limit})`);
+        
+        const pageFilters = {
+          ...filters,
+          limit,
+          offset
+        };
+        
+        console.log('📤 Filtros da página:', pageFilters);
+        
+        const pageChats = await this.searchChats(instanceToken, pageFilters);
+        
+        console.log(`📥 Página ${pageCount} retornou ${pageChats.length} chats`);
+        
+        if (pageChats.length === 0) {
+          hasMoreChats = false;
+          console.log('✅ Não há mais chats para buscar');
+        } else {
+          allChats.push(...pageChats);
+          offset += limit;
+          
+          // Se retornou menos que o limite, provavelmente é a última página
+          if (pageChats.length < limit) {
+            hasMoreChats = false;
+            console.log('✅ Última página encontrada');
+          }
+        }
+        
+        console.log(`📊 Total de chats coletados até agora: ${allChats.length}`);
+      }
+      
+      console.log(`✅ BUSCA COMPLETA: ${allChats.length} chats encontrados no total`);
+      return allChats;
+      
+    } catch (error: any) {
+      console.error('❌ ERRO ao buscar todos os chats:', error);
       return [];
     }
   },

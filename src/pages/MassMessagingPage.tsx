@@ -1239,7 +1239,11 @@ export function MassMessagingPage() {
                         Nenhum
                       </button>
                       <button 
-                        onClick={() => setShowChatModal(true)}
+                        onClick={() => {
+                          console.log('🔘 Botão "Selecionar Chats" clicado!');
+                          console.log('📊 Estado atual:', { showChatModal, selectedInstance: !!selectedInstance });
+                          setShowChatModal(true);
+                        }}
                         className="p-2 text-center rounded-lg border border-gray-200 hover:border-primary-200 hover:bg-primary-50 text-xs sm:text-sm font-medium"
                       >
                         Selecionar
