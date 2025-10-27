@@ -3,14 +3,23 @@ import { useServer, Server } from '../contexts/ServerContext';
 import { updateServerConfig } from '../lib/wapi/api';
 import { updateServerConfig as updateApiConfig, recreateApi } from '../services/api';
 import { ChevronDown, Server as ServerIcon, Check } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
 
 interface ServerSelectorProps {
   compact?: boolean;
 }
 
+const ADMIN_EMAIL = 'rafael@i9place.com.br';
+
 export function ServerSelector({ compact = false }: ServerSelectorProps) {
+  const { user } = useAuth();
   const { servers, selectedServer, setSelectedServer } = useServer();
   const [isOpen, setIsOpen] = useState(false);
+
+  // Apenas o usuário rafael@i9place.com.br pode ver o seletor de servidor
+  if (user?.email !== ADMIN_EMAIL) {
+    return null;
+  }
 
   const handleServerChange = (server: Server) => {
     setSelectedServer(server);

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Search, Plus, MessageSquare, Phone, Send, Paperclip, MoreVertical, Clock, Check, CheckCheck, Smartphone, RefreshCw, Archive, User, Wifi, WifiOff, FileText, Users, Tag, X, Filter, UserCheck, UserX, CheckCircle } from 'lucide-react';
+import { Search, Plus, MessageSquare, Phone, Send, Paperclip, MoreVertical, Clock, Check, CheckCheck, Smartphone, RefreshCw, Archive, User, Wifi, WifiOff, FileText, Tag, Filter, UserCheck, UserX, CheckCircle } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { uazapiService, Chat as UazapiChat } from '../services/uazapiService';
 import { getCurrentServerConfig } from '../services/api';
@@ -15,6 +15,7 @@ import { AssignAgentModal } from '../components/AssignAgentModal';
 import { MediaUploadModal } from '../components/MediaUploadModal';
 import { MediaRenderer } from '../components/MediaRenderer';
 import { LabelsModal } from '../components/LabelsModal';
+import { useInstanceSecurity } from '../hooks/useInstanceSecurity';
 
 interface ChatMessage {
   id: string;
@@ -38,8 +39,8 @@ interface ExtendedChat extends Omit<UazapiChat, 'lastMessage'> {
 
 export function ChatPage() {
   const { selectedInstance, setSelectedInstance } = useInstance();
+  const { validateInstanceOwnership } = useInstanceSecurity();
   const { 
-    currentUserRole, 
     isAdministrator, 
     isAgent,
     agents,
@@ -322,7 +323,8 @@ export function ChatPage() {
     if (!selectedInstance?.token) return;
     
     try {
-      await uazapiService.createLabel(selectedInstance.token, name, parseInt(color.replace('#', ''), 16));
+      // Usar editLabel com ID vazio para criar uma nova label
+      await uazapiService.editLabel(selectedInstance.token, '', name, parseInt(color.replace('#', ''), 16), false);
       toast.success('Etiqueta criada com sucesso');
       loadLabels();
     } catch (error) {
@@ -335,7 +337,8 @@ export function ChatPage() {
     if (!selectedInstance?.token) return;
     
     try {
-      await uazapiService.deleteLabel(selectedInstance.token, labelId);
+      // Usar editLabel com deleteLabel=true para excluir
+      await uazapiService.editLabel(selectedInstance.token, labelId, '', 0, true);
       toast.success('Etiqueta excluída com sucesso');
       loadLabels();
     } catch (error) {
@@ -429,11 +432,21 @@ export function ChatPage() {
     if (!selectedInstance?.token) return;
 
     try {
+      // SEGURANÇA: Validar ownership da instância
+      const isValid = await validateInstanceOwnership(selectedInstance.token);
+      if (!isValid) {
+        console.error('🚫 ACESSO NEGADO: Instância não pertence ao usuário');
+        toast.error('Acesso negado: você não tem permissão para esta instância');
+        setSelectedInstance(null);
+        return;
+      }
+
       setLoading(true);
       console.log('🔍 CARREGANDO CHATS - DIAGNÓSTICO COMPLETO');
       console.log('🔍 Instância selecionada:', selectedInstance.name);
       const instanceToken = selectedInstance.token;
       console.log('🔍 Token:', instanceToken.substring(0, 10) + '...');
+      console.log('✅ Validação de ownership: APROVADA');
       
       // Diagnóstico da URL base
       const currentServer = getCurrentServerConfig();
@@ -535,8 +548,17 @@ export function ChatPage() {
     if (!selectedInstance?.token) return;
 
     try {
+      // SEGURANÇA: Validar ownership da instância
+      const isValid = await validateInstanceOwnership(selectedInstance.token);
+      if (!isValid) {
+        console.error('🚫 ACESSO NEGADO: Instância não pertence ao usuário');
+        toast.error('Acesso negado: você não tem permissão para esta instância');
+        return;
+      }
+
       setLoadingMessages(true);
       console.log('💬 Carregando mensagens do chat:', chat.name, 'ID:', chat.id);
+      console.log('✅ Validação de ownership: APROVADA');
 
       // Buscar mensagens reais da API
       const instanceToken = selectedInstance.token;
@@ -1799,7 +1821,9 @@ export function ChatPage() {
                         
                         {/* Agent indicator */}
                         {chat.agent && (
-                          <User className="h-3 w-3 text-gray-400" title={`Agente: ${chat.agent}`} />
+                          <div title={`Agente: ${chat.agent}`}>
+                            <User className="h-3 w-3 text-gray-400" />
+                          </div>
                         )}
                       </div>
                     </div>

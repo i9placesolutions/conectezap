@@ -4,9 +4,15 @@ import { cn } from '../lib/utils';
 import { toast } from 'react-hot-toast';
 import { InstanceModal } from '../components/instance/InstanceModal';
 import { InstanceCard } from '../components/instance/InstanceCard';
-
 import { QRCodeModal } from '../components/instance/QRCodeModal';
-import { getInstances, getCurrentServerConfig } from '../lib/wapi/api';
+import { getCurrentServerConfig } from '../services/api';
+import { useAuth } from '../contexts/AuthContext';
+import { 
+  syncInstancesStatus, 
+  registerInstanceInSupabase,
+  deleteInstanceFromSupabase,
+  updateInstanceInSupabase
+} from '../lib/instanceSync';
 
 
 interface Instance {
@@ -35,13 +41,16 @@ export function InstancesPage() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
   const [showDisconnectConfirm, setShowDisconnectConfirm] = useState<string | null>(null);
+  const { user } = useAuth();
 
   useEffect(() => {
-    loadInstances();
-    // Poll for updates every 5 seconds
-    const interval = setInterval(loadInstances, 5000);
-    return () => clearInterval(interval);
-  }, []);
+    if (user) {
+      loadInstances();
+      // Poll for updates every 5 seconds
+      const interval = setInterval(loadInstances, 5000);
+      return () => clearInterval(interval);
+    }
+  }, [user]);
 
   useEffect(() => {
     if (selectedInstanceId) {
@@ -57,14 +66,40 @@ export function InstancesPage() {
   }, [instances, selectedInstanceId]);
 
   const loadInstances = async () => {
+    if (!user) {
+      setLoading(false);
+      return;
+    }
+
     try {
       if (!isRefreshing) {
         setIsRefreshing(true);
-        const data = await getInstances();
-        setInstances(data);
+        
+        console.log('🔐 Carregando instâncias do Supabase (filtradas por user_id)...');
+        
+        // SEGURANÇA: Buscar do Supabase com RLS (filtra automaticamente por user_id)
+        const data = await syncInstancesStatus(user.id);
+        
+        // Converter para formato esperado
+        const formattedInstances: Instance[] = data.map(instance => ({
+          id: instance.id,
+          name: instance.name,
+          status: instance.status,
+          token: instance.token,
+          phoneConnected: instance.phone_connected || '',
+          profileName: instance.name,
+          systemName: instance.name,
+          adminFields: {
+            adminField01: '',
+            adminField02: ''
+          }
+        }));
+        
+        console.log(`✅ ${formattedInstances.length} instâncias carregadas (seguras)`);
+        setInstances(formattedInstances);
       }
     } catch (error) {
-      console.error('Error loading instances:', error);
+      console.error('❌ Erro ao carregar instâncias:', error);
     } finally {
       setIsRefreshing(false);
       setLoading(false);
@@ -72,8 +107,15 @@ export function InstancesPage() {
   };
 
   const handleCreateInstance = async (data: any) => {
+    if (!user) {
+      toast.error('Usuário não autenticado');
+      return;
+    }
+
     try {
       const config = getCurrentServerConfig();
+      
+      console.log('🔧 Criando instância na API UAZAPI...');
       const response = await fetch(`${config.url}/instance/init`, {
         method: 'POST',
         headers: {
@@ -90,7 +132,25 @@ export function InstancesPage() {
       }
 
       const responseData = await response.json();
-      console.log('Create response:', responseData);
+      console.log('✅ Instância criada na API:', responseData);
+
+      // SEGURANÇA CRÍTICA: Registrar instância no Supabase com user_id
+      console.log('🔐 Registrando instância no Supabase...');
+      const supabaseInstance = await registerInstanceInSupabase({
+        id: responseData.instance?.id || responseData.id,
+        name: data.instanceName || data.name,
+        token: responseData.instance?.token || responseData.token,
+        user_id: user.id, // CRÍTICO: Vincular ao usuário
+        phone_connected: responseData.instance?.phoneConnected,
+        status: responseData.instance?.state === 'open' ? 'connected' : 'disconnected'
+      });
+
+      if (!supabaseInstance) {
+        console.error('❌ Falha ao registrar no Supabase');
+        toast.error('Instância criada mas não registrada no sistema. Entre em contato com suporte.');
+      } else {
+        console.log('✅ Instância registrada no Supabase com sucesso');
+      }
 
       // Se a instância foi criada com sucesso e tem QR code, mostra o modal
       if (responseData.instance?.qrcode) {
@@ -102,7 +162,7 @@ export function InstancesPage() {
       setShowModal(false);
       await loadInstances();
     } catch (error) {
-      console.error('Error creating instance:', error);
+      console.error('❌ Erro ao criar instância:', error);
       toast.error(error instanceof Error ? error.message : 'Erro ao criar instância');
     }
   };
@@ -242,6 +302,8 @@ export function InstancesPage() {
       }
 
       const config = getCurrentServerConfig();
+      
+      console.log('🔌 Desconectando instância da API...');
       const response = await fetch(`${config.url}/instance/disconnect`, {
         method: 'POST',
         headers: {
@@ -255,11 +317,20 @@ export function InstancesPage() {
         throw new Error(errorData.message || 'Falha ao desconectar instância');
       }
 
+      console.log('✅ Instância desconectada da API');
+
+      // Atualizar status no Supabase
+      console.log('🔐 Atualizando status no Supabase...');
+      await updateInstanceInSupabase(instanceId, {
+        status: 'disconnected',
+        phone_connected: ''
+      });
+
       toast.success('Instância desconectada com sucesso!');
       setShowDisconnectConfirm(null);
       await loadInstances();
     } catch (error) {
-      console.error('Error disconnecting instance:', error);
+      console.error('❌ Erro ao desconectar instância:', error);
       toast.error(error instanceof Error ? error.message : 'Erro ao desconectar instância');
     }
   };
@@ -274,6 +345,8 @@ export function InstancesPage() {
       }
 
       const config = getCurrentServerConfig();
+      
+      console.log('🗑️ Deletando instância da API...');
       const response = await fetch(`${config.url}/instance`, {
         method: 'DELETE',
         headers: {
@@ -288,13 +361,23 @@ export function InstancesPage() {
       }
 
       const responseData = await response.json();
-      console.log('Delete response:', responseData);
+      console.log('✅ Instância deletada da API:', responseData);
+
+      // SEGURANÇA: Remover do Supabase
+      console.log('🔐 Removendo instância do Supabase...');
+      const deleted = await deleteInstanceFromSupabase(instanceId);
+      
+      if (!deleted) {
+        console.warn('⚠️ Falha ao remover do Supabase');
+      } else {
+        console.log('✅ Instância removida do Supabase');
+      }
 
       toast.success('Instância excluída com sucesso!');
       setShowDeleteConfirm(null);
       await loadInstances();
     } catch (error) {
-      console.error('Error deleting instance:', error);
+      console.error('❌ Erro ao deletar instância:', error);
       toast.error(error instanceof Error ? error.message : 'Erro ao excluir instância');
     }
   };

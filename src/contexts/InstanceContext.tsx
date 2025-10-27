@@ -1,7 +1,11 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
-import { getInstances } from '../lib/wapi/api';
+import { useAuth } from './AuthContext';
+import { syncInstancesStatus } from '../lib/instanceSync';
+import { supabase } from '../lib/supabase';
+
+const ADMIN_EMAIL = 'rafael@i9place.com.br';
 
 export interface Instance {
   id: string;
@@ -30,18 +34,6 @@ interface InstanceContextType {
 
 const InstanceContext = createContext<InstanceContextType | undefined>(undefined);
 
-// Função para converter dados da API para o formato do contexto
-const formatApiInstance = (apiInstance: any, isDefault: boolean = false): Instance => ({
-  id: apiInstance.id,
-  name: apiInstance.name || apiInstance.profileName || apiInstance.id,
-  status: apiInstance.status,
-  isDefault,
-  token: apiInstance.token,
-  phoneConnected: apiInstance.phoneConnected,
-  profileName: apiInstance.profileName,
-  systemName: apiInstance.systemName
-});
-
 export function InstanceProvider({ children }: { children: React.ReactNode }) {
   const [instances, setInstances] = useState<Instance[]>([]);
   const [selectedInstance, setSelectedInstance] = useState<Instance | null>(null);
@@ -49,10 +41,13 @@ export function InstanceProvider({ children }: { children: React.ReactNode }) {
   const [defaultInstance, setDefaultInstance] = useState<Instance | null>(null);
   const [loading, setLoading] = useState(true);
   const location = useLocation();
+  const { user } = useAuth();
 
   useEffect(() => {
-    loadInstances();
-  }, []);
+    if (user) {
+      loadInstances();
+    }
+  }, [user]);
 
   useEffect(() => {
     // Reset selected instance and show modal when navigating to specific pages
@@ -80,19 +75,67 @@ export function InstanceProvider({ children }: { children: React.ReactNode }) {
   }, [location.pathname, instances.length, defaultInstance]);
 
   const loadInstances = async () => {
+    if (!user) {
+      setLoading(false);
+      return;
+    }
+
     try {
       setLoading(true);
       
-      // Carregar instâncias da API real
-      const apiInstances = await getInstances();
+      console.log('🔐 Carregando instâncias...');
+      
+      let supabaseInstances: any[] = [];
+      
+      // REGRA ESPECIAL: rafael@i9place.com.br vê TODAS as instâncias
+      if (user.email === ADMIN_EMAIL) {
+        console.log('👑 Usuário admin - Carregando TODAS as instâncias');
+        
+        const { data, error } = await supabase
+          .from('instances')
+          .select('*')
+          .eq('is_active', true)
+          .order('created_at', { ascending: false });
+        
+        if (error) {
+          console.error('❌ Erro ao carregar instâncias:', error);
+          supabaseInstances = [];
+        } else {
+          supabaseInstances = data.map((instance: any) => ({
+            id: instance.id,
+            user_id: instance.user_id,
+            name: instance.name,
+            token: instance.token,
+            phone_connected: instance.phone_connected,
+            status: instance.status,
+            is_active: instance.is_active,
+            organization_id: instance.organization_id,
+            created_at: instance.created_at,
+            updated_at: instance.updated_at
+          }));
+        }
+      } else {
+        // Usuários normais: apenas suas instâncias (RLS automático)
+        console.log('👤 Usuário normal - Carregando apenas instâncias próprias');
+        supabaseInstances = await syncInstancesStatus(user.id);
+      }
       
       // Converter para o formato do contexto
-      const formattedInstances = apiInstances.map((instance, index) => 
-        formatApiInstance(instance, index === 0) // Primeira instância como padrão
-      );
+      const formattedInstances: Instance[] = supabaseInstances.map((instance: any, index: number) => ({
+        id: instance.id,
+        name: instance.name,
+        status: instance.status,
+        isDefault: index === 0, // Primeira instância como padrão
+        token: instance.token,
+        phoneConnected: instance.phone_connected || undefined,
+        profileName: instance.name,
+        systemName: instance.name
+      }));
+      
+      console.log(`✅ ${formattedInstances.length} instâncias carregadas`);
       
       setInstances(formattedInstances);
-      const defaultInst = formattedInstances.find(i => i.isDefault) || formattedInstances[0];
+      const defaultInst = formattedInstances.find((i: Instance) => i.isDefault) || formattedInstances[0];
       setDefaultInstance(defaultInst);
 
       // Para multi-chat page, automaticamente selecionar a instância padrão
@@ -101,8 +144,8 @@ export function InstanceProvider({ children }: { children: React.ReactNode }) {
       }
       
     } catch (error) {
-      console.error('Erro ao carregar instâncias:', error);
-      toast.error('Erro ao carregar instâncias da API');
+      console.error('❌ Erro ao carregar instâncias:', error);
+      toast.error('Erro ao carregar instâncias');
       
       // Em caso de erro, usar dados vazios
       setInstances([]);

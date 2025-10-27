@@ -1,4 +1,7 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { useAuth } from './AuthContext';
+
+const ADMIN_EMAIL = 'rafael@i9place.com.br';
 
 export interface Server {
   id: string;
@@ -43,6 +46,7 @@ const ServerContext = createContext<ServerContextType | undefined>(undefined);
 export function ServerProvider({ children }: { children: ReactNode }) {
   const [servers] = useState<Server[]>(defaultServers);
   const [selectedServer, setSelectedServerState] = useState<Server>(defaultServers[0]);
+  const { user } = useAuth();
 
   // Sempre inicializar com o Servidor 1 (Principal) a cada carregamento da página
   useEffect(() => {
@@ -59,6 +63,12 @@ export function ServerProvider({ children }: { children: ReactNode }) {
 
   // Salvar servidor selecionado no localStorage
   const setSelectedServer = (server: Server) => {
+    // Apenas o usuário rafael@i9place.com.br pode trocar de servidor
+    if (user?.email !== ADMIN_EMAIL) {
+      console.warn('⚠️ Usuário não autorizado a trocar de servidor');
+      return;
+    }
+    
     setSelectedServerState(server);
     localStorage.setItem('selectedServerId', server.id);
     
