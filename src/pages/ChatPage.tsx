@@ -65,7 +65,7 @@ export function ChatPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedFilter, setSelectedFilter] = useState<'all' | 'mine' | 'unassigned'>('all');
+  const [selectedFilter, setSelectedFilter] = useState<'all' | 'mine' | 'unassigned' | 'archived'>('all');
   const [loading, setLoading] = useState(false);
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [loadingChatDetails, setLoadingChatDetails] = useState(false); // ✅ Estado de carregamento dos detalhes
@@ -505,27 +505,63 @@ export function ChatPage() {
     }
   };
 
-  // ✅ Arquivar conversa
-  const handleArchiveChat = async () => {
+  // ✅ Arquivar/Desarquivar conversa (toggle)
+  const handleToggleArchiveChat = async () => {
     if (!selectedChat || !selectedInstance?.token) return;
     
+    const isCurrentlyArchived = selectedChat.isArchived || false;
+    const action = isCurrentlyArchived ? 'desarquivando' : 'arquivando';
+    
     try {
-      console.log('📦 Arquivando conversa:', selectedChat.name);
+      console.log(`📦 ${action} conversa:`, selectedChat.name);
       
       // Extrair número do chat ID
       const number = selectedChat.id.includes('@') ? selectedChat.id.split('@')[0] : selectedChat.id;
       
-      // Chamar API para arquivar (endpoint: POST /chat/archive)
-      await uazapiService.archiveChat(selectedInstance.token, number, true);
+      // Chamar API para arquivar/desarquivar
+      await uazapiService.archiveChat(selectedInstance.token, number, !isCurrentlyArchived);
       
-      // Remover da lista de chats
-      setChats(prev => prev.filter(chat => chat.id !== selectedChat.id));
-      setSelectedChat(null);
+      // Atualizar o chat localmente
+      setChats(prev => prev.map(chat => 
+        chat.id === selectedChat.id 
+          ? { ...chat, isArchived: !isCurrentlyArchived }
+          : chat
+      ));
       
-      toast.success('Conversa arquivada com sucesso');
+      // Atualizar chat selecionado
+      setSelectedChat(prev => prev ? { ...prev, isArchived: !isCurrentlyArchived } : null);
+      
+      toast.success(isCurrentlyArchived ? 'Conversa desarquivada com sucesso' : 'Conversa arquivada com sucesso');
     } catch (error) {
-      console.error('❌ Erro ao arquivar conversa:', error);
-      toast.error('Erro ao arquivar conversa');
+      console.error(`❌ Erro ao ${action} conversa:`, error);
+      toast.error(`Erro ao ${action} conversa`);
+    }
+  };
+
+  // ✅ Desarquivar conversa
+  const handleUnarchiveChat = async (chat: ExtendedChat) => {
+    if (!selectedInstance?.token) return;
+    
+    try {
+      console.log('📂 Desarquivando conversa:', chat.name);
+      
+      // Extrair número do chat ID
+      const number = chat.id.includes('@') ? chat.id.split('@')[0] : chat.id;
+      
+      // Chamar API para desarquivar (endpoint: POST /chat/archive com archive=false)
+      await uazapiService.archiveChat(selectedInstance.token, number, false);
+      
+      // Atualizar o chat localmente removendo flag de arquivado
+      setChats(prev => prev.map(c => 
+        c.id === chat.id 
+          ? { ...c, isArchived: false }
+          : c
+      ));
+      
+      toast.success('Conversa desarquivada com sucesso');
+    } catch (error) {
+      console.error('❌ Erro ao desarquivar conversa:', error);
+      toast.error('Erro ao desarquivar conversa');
     }
   };
 
@@ -1262,6 +1298,37 @@ export function ChatPage() {
     }
   };
 
+  // Função para rolar até uma mensagem específica
+  const scrollToMessage = (messageId: string) => {
+    console.log('🎯 Procurando mensagem:', messageId);
+    
+    // Encontrar o elemento da mensagem pelo ID
+    const messageElement = document.getElementById(`message-${messageId}`);
+    
+    if (messageElement) {
+      console.log('✅ Mensagem encontrada! Rolando...');
+      
+      // Rolar suavemente até a mensagem
+      messageElement.scrollIntoView({ 
+        behavior: 'smooth', 
+        block: 'center' 
+      });
+      
+      // Destacar a mensagem temporariamente
+      messageElement.classList.add('bg-yellow-100', 'ring-2', 'ring-yellow-400');
+      
+      // Remover destaque após 2 segundos
+      setTimeout(() => {
+        messageElement.classList.remove('bg-yellow-100', 'ring-2', 'ring-yellow-400');
+      }, 2000);
+      
+      toast.success('Mensagem original encontrada!');
+    } else {
+      console.warn('⚠️ Mensagem original não encontrada no chat atual');
+      toast.error('Mensagem original não está mais disponível');
+    }
+  };
+
   // Função para renderizar mensagem citada/de resposta - estilo WhatsApp Web
   const renderQuotedMessage = (quotedMsg: any, isFromMe: boolean) => {
     if (!quotedMsg) {
@@ -1284,7 +1351,24 @@ export function ChatPage() {
     const isQuotedMedia = quotedMsg.type && quotedMsg.type !== 'text';
     
     return (
-      <div className="flex items-start gap-2">
+      <button
+        onClick={() => {
+          // Tentar encontrar a mensagem original pelo ID
+          const originalMessageId = quotedMsg.id || quotedMsg.messageId || quotedMsg.stanzaId;
+          if (originalMessageId) {
+            scrollToMessage(originalMessageId);
+          } else {
+            console.warn('⚠️ ID da mensagem citada não encontrado:', quotedMsg);
+            toast.error('Não foi possível localizar a mensagem original');
+          }
+        }}
+        className={cn(
+          "flex items-start gap-2 w-full text-left p-2 rounded-lg transition-all",
+          "hover:bg-black/5 active:bg-black/10 cursor-pointer",
+          isFromMe && "hover:bg-white/10 active:bg-white/20"
+        )}
+        title="Clique para ir até a mensagem original"
+      >
         {/* Linha indicadora vertical */}
         <div className={cn(
           "w-1 h-full min-h-[40px] rounded-full flex-shrink-0",
@@ -1341,7 +1425,7 @@ export function ChatPage() {
             )}
           </div>
         </div>
-      </div>
+      </button>
     );
   };
 
@@ -1545,13 +1629,19 @@ export function ChatPage() {
   const filteredChats = chats.filter(chat => {
     const matchesSearch = chat.name.toLowerCase().includes(searchTerm.toLowerCase());
     
+    // ✅ Filtro por status de arquivamento
+    const matchesArchiveFilter = selectedFilter === 'archived' 
+      ? chat.isArchived === true 
+      : chat.isArchived !== true; // Chats não arquivados nos outros filtros
+    
     const matchesFilter = 
       selectedFilter === 'all' ||
+      selectedFilter === 'archived' || // Já tratado em matchesArchiveFilter
       // 👑 Admin vê todos os chats | Agente vê apenas os atribuídos a ele
       (selectedFilter === 'mine' && (isAdministrator || (chat.agentId === currentUserId))) ||
       (selectedFilter === 'unassigned' && chat.status === 'unassigned');
     
-    return matchesSearch && matchesFilter;
+    return matchesSearch && matchesFilter && matchesArchiveFilter;
   });
 
   const unreadCount = chats.filter(chat => chat.unreadCount > 0).length;
@@ -1822,11 +1912,11 @@ export function ChatPage() {
           )}
 
           {/* Filter Tabs */}
-          <div className="flex rounded-lg bg-gray-100 p-1">
+          <div className="flex flex-wrap gap-1 rounded-lg bg-gray-100 p-1">
             <button
               onClick={() => setSelectedFilter('all')}
               className={cn(
-                "flex-1 px-4 py-1.5 text-sm font-medium rounded-md transition-colors",
+                "flex-1 px-3 py-1.5 text-sm font-medium rounded-md transition-colors whitespace-nowrap",
                 selectedFilter === 'all' ? "bg-white text-primary-600 shadow" : "text-gray-500 hover:text-gray-900"
               )}
             >
@@ -1835,7 +1925,7 @@ export function ChatPage() {
             <button
               onClick={() => setSelectedFilter('mine')}
               className={cn(
-                "flex-1 px-4 py-1.5 text-sm font-medium rounded-md transition-colors",
+                "flex-1 px-3 py-1.5 text-sm font-medium rounded-md transition-colors whitespace-nowrap",
                 selectedFilter === 'mine' ? "bg-white text-primary-600 shadow" : "text-gray-500 hover:text-gray-900"
               )}
             >
@@ -1844,11 +1934,21 @@ export function ChatPage() {
             <button
               onClick={() => setSelectedFilter('unassigned')}
               className={cn(
-                "flex-1 px-4 py-1.5 text-sm font-medium rounded-md transition-colors",
+                "flex-1 px-3 py-1.5 text-sm font-medium rounded-md transition-colors whitespace-nowrap",
                 selectedFilter === 'unassigned' ? "bg-white text-primary-600 shadow" : "text-gray-500 hover:text-gray-900"
               )}
             >
-              Não atribuídas
+              Não atrib.
+            </button>
+            <button
+              onClick={() => setSelectedFilter('archived')}
+              className={cn(
+                "flex-1 px-3 py-1.5 text-sm font-medium rounded-md transition-colors whitespace-nowrap",
+                selectedFilter === 'archived' ? "bg-white text-primary-600 shadow" : "text-gray-500 hover:text-gray-900"
+              )}
+              title="Conversas arquivadas"
+            >
+              Arquivados
             </button>
           </div>
         </div>
@@ -1988,12 +2088,26 @@ export function ChatPage() {
             filteredChats.map((chat) => (
             <div
               key={chat.id}
-                onClick={() => handleSelectChat(chat)}
                 className={cn(
-                  "p-4 hover:bg-gray-50 cursor-pointer border-b border-gray-100 transition-colors",
+                  "relative p-4 hover:bg-gray-50 cursor-pointer border-b border-gray-100 transition-colors group",
                   selectedChat?.id === chat.id && "bg-primary-50 border-primary-200"
                 )}
             >
+              {/* ✅ Botão de Desarquivar (aparece no hover quando no filtro "Arquivados") */}
+              {selectedFilter === 'archived' && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation(); // Evitar abrir o chat ao clicar no botão
+                    handleUnarchiveChat(chat);
+                  }}
+                  className="absolute top-2 right-2 p-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg shadow-md opacity-0 group-hover:opacity-100 transition-opacity z-10"
+                  title="Desarquivar conversa"
+                >
+                  <Archive className="h-4 w-4 rotate-180" />
+                </button>
+              )}
+              
+              <div onClick={() => handleSelectChat(chat)}>
               <div className="flex items-center gap-3">
                 <div className="relative">
                   {/* Foto de perfil ou avatar com inicial */}
@@ -2042,6 +2156,14 @@ export function ChatPage() {
                           : chat.lastMessage?.content || 'Sem mensagens'}
                       </p>
                       <div className="flex items-center gap-1 flex-shrink-0">
+                        {/* ✅ Indicador de arquivado */}
+                        {chat.isArchived && (
+                          <div className="flex items-center gap-1 bg-orange-100 text-orange-700 px-2 py-0.5 rounded text-xs font-medium mr-1" title="Arquivado">
+                            <Archive className="h-3 w-3" />
+                            <span>Arquivado</span>
+                          </div>
+                        )}
+                        
                         {/* Status indicator */}
                         {chat.status === 'unassigned' && (
                           <div className="w-2 h-2 bg-orange-400 rounded-full" title="Não atribuído" />
@@ -2085,6 +2207,7 @@ export function ChatPage() {
                   </div>
                 </div>
               </div>
+            </div>
             ))
           )}
         </div>
@@ -2122,7 +2245,16 @@ export function ChatPage() {
                     </span>
                   </div>
                   <div>
-                    <h2 className="font-semibold text-gray-900">{selectedChat.name}</h2>
+                    <div className="flex items-center gap-2">
+                      <h2 className="font-semibold text-gray-900">{selectedChat.name}</h2>
+                      {/* ✅ Badge de Arquivado no header */}
+                      {selectedChat.isArchived && (
+                        <span className="inline-flex items-center gap-1 bg-orange-100 text-orange-700 px-2 py-1 rounded-md text-xs font-medium">
+                          <Archive className="h-3 w-3" />
+                          Arquivado
+                        </span>
+                      )}
+                    </div>
                     <button
                       onClick={() => setShowAssignModal(true)}
                       className="text-sm text-gray-500 hover:text-primary-600 transition-colors"
@@ -2191,13 +2323,21 @@ export function ChatPage() {
                   >
                     <FileText className="h-5 w-5" />
                   </button>
+                  
+                  {/* ✅ BOTÃO DE ARQUIVAR/DESARQUIVAR - DINÂMICO */}
                   <button
-                    onClick={handleArchiveChat}
-                    className="p-2 text-gray-400 hover:text-orange-600 rounded-lg hover:bg-orange-50"
-                    title="Arquivar conversa"
+                    onClick={handleToggleArchiveChat}
+                    className={cn(
+                      "p-2 rounded-lg hover:bg-orange-50 transition-colors",
+                      selectedChat.isArchived 
+                        ? "text-blue-500 hover:text-blue-600" 
+                        : "text-gray-400 hover:text-orange-600"
+                    )}
+                    title={selectedChat.isArchived ? "Desarquivar conversa" : "Arquivar conversa"}
                   >
-                    <Archive className="h-5 w-5" />
+                    <Archive className={cn("h-5 w-5", selectedChat.isArchived && "rotate-180")} />
                   </button>
+                  
                   <div className="relative more-options-menu">
                     <button
                       onClick={() => setShowMoreOptionsMenu(!showMoreOptionsMenu)}
@@ -2219,6 +2359,9 @@ export function ChatPage() {
                             <MailOpen className="h-4 w-4" />
                             Marcar como não lido
                           </button>
+                          
+                          <div className="my-1 border-t border-gray-200"></div>
+                          
                           <button
                             onClick={() => {
                               handleBlockContact();
@@ -2263,8 +2406,9 @@ export function ChatPage() {
                 messages.map((message) => (
                   <div
                     key={message.id}
+                    id={`message-${message.id}`}
                     className={cn(
-                      "flex group",
+                      "flex group transition-all duration-300 rounded-lg",
                       message.fromMe ? "justify-end" : "justify-start"
                     )}
                   >
@@ -2382,7 +2526,7 @@ export function ChatPage() {
                       )}
 
                       {/* Botão para adicionar reação */}
-                      <div className="flex items-center gap-1">
+                      <div className="relative inline-block">
                         <button
                           onClick={() => toggleEmojiPicker(message.id)}
                           className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded-full hover:bg-gray-200 text-gray-500 hover:text-gray-700"
@@ -2393,14 +2537,18 @@ export function ChatPage() {
 
                         {/* Seletor de emojis */}
                          {showEmojiPicker === message.id && (
-                           <div className="emoji-picker absolute bottom-full left-0 mb-2 bg-white border border-gray-200 rounded-lg shadow-lg p-2 z-10">
-                            <div className="grid grid-cols-6 gap-1">
+                           <div className={cn(
+                             "emoji-picker absolute bottom-full mb-2 bg-white border border-gray-200 rounded-lg shadow-xl p-3 z-[9999] min-w-[240px]",
+                             message.fromMe ? "right-0" : "left-0"
+                           )}>
+                            <div className="grid grid-cols-6 gap-2">
                               {['👍', '❤️', '😂', '😮', '😢', '😡', '👏', '🙏', '🔥', '💯', '🎉', '✅'].map((emoji) => (
                                 <button
                                   key={emoji}
                                   onClick={() => handleReactToMessage(message.id, emoji)}
-                                  className="p-2 hover:bg-gray-100 rounded text-lg transition-colors"
+                                  className="w-10 h-10 flex items-center justify-center hover:bg-gray-100 rounded-lg text-2xl transition-all hover:scale-110 active:scale-95"
                                   disabled={reactingToMessage === message.id}
+                                  title={`Reagir com ${emoji}`}
                                 >
                                   {emoji}
                                 </button>

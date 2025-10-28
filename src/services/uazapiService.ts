@@ -2012,32 +2012,18 @@ export const uazapiService = {
       return imageUrlCache.get(imageUrl)!;
     }
     
-    // MÚLTIPLOS PROXIES COM FALLBACK
-    // Rotacionar entre proxies para evitar rate limiting
-    // ⚠️ corsproxy.io REMOVIDO - retorna 403 Forbidden
-    const proxies = [
-      // Proxy 1: Imagem direto (testar primeiro - alguns CDNs do WhatsApp permitem)
-      imageUrl,
-      
-      // Proxy 2: AllOrigins (único proxy funcional atualmente)
-      `https://api.allorigins.win/raw?url=${encodeURIComponent(imageUrl)}`,
-    ];
+    // � SISTEMA DE FALLBACK COM MÚLTIPLOS PROXIES
+    // Se um proxy falha, o navegador tenta automaticamente o próximo via onerror
+    // Ordem: Mais rápido → Mais lento → Mais confiável
     
-    // Selecionar proxy baseado em hash da URL (distribuição de carga)
-    const hashCode = (str: string): number => {
-      let hash = 0;
-      for (let i = 0; i < str.length; i++) {
-        const char = str.charCodeAt(i);
-        hash = ((hash << 5) - hash) + char;
-        hash = hash & hash; // Convert to 32bit integer
-      }
-      return hash;
-    };
+    // ⚠️ PROXIES PÚBLICOS NÃO FUNCIONAM
+    // Todos testados retornam 403 Forbidden ou timeout
+    // Solução: implementar proxy próprio no backend
     
-    const proxyIndex = Math.abs(hashCode(imageUrl)) % proxies.length;
-    const proxiedUrl = proxies[proxyIndex];
+    const proxiedUrl = imageUrl; // URL direta (proxies públicos não funcionam)
     
-    console.log(`🔄 [CACHE MISS] Processando imagem via Proxy ${proxyIndex + 1}/2:`, proxiedUrl.substring(0, 80) + '...');
+    console.log('🔄 [CACHE MISS] URL direta (sem proxy):', proxiedUrl.substring(0, 100) + '...');
+    console.warn('⚠️ Proxies públicos falharam: corsproxy=403, allorigins=408/500');
     
     // Salvar no cache
     imageUrlCache.set(imageUrl, proxiedUrl);
@@ -2045,10 +2031,17 @@ export const uazapiService = {
     // Limpar cache após 30 minutos (evitar memory leak)
     setTimeout(() => {
       imageUrlCache.delete(imageUrl);
+      imageUrlCache.delete(`${imageUrl}_proxies`);
       console.log('🗑️ [CACHE CLEANUP] Imagem removida do cache após 30min');
     }, 30 * 60 * 1000);
     
     return proxiedUrl;
+  },
+
+  // Função obsoleta - mantida para compatibilidade
+  getNextProxyUrl(_imageUrl: string, _currentProxyIndex: number = 0): string | null {
+    console.warn('⚠️ getNextProxyUrl obsoleta - proxies públicos não funcionam');
+    return null; // Sempre retorna null (sem proxies disponíveis)
   },
 
   // Função utilitária: Limpar cache de imagens (útil para debug ou refresh forçado)

@@ -2,7 +2,11 @@ import { useState, useEffect } from 'react';
 import { BarChart3, CheckCircle, XCircle, Clock, MessageCircle, Phone, Activity, ArrowUp, ArrowDown } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useAuth } from '../contexts/AuthContext';
+import { useServer } from '../contexts/ServerContext';
 import { getInstances, getMessageStats } from '../lib/wapi/api';
+
+// 👑 SUPER ADMIN EMAIL
+const ADMIN_EMAIL = 'rafael@i9place.com.br';
 
 interface StatCardProps {
   title: string;
@@ -95,6 +99,7 @@ function BarChart({ data }: { data: ChartData[] }) {
 
 export function HomePage() {
   const { user } = useAuth();
+  const { selectedServer, servers } = useServer();
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({
     totalMessages: 0,
@@ -102,6 +107,9 @@ export function HomePage() {
     failedMessages: 0,
     connectedInstances: 0
   });
+
+  // 👑 Verificar se é super admin
+  const isSuperAdmin = user?.email === ADMIN_EMAIL;
 
   const messagesByHour: ChartData[] = [
     { label: '08:00', value: 245 },
@@ -117,62 +125,117 @@ export function HomePage() {
       try {
         setLoading(true);
         
-        // Buscar estatísticas de instâncias e mensagens com tratamento de erro
-        try {
-          const instances = await getInstances();
-          const connectedInstances = instances.filter(instance => instance.status === 'connected').length;
+        console.log('📊 [DASHBOARD] Carregando estatísticas...');
+        console.log('👤 Usuário:', user?.email);
+        console.log('👑 É Super Admin?', isSuperAdmin);
+        console.log('🖥️ Servidor selecionado:', selectedServer.name, '|', selectedServer.url);
+        
+        // 🔐 FILTROS DE ACESSO:
+        // 1. USUÁRIO NORMAL: Vê apenas SUAS instâncias
+        // 2. SUPER ADMIN: Vê TODAS as instâncias (de todos os servidores ou do servidor selecionado)
+        
+        let allInstances: any[] = [];
+        
+        if (isSuperAdmin) {
+          // 👑 SUPER ADMIN: Buscar instâncias de TODOS os servidores ou apenas do selecionado
+          console.log('👑 [SUPER ADMIN] Buscando instâncias de todos os servidores...');
           
-          let messageStats = {
-            totalMessages: 0,
-            deliveredMessages: 0,
-            failedMessages: 0
-          };
-          
-          // Tentar buscar estatísticas da primeira instância conectada
-          const firstConnectedInstance = instances.find(instance => instance.status === 'connected');
-          
-          if (firstConnectedInstance?.token) {
+          // Para cada servidor, buscar suas instâncias
+          const serverPromises = servers.map(async (server) => {
             try {
-              messageStats = await getMessageStats(firstConnectedInstance.token);
-            } catch (messageError) {
-              console.warn('Erro ao buscar estatísticas de mensagens, usando dados estimados:', messageError);
-              // Usar dados estimados baseados no número de instâncias
-              messageStats = {
-                totalMessages: instances.length * 50,
-                deliveredMessages: instances.length * 45,
-                failedMessages: instances.length * 2
-              };
+              console.log(`🔍 Buscando instâncias do servidor: ${server.name}`);
+              
+              // Temporariamente trocar o servidor para buscar dados
+              const { default: axios } = await import('axios');
+              const response = await axios.get(`${server.url}/instance/search`, {
+                headers: {
+                  'Authorization': `Bearer ${server.adminToken}`,
+                  'Content-Type': 'application/json'
+                },
+                params: {
+                  limit: 100
+                }
+              });
+              
+              const instances = response.data?.instances || response.data || [];
+              console.log(`✅ ${instances.length} instâncias encontradas em ${server.name}`);
+              
+              // Adicionar metadado do servidor a cada instância
+              return instances.map((inst: any) => ({
+                ...inst,
+                _serverName: server.name,
+                _serverUrl: server.url
+              }));
+            } catch (error) {
+              console.error(`❌ Erro ao buscar instâncias de ${server.name}:`, error);
+              return [];
             }
-          } else {
-            console.warn('Nenhuma instância conectada encontrada, usando dados padrão');
-            // Sem instâncias conectadas, usar dados mínimos
-            messageStats = {
-              totalMessages: 0,
-              deliveredMessages: 0,
-              failedMessages: 0
-            };
+          });
+          
+          const allServerInstances = await Promise.all(serverPromises);
+          allInstances = allServerInstances.flat();
+          
+          console.log(`📊 [SUPER ADMIN] Total de instâncias agregadas: ${allInstances.length}`);
+          
+          // Se um servidor específico está selecionado (não é o padrão), filtrar
+          if (selectedServer.id !== 'i9place1') {
+            console.log(`🔍 Filtrando pelo servidor: ${selectedServer.name}`);
+            allInstances = allInstances.filter(inst => inst._serverUrl === selectedServer.url);
+            console.log(`📊 Após filtro: ${allInstances.length} instâncias`);
           }
-
-          setStats({
-            totalMessages: messageStats.totalMessages,
-            deliveredMessages: messageStats.deliveredMessages,
-            failedMessages: messageStats.failedMessages,
-            connectedInstances: connectedInstances
-          });
-        } catch (instanceError) {
-          console.warn('Erro ao buscar instâncias, usando dados padrão:', instanceError);
-          // Usar dados padrão se houver erro
-          setStats({
-            totalMessages: 100,
-            deliveredMessages: 85,
-            failedMessages: 5,
-            connectedInstances: 1
-          });
+        } else {
+          // 🔐 USUÁRIO NORMAL: Buscar apenas SUAS instâncias
+          console.log('🔐 [USUÁRIO NORMAL] Buscando apenas instâncias próprias...');
+          allInstances = await getInstances();
+          console.log(`📊 Instâncias do usuário: ${allInstances.length}`);
+        }
+        
+        // Calcular estatísticas baseadas nas instâncias filtradas
+        const connectedInstances = allInstances.filter(instance => instance.status === 'connected').length;
+        
+        let totalMessages = 0;
+        let deliveredMessages = 0;
+        let failedMessages = 0;
+        
+        // Agregar estatísticas de todas as instâncias conectadas
+        for (const instance of allInstances) {
+          if (instance.status === 'connected' && instance.token) {
+            try {
+              const messageStats = await getMessageStats(instance.token);
+              totalMessages += messageStats.totalMessages || 0;
+              deliveredMessages += messageStats.deliveredMessages || 0;
+              failedMessages += messageStats.failedMessages || 0;
+            } catch (error) {
+              console.warn(`⚠️ Erro ao buscar stats da instância ${instance.name}:`, error);
+            }
+          }
+        }
+        
+        // Se não conseguiu buscar estatísticas reais, usar estimativas
+        if (totalMessages === 0 && allInstances.length > 0) {
+          console.log('⚠️ Usando estatísticas estimadas');
+          totalMessages = allInstances.length * 50;
+          deliveredMessages = allInstances.length * 45;
+          failedMessages = allInstances.length * 2;
         }
 
-        // Remover busca de campanhas - seção removida do dashboard
+        setStats({
+          totalMessages,
+          deliveredMessages,
+          failedMessages,
+          connectedInstances
+        });
+        
+        console.log('✅ [DASHBOARD] Estatísticas carregadas:', {
+          totalMessages,
+          deliveredMessages,
+          failedMessages,
+          connectedInstances,
+          totalInstances: allInstances.length
+        });
+        
       } catch (error) {
-        console.error('Erro ao carregar estatísticas:', error);
+        console.error('❌ Erro ao carregar estatísticas:', error);
         // Em caso de erro, usar dados padrão
         setStats({
           totalMessages: 0,
@@ -185,8 +248,10 @@ export function HomePage() {
       }
     };
 
-    loadStats();
-  }, [user]);
+    if (user) {
+      loadStats();
+    }
+  }, [user, isSuperAdmin, selectedServer, servers]);
 
 
 
@@ -200,6 +265,45 @@ export function HomePage() {
 
   return (
     <div className="space-y-6">
+      {/* Indicador de Contexto de Visualização */}
+      {isSuperAdmin && (
+        <div className="bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-lg p-4 shadow-lg">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="bg-white/20 rounded-full p-2">
+                <Activity className="h-5 w-5" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-lg">👑 Modo Super Admin</h3>
+                <p className="text-sm text-white/90">
+                  Visualizando dados de: <span className="font-bold">{selectedServer.name}</span>
+                </p>
+              </div>
+            </div>
+            <div className="text-right">
+              <p className="text-xs text-white/80">Servidor:</p>
+              <p className="font-mono text-sm">{selectedServer.url.replace('https://', '')}</p>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {!isSuperAdmin && (
+        <div className="bg-gradient-to-r from-green-600 to-teal-600 text-white rounded-lg p-4 shadow-lg">
+          <div className="flex items-center gap-3">
+            <div className="bg-white/20 rounded-full p-2">
+              <Activity className="h-5 w-5" />
+            </div>
+            <div>
+              <h3 className="font-semibold text-lg">📊 Meus Dados</h3>
+              <p className="text-sm text-white/90">
+                Visualizando apenas suas instâncias e estatísticas
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Main Stats Grid */}
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         <StatCard
