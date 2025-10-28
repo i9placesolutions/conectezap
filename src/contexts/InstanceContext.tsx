@@ -49,27 +49,35 @@ export function InstanceProvider({ children }: { children: React.ReactNode }) {
   }, [user]);
 
   useEffect(() => {
-    // Reset selected instance and show modal when navigating to specific pages
-    if (location.pathname !== '/messages/multi') {
-      const shouldShowModal = [
+    // ✅ CORREÇÃO: Não forçar mudança de instância ao trocar de aba/voltar para a página
+    // Apenas resetar instância quando mudar de rota (pathname muda)
     
+    // Se não há instância selecionada E temos instâncias disponíveis
+    if (!selectedInstance && instances.length > 0) {
+      // Para páginas que precisam de instância, mostrar modal se houver múltiplas
+      const needsInstancePages = [
+        '/messages/multi',
         '/messages/mass',
         '/messages/campaigns',
         '/messages/instances'
-      ].includes(location.pathname);
-
-      if (shouldShowModal && instances.length > 1) {
-        setSelectedInstance(null);
-        setShowInstanceModal(true);
-      } else if (instances.length === 1) {
-        // If there's only one instance, use it automatically
-        setSelectedInstance(instances[0]);
-        setShowInstanceModal(false);
+      ];
+      
+      const needsInstance = needsInstancePages.includes(location.pathname);
+      
+      if (needsInstance) {
+        if (instances.length === 1) {
+          // Se há apenas uma instância, selecionar automaticamente
+          setSelectedInstance(instances[0]);
+          setShowInstanceModal(false);
+        } else if (defaultInstance) {
+          // Se há instância padrão, usar ela
+          setSelectedInstance(defaultInstance);
+          setShowInstanceModal(false);
+        } else {
+          // Se há múltiplas e nenhuma padrão, mostrar modal
+          setShowInstanceModal(true);
+        }
       }
-    } else {
-      // For multi-chat page, always use default instance
-      setSelectedInstance(defaultInstance);
-      setShowInstanceModal(false);
     }
   }, [location.pathname, instances.length, defaultInstance]);
 

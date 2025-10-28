@@ -18,7 +18,7 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   },
   global: {
     // Evitar cache que pode causar ERR_CACHE_RACE
-    fetch: (url, init) => {
+    fetch: async (url, init) => {
       const nextInit: RequestInit = {
         ...init,
         cache: 'no-store',
@@ -27,7 +27,37 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
       const headers = nextInit.headers as Headers;
       // Garantir que o header apikey esteja presente em todas as requisições
       if (!headers.has('apikey')) headers.set('apikey', supabaseAnonKey);
-      return fetch(url, nextInit);
+      
+      try {
+        const response = await fetch(url, nextInit);
+        
+        // Capturar erros de refresh token
+        const urlString = typeof url === 'string' ? url : url.toString();
+        if (!response.ok && urlString.includes('/auth/v1/token')) {
+          const errorText = await response.text();
+          if (errorText.includes('Invalid Refresh Token') || errorText.includes('Refresh Token Not Found')) {
+            console.warn('🔄 Refresh token inválido detectado, limpando sessão...');
+            
+            // Limpar dados de autenticação
+            try {
+              localStorage.removeItem('sb-fuojiwpyhoimyrknfcze-auth-token');
+              sessionStorage.clear();
+              
+              // Recarregar página para forçar logout
+              setTimeout(() => {
+                window.location.href = '/auth?expired=true';
+              }, 100);
+            } catch (error) {
+              console.error('Erro ao limpar sessão:', error);
+            }
+          }
+        }
+        
+        return response;
+      } catch (error) {
+        console.error('Erro na requisição Supabase:', error);
+        throw error;
+      }
     },
     // Headers globais adicionais (supabase-js já adiciona, mas reforçamos)
     headers: {

@@ -88,14 +88,60 @@ export function ChatPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messageInputRef = useRef<HTMLTextAreaElement>(null);
 
-  // Cache para nomes de contatos
-  const [contactNamesCache, setContactNamesCache] = useState<Record<string, string>>({});
+  // ✅ Cache para nomes de contatos com persistência em localStorage
+  const CACHE_KEY = 'conectezap_contact_names_cache';
+  const CACHE_EXPIRY_MS = 24 * 60 * 60 * 1000; // 24 horas
+  
+  const [contactNamesCache, setContactNamesCache] = useState<Record<string, { name: string; timestamp: number }>>(() => {
+    // Carregar cache do localStorage ao inicializar
+    try {
+      const cached = localStorage.getItem(CACHE_KEY);
+      if (cached) {
+        const parsedCache = JSON.parse(cached);
+        const now = Date.now();
+        
+        // Filtrar entradas expiradas
+        const validCache = Object.entries(parsedCache).reduce((acc, [key, value]: [string, any]) => {
+          if (value.timestamp && (now - value.timestamp) < CACHE_EXPIRY_MS) {
+            acc[key] = value;
+          }
+          return acc;
+        }, {} as Record<string, { name: string; timestamp: number }>);
+        
+        console.log('📦 Cache de nomes carregado do localStorage:', Object.keys(validCache).length, 'entradas');
+        return validCache;
+      }
+    } catch (error) {
+      console.warn('⚠️ Erro ao carregar cache do localStorage:', error);
+    }
+    return {};
+  });
 
-  // Função para buscar o nome correto do contato
+  // ✅ Persiste cache no localStorage quando atualizado
+  useEffect(() => {
+    if (Object.keys(contactNamesCache).length > 0) {
+      try {
+        localStorage.setItem(CACHE_KEY, JSON.stringify(contactNamesCache));
+        console.log('💾 Cache de nomes salvo no localStorage:', Object.keys(contactNamesCache).length, 'entradas');
+      } catch (error) {
+        console.warn('⚠️ Erro ao salvar cache no localStorage:', error);
+      }
+    }
+  }, [contactNamesCache]);
+
+  // ✅ Função para buscar o nome correto do contato com cache persistente
   const getContactName = async (chatId: string, instanceToken?: string): Promise<string> => {
     // Verificar cache primeiro
-    if (contactNamesCache[chatId]) {
-      return contactNamesCache[chatId];
+    const cached = contactNamesCache[chatId];
+    if (cached) {
+      const now = Date.now();
+      // Verificar se o cache ainda é válido (menos de 24h)
+      if ((now - cached.timestamp) < CACHE_EXPIRY_MS) {
+        console.log('✅ Nome do cache (válido):', cached.name, 'para', chatId);
+        return cached.name;
+      } else {
+        console.log('⏰ Cache expirado para:', chatId);
+      }
     }
 
     try {
@@ -106,20 +152,55 @@ export function ChatPage() {
       const profileInfo = await getProfileInfo(number, instanceToken);
       
       if (profileInfo && profileInfo.name && profileInfo.name !== number) {
-        // Atualizar cache
+        // Atualizar cache com timestamp
+        const nameData = { name: profileInfo.name, timestamp: Date.now() };
         setContactNamesCache(prev => ({
           ...prev,
-          [chatId]: profileInfo.name
+          [chatId]: nameData
         }));
+        console.log('📝 Nome atualizado no cache:', profileInfo.name, 'para', chatId);
         return profileInfo.name;
       }
     } catch (error) {
-      console.warn('Erro ao buscar nome do contato:', error);
+      console.warn('⚠️ Erro ao buscar nome do contato:', error);
+      
+      // ✅ Se falhar mas temos cache expirado, usar mesmo assim
+      if (cached) {
+        console.log('🔄 Usando cache expirado como fallback:', cached.name);
+        return cached.name;
+      }
     }
 
     // Fallback para 'Contato' se não conseguir obter o nome
     return 'Contato';
   };
+
+  // ✅ Função para limpar cache de nomes expirados (manutenção)
+  const cleanExpiredCache = () => {
+    const now = Date.now();
+    const validCache = Object.entries(contactNamesCache).reduce((acc, [key, value]) => {
+      if ((now - value.timestamp) < CACHE_EXPIRY_MS) {
+        acc[key] = value;
+      }
+      return acc;
+    }, {} as Record<string, { name: string; timestamp: number }>);
+    
+    const removedCount = Object.keys(contactNamesCache).length - Object.keys(validCache).length;
+    if (removedCount > 0) {
+      console.log('🧹 Cache limpo:', removedCount, 'entradas expiradas removidas');
+      setContactNamesCache(validCache);
+    }
+  };
+
+  // ✅ Limpar cache expirado ao montar o componente
+  useEffect(() => {
+    cleanExpiredCache();
+    
+    // Limpar cache a cada 1 hora
+    const intervalId = setInterval(cleanExpiredCache, 60 * 60 * 1000);
+    
+    return () => clearInterval(intervalId);
+  }, []);
 
   // Função para analisar se uma mensagem pode ser uma resposta baseado em padrões
   // Função removida: analyzeIfCouldBeReply - causava detecção incorreta de respostas
@@ -272,12 +353,23 @@ export function ChatPage() {
     scrollToBottom();
   }, [messages]);
 
-  // Abrir modal de instância automaticamente se não houver instância selecionada
+  // ✅ Abrir modal de instância APENAS na montagem inicial se não houver instância
+  // Não abrir novamente ao trocar de aba/voltar para a página
   useEffect(() => {
-    if (!selectedInstance) {
-      setShowInstanceModal(true);
+    // Verificar se é a primeira renderização e não há instância
+    const hasNoInstance = !selectedInstance;
+    
+    if (hasNoInstance) {
+      // Aguardar um pequeno delay para garantir que o InstanceContext carregou
+      const timer = setTimeout(() => {
+        if (!selectedInstance) {
+          setShowInstanceModal(true);
+        }
+      }, 100);
+      
+      return () => clearTimeout(timer);
     }
-  }, [selectedInstance]);
+  }, []); // ✅ Array vazio = executa APENAS na montagem
 
   // Carregar chats quando instância for selecionada
   useEffect(() => {
@@ -735,6 +827,9 @@ export function ChatPage() {
 
       setChats(extendedChats);
       
+      // ✅ Pré-carregar nomes de contatos em lote (background)
+      preloadContactNames(extendedChats, instanceToken);
+      
       // Se não há chat selecionado e temos chats, selecionar o primeiro
       if (!selectedChat && extendedChats.length > 0) {
         handleSelectChat(extendedChats[0]);
@@ -746,6 +841,51 @@ export function ChatPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  // ✅ Função para pré-carregar nomes de contatos em lote (background)
+  const preloadContactNames = async (chats: ExtendedChat[], instanceToken: string) => {
+    console.log('🔄 Iniciando pré-carregamento de nomes de contatos...');
+    
+    // Filtrar apenas chats que não têm nome em cache
+    const chatsToLoad = chats.filter(chat => !contactNamesCache[chat.id]);
+    
+    if (chatsToLoad.length === 0) {
+      console.log('✅ Todos os nomes já estão em cache');
+      return;
+    }
+    
+    console.log(`📥 Pré-carregando ${chatsToLoad.length} nomes de contatos...`);
+    
+    // Processar em lotes de 5 para não sobrecarregar a API
+    const batchSize = 5;
+    let loadedCount = 0;
+    
+    for (let i = 0; i < chatsToLoad.length; i += batchSize) {
+      const batch = chatsToLoad.slice(i, i + batchSize);
+      
+      const namePromises = batch.map(async (chat) => {
+        try {
+          const name = await getContactName(chat.id, instanceToken);
+          if (name !== 'Contato') {
+            loadedCount++;
+          }
+          return { chatId: chat.id, name };
+        } catch (error) {
+          console.warn(`⚠️ Erro ao pré-carregar nome de ${chat.id}:`, error);
+          return { chatId: chat.id, name: 'Contato' };
+        }
+      });
+      
+      await Promise.all(namePromises);
+      
+      // Pequena pausa entre lotes para não sobrecarregar
+      if (i + batchSize < chatsToLoad.length) {
+        await new Promise(resolve => setTimeout(resolve, 200));
+      }
+    }
+    
+    console.log(`✅ Pré-carregamento concluído: ${loadedCount}/${chatsToLoad.length} nomes obtidos`);
   };
 
   const loadMessages = async (chat: ExtendedChat) => {
@@ -2381,6 +2521,24 @@ export function ChatPage() {
                           >
                             <Trash2 className="h-4 w-4" />
                             Limpar conversa
+                          </button>
+                          
+                          {/* Separador */}
+                          <div className="border-t border-gray-200 my-1"></div>
+                          
+                          {/* ✅ Opção para limpar cache de nomes */}
+                          <button
+                            onClick={() => {
+                              setContactNamesCache({});
+                              localStorage.removeItem(CACHE_KEY);
+                              setShowMoreOptionsMenu(false);
+                              toast.success('Cache de nomes limpo com sucesso');
+                              console.log('🧹 Cache de nomes limpo manualmente');
+                            }}
+                            className="w-full px-4 py-2 text-left text-sm text-gray-600 hover:bg-gray-50 flex items-center gap-3"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                            Limpar cache de nomes
                           </button>
                         </div>
                       </div>

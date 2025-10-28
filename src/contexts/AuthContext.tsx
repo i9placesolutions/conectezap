@@ -42,7 +42,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setUser(session.user);
         }
       } catch (error) {
-        console.error('Error initializing auth:', error);
+        console.error('❌ Erro ao inicializar autenticação:', error);
+        
+        // Tratar erro específico de refresh token
+        if (error instanceof Error && error.message.includes('Invalid Refresh Token')) {
+          console.warn('🔄 Refresh token inválido, fazendo logout automático...');
+          try {
+            await supabase.auth.signOut();
+            localStorage.clear();
+            sessionStorage.clear();
+            toast.error('⚠️ Sua sessão expirou. Faça login novamente.');
+            navigate('/auth');
+          } catch (signOutError) {
+            console.error('Erro ao fazer logout:', signOutError);
+          }
+        }
       } finally {
         if (mounted) {
           setLoading(false);
@@ -52,8 +66,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     initAuth();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (!mounted) return;
+
+      console.log('🔄 Auth state change:', event, session?.user?.email || 'No user');
+
+      // Tratar eventos específicos
+      if (event === 'TOKEN_REFRESHED') {
+        console.log('✅ Token renovado com sucesso');
+      } else if (event === 'SIGNED_OUT') {
+        console.log('👋 Usuário deslogado');
+        setUser(null);
+        navigate('/auth');
+      } else if (event === 'SIGNED_IN') {
+        console.log('👤 Usuário logado:', session?.user?.email);
+        if (session?.user) {
+          setUser(session.user);
+        }
+      }
 
       if (session?.user) {
         setUser(session.user);

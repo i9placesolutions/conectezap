@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { Eye, EyeOff } from 'lucide-react';
 import { toast } from 'react-hot-toast';
@@ -9,7 +9,15 @@ export function LoginPage() {
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [searchParams] = useSearchParams();
   const { signIn } = useAuth();
+
+  // Verificar se chegou aqui por sessão expirada
+  useEffect(() => {
+    if (searchParams.get('expired') === 'true') {
+      toast.error('⚠️ Sua sessão expirou. Faça login novamente.');
+    }
+  }, [searchParams]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

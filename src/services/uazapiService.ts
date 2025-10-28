@@ -2908,6 +2908,107 @@ export const uazapiService = {
     }
   },
 
+  /**
+   * Buscar estatísticas de mensagens de uma instância
+   * Agrega dados de chats e mensagens para fornecer métricas gerais
+   * 
+   * @param instanceToken - Token da instância
+   * @returns Objeto com estatísticas de mensagens
+   */
+  async getInstanceMessageStats(instanceToken: string): Promise<{
+    totalMessages: number;
+    deliveredMessages: number;
+    failedMessages: number;
+    pendingMessages: number;
+    totalChats: number;
+    unreadChats: number;
+  }> {
+    try {
+      console.log('📊 Buscando estatísticas de mensagens...');
+
+      // Buscar todos os chats para contar mensagens
+      const chatsResponse = await this.searchChats(instanceToken, {
+        limit: 100,
+        includeLastMessage: true
+      });
+
+      let totalMessages = 0;
+      let deliveredMessages = 0;
+      let failedMessages = 0;
+      let unreadChats = 0;
+
+      // Agregar dados dos chats
+      chatsResponse.forEach(chat => {
+        if (chat.unreadCount > 0) {
+          unreadChats++;
+        }
+      });
+
+      // Para cada chat, buscar mensagens recentes e contar status
+      const statsPromises = chatsResponse.slice(0, 20).map(async (chat) => {
+        try {
+          const messages = await this.searchMessages(instanceToken, {
+            chatid: chat.id,
+            limit: 50
+          });
+
+          // Filtrar apenas mensagens enviadas por mim
+          const myMessages = messages.filter((m: any) => m.fromMe);
+
+          return {
+            total: myMessages.length,
+            delivered: myMessages.filter((m: any) => 
+              m.ack === 2 || m.ack === 3 || m.ack === 4 || 
+              m.status === 'delivered' || m.status === 'read'
+            ).length,
+            failed: myMessages.filter((m: any) => 
+              m.ack === -1 || m.ack === 0 || 
+              m.status === 'failed' || m.status === 'error'
+            ).length
+          };
+        } catch (error) {
+          console.warn(`⚠️ Erro ao buscar mensagens do chat ${chat.id}:`, error);
+          return { total: 0, delivered: 0, failed: 0 };
+        }
+      });
+
+      const allStats = await Promise.all(statsPromises);
+
+      // Agregar todos os stats
+      allStats.forEach(stat => {
+        totalMessages += stat.total;
+        deliveredMessages += stat.delivered;
+        failedMessages += stat.failed;
+      });
+
+      // Estimar mensagens pendentes
+      const pendingMessages = totalMessages - deliveredMessages - failedMessages;
+
+      const stats = {
+        totalMessages,
+        deliveredMessages,
+        failedMessages,
+        pendingMessages: Math.max(0, pendingMessages),
+        totalChats: chatsResponse.length,
+        unreadChats
+      };
+
+      console.log('✅ Estatísticas calculadas:', stats);
+      return stats;
+    } catch (error) {
+      console.error('❌ Erro ao buscar estatísticas:', error);
+      // Retornar stats vazios em caso de erro
+      return {
+        totalMessages: 0,
+        deliveredMessages: 0,
+        failedMessages: 0,
+        pendingMessages: 0,
+        totalChats: 0,
+        unreadChats: 0
+      };
+    }
+  },
+
 };
 export default uazapiService;
 
