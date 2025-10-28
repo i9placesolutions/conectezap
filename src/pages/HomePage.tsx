@@ -128,15 +128,28 @@ export function HomePage() {
             failedMessages: 0
           };
           
-          try {
-            messageStats = await getMessageStats();
-          } catch (messageError) {
-            console.warn('Erro ao buscar estatísticas de mensagens, usando dados padrão:', messageError);
-            // Usar dados padrão se houver erro de autenticação
+          // Tentar buscar estatísticas da primeira instância conectada
+          const firstConnectedInstance = instances.find(instance => instance.status === 'connected');
+          
+          if (firstConnectedInstance?.token) {
+            try {
+              messageStats = await getMessageStats(firstConnectedInstance.token);
+            } catch (messageError) {
+              console.warn('Erro ao buscar estatísticas de mensagens, usando dados estimados:', messageError);
+              // Usar dados estimados baseados no número de instâncias
+              messageStats = {
+                totalMessages: instances.length * 50,
+                deliveredMessages: instances.length * 45,
+                failedMessages: instances.length * 2
+              };
+            }
+          } else {
+            console.warn('Nenhuma instância conectada encontrada, usando dados padrão');
+            // Sem instâncias conectadas, usar dados mínimos
             messageStats = {
-              totalMessages: instances.length * 50,
-              deliveredMessages: instances.length * 45,
-              failedMessages: instances.length * 2
+              totalMessages: 0,
+              deliveredMessages: 0,
+              failedMessages: 0
             };
           }
 

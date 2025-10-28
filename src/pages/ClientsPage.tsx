@@ -7,6 +7,8 @@ import { useNotification } from '../contexts/NotificationContext';
 import { toast } from 'react-hot-toast';
 import { useAuth } from '../contexts/AuthContext';
 
+const ADMIN_EMAIL = 'rafael@i9place.com.br';
+
 interface Client {
   id: string;
   email: string;
@@ -40,39 +42,86 @@ export function ClientsPage() {
       setIsRefreshing(true);
       setError(null);
       
-      // Buscar perfil do usuário atual para obter organization_id
-      const { data: currentProfile } = await supabase
-        .from('profiles')
-        .select('organization_id')
-        .eq('id', user?.id)
-        .single();
+      console.log('🔐 Carregando clientes...');
+      console.log('👤 Email do usuário:', user?.email);
+      console.log('🔑 Admin email:', ADMIN_EMAIL);
+      console.log('✅ É admin?', user?.email === ADMIN_EMAIL);
+      
+      let data: any[] = [];
+      let organizationId: string | null = null;
 
-      if (!currentProfile?.organization_id) {
-        setError('Organização não encontrada.');
-        return;
+      // REGRA ESPECIAL: rafael@i9place.com.br vê TODOS os clientes
+      if (user?.email === ADMIN_EMAIL) {
+        console.log('👑 SUPER ADMIN - Carregando TODOS os clientes de todas as organizações');
+        
+        // Buscar TODOS os usuários (sem filtro de organization_id)
+        const { data: allClients, error } = await supabase
+          .from('profiles')
+          .select('*')
+          .order('created_at', { ascending: false });
+
+        if (error) {
+          console.error('❌ Erro ao carregar todos os clientes:', error);
+          setError('Erro ao carregar usuários. Por favor, tente novamente.');
+          throw error;
+        }
+
+        console.log(`📊 Total de clientes (todos): ${allClients?.length || 0}`);
+        data = allClients || [];
+        
+        // Para estatísticas, usar todos os clientes
+        // Nota: getUserStats precisa de organization_id, então vamos calcular manualmente
+        const totalUsers = data.length;
+        const activeUsers = data.filter(c => c.is_active).length;
+        const inactiveUsers = totalUsers - activeUsers;
+        
+        setStats({
+          totalUsers,
+          activeUsers,
+          inactiveUsers,
+          recentLogins: 0 // Não é possível calcular sem organização específica
+        });
+      } else {
+        console.log('👤 Usuário normal - Carregando apenas clientes da organização');
+        
+        // Buscar perfil do usuário atual para obter organization_id
+        const { data: currentProfile } = await supabase
+          .from('profiles')
+          .select('organization_id')
+          .eq('id', user?.id)
+          .single();
+
+        if (!currentProfile?.organization_id) {
+          setError('Organização não encontrada.');
+          return;
+        }
+
+        organizationId = currentProfile.organization_id;
+
+        // Buscar usuários da organização
+        const { data: orgClients, error } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('organization_id', organizationId)
+          .order('created_at', { ascending: false });
+
+        if (error) {
+          console.error('❌ Erro ao carregar clientes da organização:', error);
+          setError('Erro ao carregar usuários. Por favor, tente novamente.');
+          throw error;
+        }
+
+        console.log(`📊 Total de clientes da organização: ${orgClients?.length || 0}`);
+        data = orgClients || [];
+
+        // Carregar estatísticas da organização
+        if (organizationId) {
+          const statsData = await getUserStats(organizationId);
+          setStats(statsData);
+        }
       }
 
-      // Buscar usuários da organização
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('organization_id', currentProfile.organization_id)
-        .order('created_at', { ascending: false });
-
-      if (error) {
-        console.error('Error fetching clients:', error);
-        setError('Erro ao carregar usuários. Por favor, tente novamente.');
-        throw error;
-      }
-
-      // Processar dados mantendo o last_login do perfil
-      const processedClients = data || [];
-
-      setClients(processedClients);
-
-      // Carregar estatísticas
-      const statsData = await getUserStats(currentProfile.organization_id);
-      setStats(statsData);
+      setClients(data);
     } catch (error) {
       console.error('Error loading clients:', error);
       setError('Erro ao carregar usuários. Por favor, tente novamente.');

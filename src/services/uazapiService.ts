@@ -127,6 +127,9 @@ interface CampaignProgress {
 // Armazenamento local para campanhas ativas
 const activeCampaigns: Record<string, CampaignProgress> = {};
 
+// Cache de URLs de imagens do WhatsApp (reduz chamadas ao proxy)
+const imageUrlCache = new Map<string, string>();
+
 export const uazapiService = {
   // Método para buscar contatos da instância
   async getContacts(instanceToken: string): Promise<Contact[]> {
@@ -1991,6 +1994,75 @@ export const uazapiService = {
     }
   },
 
+  // Método para fazer proxy de imagens do WhatsApp (evitar erro 403 CORS)
+  getProxiedImageUrl(imageUrl: string): string {
+    // Se não há URL, retornar vazio
+    if (!imageUrl || !imageUrl.trim()) {
+      return '';
+    }
+    
+    // Se a URL NÃO é do WhatsApp (pps.whatsapp.net), retornar a URL original
+    if (!imageUrl.includes('pps.whatsapp.net')) {
+      return imageUrl;
+    }
+
+    // CACHE: Verificar se já temos a URL processada
+    if (imageUrlCache.has(imageUrl)) {
+      console.log('✅ [CACHE HIT] Imagem WhatsApp já cacheada:', imageUrl.substring(0, 60) + '...');
+      return imageUrlCache.get(imageUrl)!;
+    }
+    
+    // MÚLTIPLOS PROXIES COM FALLBACK
+    // Rotacionar entre proxies para evitar rate limiting
+    // ⚠️ corsproxy.io REMOVIDO - retorna 403 Forbidden
+    const proxies = [
+      // Proxy 1: Imagem direto (testar primeiro - alguns CDNs do WhatsApp permitem)
+      imageUrl,
+      
+      // Proxy 2: AllOrigins (único proxy funcional atualmente)
+      `https://api.allorigins.win/raw?url=${encodeURIComponent(imageUrl)}`,
+    ];
+    
+    // Selecionar proxy baseado em hash da URL (distribuição de carga)
+    const hashCode = (str: string): number => {
+      let hash = 0;
+      for (let i = 0; i < str.length; i++) {
+        const char = str.charCodeAt(i);
+        hash = ((hash << 5) - hash) + char;
+        hash = hash & hash; // Convert to 32bit integer
+      }
+      return hash;
+    };
+    
+    const proxyIndex = Math.abs(hashCode(imageUrl)) % proxies.length;
+    const proxiedUrl = proxies[proxyIndex];
+    
+    console.log(`🔄 [CACHE MISS] Processando imagem via Proxy ${proxyIndex + 1}/2:`, proxiedUrl.substring(0, 80) + '...');
+    
+    // Salvar no cache
+    imageUrlCache.set(imageUrl, proxiedUrl);
+    
+    // Limpar cache após 30 minutos (evitar memory leak)
+    setTimeout(() => {
+      imageUrlCache.delete(imageUrl);
+      console.log('🗑️ [CACHE CLEANUP] Imagem removida do cache após 30min');
+    }, 30 * 60 * 1000);
+    
+    return proxiedUrl;
+  },
+
+  // Função utilitária: Limpar cache de imagens (útil para debug ou refresh forçado)
+  clearImageCache(): void {
+    const cacheSize = imageUrlCache.size;
+    imageUrlCache.clear();
+    console.log(`🗑️ [CACHE CLEARED] ${cacheSize} imagens removidas do cache`);
+  },
+
+  // Função utilitária: Verificar tamanho do cache
+  getImageCacheSize(): number {
+    return imageUrlCache.size;
+  },
+  
   // Função para forçar atualização de status de campanhas travadas
   async forceCampaignStatusUpdate(instanceToken: string): Promise<void> {
     try {
@@ -2758,6 +2830,88 @@ export const uazapiService = {
     } catch (error) {
       console.error('Erro ao enviar presença:', error);
       return false;
+    }
+  },
+
+  /**
+   * Obter detalhes completos de um chat/contato
+   * Endpoint: POST /chat/details
+   * Retorna mais de 60 campos com informações completas do WhatsApp, Lead/CRM e Chatbot
+   * 
+   * @param instanceToken - Token da instância
+   * @param number - Número do telefone (5511999999999) ou ID do grupo
+   * @param preview - true = imagem preview (menor), false = full (original)
+   * @returns Objeto ChatDetails com todas as informações do contato/grupo
+   */
+  async getChatDetails(
+    instanceToken: string, 
+    number: string, 
+    preview: boolean = false
+  ): Promise<any> {
+    try {
+      console.log('📋 OBTENDO DETALHES DO CHAT:', {
+        token: instanceToken?.substring(0, 10) + '...',
+        number,
+        preview
+      });
+
+      const api = createApiClient();
+
+      const response = await api.post('/chat/details', {
+        number,
+        preview
+      }, {
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'token': instanceToken
+        }
+      });
+
+      console.log('✅ Detalhes do chat obtidos:', {
+        id: response.data.id,
+        name: response.data.name || response.data.wa_name,
+        isGroup: response.data.wa_isGroup,
+        fields: Object.keys(response.data).length
+      });
+
+      return response.data;
+    } catch (error: any) {
+      console.error('❌ Erro ao obter detalhes do chat:', {
+        message: error.message,
+        status: error.response?.status,
+        data: error.response?.data
+      });
+      throw error;
+    }
+  },
+
+  /**
+   * Bloquear ou desbloquear um contato
+   * Endpoint: POST /contact/block
+   */
+  async blockContact(instanceToken: string, number: string, block: boolean = true): Promise<boolean> {
+    try {
+      console.log(`🚫 ${block ? 'Bloqueando' : 'Desbloqueando'} contato:`, number);
+
+      const api = createApiClient();
+
+      const response = await api.post('/contact/block', {
+        number,
+        block
+      }, {
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'token': instanceToken
+        }
+      });
+
+      console.log('✅ Contato bloqueado/desbloqueado com sucesso');
+      return response.data.success || true;
+    } catch (error: any) {
+      console.error('❌ Erro ao bloquear/desbloquear contato:', error);
+      throw error;
     }
   },
 

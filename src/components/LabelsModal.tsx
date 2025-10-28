@@ -1,11 +1,11 @@
-import React, { useState, useEffect } from 'react';
-import { X, Search, Plus, Tag, Trash2, Edit, Palette } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { X, Search, Plus, Tag, Trash2, Edit, Check } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 
 interface Label {
   id: string;
   name: string;
-  color: string;
+  color: number; // ✅ API usa número de 0-19
   createdAt?: string;
   chatCount?: number;
 }
@@ -15,14 +15,34 @@ interface LabelsModalProps {
   onClose: () => void;
   labels: Label[];
   onLoadLabels: () => void;
-  onCreateLabel: (name: string, color: string) => void;
+  onCreateLabel: (name: string, color: number) => void;
+  onEditLabel: (labelId: string, name: string, color: number) => void;
   onDeleteLabel: (labelId: string) => void;
   loading: boolean;
 }
 
-const LABEL_COLORS = [
-  '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7',
-  '#DDA0DD', '#98D8C8', '#F7DC6F', '#BB8FCE', '#85C1E9'
+// ✅ Cores do WhatsApp (0-19 conforme API)
+const WHATSAPP_LABEL_COLORS = [
+  { index: 0, hex: '#FF6B6B', name: 'Vermelho' },
+  { index: 1, hex: '#FF8C42', name: 'Laranja' },
+  { index: 2, hex: '#FFD93D', name: 'Amarelo' },
+  { index: 3, hex: '#6BCF7F', name: 'Verde claro' },
+  { index: 4, hex: '#4ECDC4', name: 'Turquesa' },
+  { index: 5, hex: '#45B7D1', name: 'Azul claro' },
+  { index: 6, hex: '#5F9BFF', name: 'Azul' },
+  { index: 7, hex: '#9B59B6', name: 'Roxo' },
+  { index: 8, hex: '#E91E63', name: 'Rosa' },
+  { index: 9, hex: '#795548', name: 'Marrom' },
+  { index: 10, hex: '#607D8B', name: 'Cinza azulado' },
+  { index: 11, hex: '#26C281', name: 'Verde esmeralda' },
+  { index: 12, hex: '#16A085', name: 'Verde mar' },
+  { index: 13, hex: '#2ECC71', name: 'Verde' },
+  { index: 14, hex: '#3498DB', name: 'Azul céu' },
+  { index: 15, hex: '#9C88FF', name: 'Lavanda' },
+  { index: 16, hex: '#F39C12', name: 'Laranja escuro' },
+  { index: 17, hex: '#E74C3C', name: 'Vermelho escuro' },
+  { index: 18, hex: '#95A5A6', name: 'Cinza' },
+  { index: 19, hex: '#34495E', name: 'Cinza escuro' },
 ];
 
 export function LabelsModal({
@@ -31,18 +51,23 @@ export function LabelsModal({
   labels,
   onLoadLabels,
   onCreateLabel,
+  onEditLabel,
   onDeleteLabel,
   loading
 }: LabelsModalProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [filteredLabels, setFilteredLabels] = useState<Label[]>([]);
   const [showCreateForm, setShowCreateForm] = useState(false);
+  const [editingLabel, setEditingLabel] = useState<Label | null>(null);
   const [newLabelName, setNewLabelName] = useState('');
-  const [selectedColor, setSelectedColor] = useState(LABEL_COLORS[0]);
+  const [selectedColor, setSelectedColor] = useState(0); // ✅ Índice da cor (0-19)
 
   useEffect(() => {
     if (isOpen) {
+      console.log('🏷️ [LabelsModal] Modal aberto! Carregando etiquetas...');
       onLoadLabels();
+    } else {
+      console.log('🏷️ [LabelsModal] Modal fechado');
     }
   }, [isOpen, onLoadLabels]);
 
@@ -51,6 +76,7 @@ export function LabelsModal({
       label.name.toLowerCase().includes(searchTerm.toLowerCase())
     );
     setFilteredLabels(filtered);
+    console.log('🏷️ [LabelsModal] Etiquetas filtradas:', filtered.length, '/', labels.length);
   }, [labels, searchTerm]);
 
   const handleCreateLabel = () => {
@@ -61,7 +87,35 @@ export function LabelsModal({
 
     onCreateLabel(newLabelName.trim(), selectedColor);
     setNewLabelName('');
-    setSelectedColor(LABEL_COLORS[0]);
+    setSelectedColor(0);
+    setShowCreateForm(false);
+  };
+
+  const handleStartEdit = (label: Label) => {
+    setEditingLabel(label);
+    setNewLabelName(label.name);
+    setSelectedColor(label.color);
+    setShowCreateForm(false);
+  };
+
+  const handleUpdateLabel = () => {
+    if (!editingLabel) return;
+    
+    if (!newLabelName.trim()) {
+      toast.error('Nome da etiqueta é obrigatório');
+      return;
+    }
+
+    onEditLabel(editingLabel.id, newLabelName.trim(), selectedColor);
+    setEditingLabel(null);
+    setNewLabelName('');
+    setSelectedColor(0);
+  };
+
+  const handleCancelEdit = () => {
+    setEditingLabel(null);
+    setNewLabelName('');
+    setSelectedColor(0);
     setShowCreateForm(false);
   };
 
@@ -71,11 +125,23 @@ export function LabelsModal({
     }
   };
 
+  // ✅ Converter índice de cor para hex
+  const getColorHex = (colorIndex: number): string => {
+    const color = WHATSAPP_LABEL_COLORS.find(c => c.index === colorIndex);
+    return color?.hex || WHATSAPP_LABEL_COLORS[0].hex;
+  };
+
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg w-full max-w-2xl max-h-[80vh] overflow-hidden">
+    <div 
+      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999] p-4"
+      onClick={onClose}
+    >
+      <div 
+        className="bg-white rounded-lg w-full max-w-2xl max-h-[80vh] overflow-hidden shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="flex items-center justify-between p-4 border-b">
           <div className="flex items-center space-x-2">
             <Tag className="h-5 w-5 text-yellow-600" />
@@ -101,21 +167,27 @@ export function LabelsModal({
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
-            <button
-              onClick={() => setShowCreateForm(!showCreateForm)}
-              className="flex items-center px-3 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700"
-            >
-              <Plus className="h-4 w-4 mr-1" />
-              Nova
-            </button>
+            {!editingLabel && (
+              <button
+                onClick={() => {
+                  setShowCreateForm(!showCreateForm);
+                  setEditingLabel(null);
+                }}
+                className="flex items-center px-3 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700"
+              >
+                <Plus className="h-4 w-4 mr-1" />
+                Nova
+              </button>
+            )}
           </div>
 
-          {showCreateForm && (
+          {/* Formulário de Criar/Editar */}
+          {(showCreateForm || editingLabel) && (
             <div className="bg-gray-50 p-3 rounded-lg">
               <div className="space-y-3">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Nome da Etiqueta
+                    {editingLabel ? 'Editar Etiqueta' : 'Nome da Etiqueta'}
                   </label>
                   <input
                     type="text"
@@ -123,39 +195,40 @@ export function LabelsModal({
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
                     value={newLabelName}
                     onChange={(e) => setNewLabelName(e.target.value)}
-                    onKeyPress={(e) => e.key === 'Enter' && handleCreateLabel()}
+                    onKeyPress={(e) => e.key === 'Enter' && (editingLabel ? handleUpdateLabel() : handleCreateLabel())}
                   />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Cor da Etiqueta
+                    Cor da Etiqueta (WhatsApp)
                   </label>
-                  <div className="flex space-x-2">
-                    {LABEL_COLORS.map((color) => (
+                  <div className="grid grid-cols-10 gap-2">
+                    {WHATSAPP_LABEL_COLORS.map((colorOption) => (
                       <button
-                        key={color}
-                        onClick={() => setSelectedColor(color)}
-                        className={`w-8 h-8 rounded-full border-2 ${
-                          selectedColor === color ? 'border-gray-800' : 'border-gray-300'
+                        key={colorOption.index}
+                        onClick={() => setSelectedColor(colorOption.index)}
+                        className={`w-8 h-8 rounded-full border-2 relative transition-all ${
+                          selectedColor === colorOption.index ? 'border-gray-800 ring-2 ring-offset-2 ring-yellow-500' : 'border-gray-300'
                         }`}
-                        style={{ backgroundColor: color }}
-                      />
+                        style={{ backgroundColor: colorOption.hex }}
+                        title={colorOption.name}
+                      >
+                        {selectedColor === colorOption.index && (
+                          <Check className="h-4 w-4 text-white absolute inset-0 m-auto" strokeWidth={3} />
+                        )}
+                      </button>
                     ))}
                   </div>
                 </div>
                 <div className="flex space-x-2">
                   <button
-                    onClick={handleCreateLabel}
+                    onClick={editingLabel ? handleUpdateLabel : handleCreateLabel}
                     className="px-3 py-1 bg-yellow-600 text-white rounded-md hover:bg-yellow-700 text-sm"
                   >
-                    Criar
+                    {editingLabel ? 'Salvar' : 'Criar'}
                   </button>
                   <button
-                    onClick={() => {
-                      setShowCreateForm(false);
-                      setNewLabelName('');
-                      setSelectedColor(LABEL_COLORS[0]);
-                    }}
+                    onClick={handleCancelEdit}
                     className="px-3 py-1 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400 text-sm"
                   >
                     Cancelar
@@ -194,22 +267,28 @@ export function LabelsModal({
                 <div key={label.id} className="p-4 flex items-center justify-between hover:bg-gray-50">
                   <div className="flex items-center space-x-3">
                     <div
-                      className="w-4 h-4 rounded-full"
-                      style={{ backgroundColor: label.color }}
+                      className="w-6 h-6 rounded-full border border-gray-200"
+                      style={{ backgroundColor: getColorHex(label.color) }}
+                      title={`Cor ${label.color}`}
                     />
                     <div>
                       <h3 className="font-medium text-gray-900">{label.name}</h3>
                       <div className="flex items-center space-x-2 text-sm text-gray-500">
+                        <span>ID: {label.id}</span>
                         {label.chatCount !== undefined && (
-                          <span>{label.chatCount} chat(s)</span>
-                        )}
-                        {label.createdAt && (
-                          <span>• Criada em {new Date(label.createdAt).toLocaleDateString('pt-BR')}</span>
+                          <span>• {label.chatCount} chat(s)</span>
                         )}
                       </div>
                     </div>
                   </div>
                   <div className="flex items-center space-x-2">
+                    <button
+                      onClick={() => handleStartEdit(label)}
+                      className="flex items-center px-2 py-1 text-blue-600 hover:bg-blue-50 rounded-md"
+                      title="Editar etiqueta"
+                    >
+                      <Edit className="h-4 w-4" />
+                    </button>
                     <button
                       onClick={() => handleDeleteLabel(label)}
                       className="flex items-center px-2 py-1 text-red-600 hover:bg-red-50 rounded-md"

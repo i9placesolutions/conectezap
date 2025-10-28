@@ -1,5 +1,5 @@
  import { useState, useEffect } from 'react';
-import { X, User, Users, Check, Search, UserPlus, Clock, MessageSquare } from 'lucide-react';
+import { X, User, Users, Check, Search, Clock, MessageSquare } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { toast } from 'react-hot-toast';
 
@@ -21,82 +21,33 @@ interface AssignAgentModalProps {
   chatId: string;
   chatName: string;
   currentAgent?: string;
+  currentAgentId?: string;
+  agents: Agent[]; // ✅ Agentes reais do contexto
   onAssign: (agentId: string, agentName: string) => void;
 }
-
-// Mock data - em produção viria da API
-const mockAgents: Agent[] = [
-  {
-    id: '1',
-    name: 'Ana Silva',
-    email: 'ana@conectezap.com',
-    status: 'online',
-    activeChats: 3,
-    lastActivity: Date.now() - 300000, // 5 minutos
-    skills: ['Vendas', 'Suporte Técnico'],
-    isAvailable: true
-  },
-  {
-    id: '2',
-    name: 'Carlos Santos',
-    email: 'carlos@conectezap.com',
-    status: 'online',
-    activeChats: 5,
-    lastActivity: Date.now() - 120000, // 2 minutos
-    skills: ['Vendas', 'Atendimento'],
-    isAvailable: true
-  },
-  {
-    id: '3',
-    name: 'Maria Oliveira',
-    email: 'maria@conectezap.com',
-    status: 'away',
-    activeChats: 2,
-    lastActivity: Date.now() - 900000, // 15 minutos
-    skills: ['Suporte Técnico', 'Financeiro'],
-    isAvailable: false
-  },
-  {
-    id: '4',
-    name: 'João Pedro',
-    email: 'joao@conectezap.com',
-    status: 'busy',
-    activeChats: 8,
-    lastActivity: Date.now() - 60000, // 1 minuto
-    skills: ['Vendas', 'Gerência'],
-    isAvailable: false
-  },
-  {
-    id: '5',
-    name: 'Fernanda Costa',
-    email: 'fernanda@conectezap.com',
-    status: 'offline',
-    activeChats: 0,
-    lastActivity: Date.now() - 7200000, // 2 horas
-    skills: ['Atendimento', 'RH'],
-    isAvailable: false
-  }
-];
 
 export function AssignAgentModal({ 
   isOpen, 
   onClose, 
-  chatId, 
   chatName, 
-  currentAgent, 
+  currentAgent,
+  currentAgentId,
+  agents: propsAgents, // ✅ Agentes reais do contexto
   onAssign 
 }: AssignAgentModalProps) {
-  const [agents, setAgents] = useState<Agent[]>(mockAgents);
-  const [selectedAgentId, setSelectedAgentId] = useState<string>('');
+  const [agents, setAgents] = useState<Agent[]>(propsAgents);
+  const [selectedAgentId, setSelectedAgentId] = useState<string>(currentAgentId || '');
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<'all' | 'available' | 'online'>('all');
 
+  // ✅ Atualizar agentes quando props mudarem
   useEffect(() => {
     if (isOpen) {
-      // Simular carregamento de agentes
-      setAgents(mockAgents);
+      console.log('📋 Agentes disponíveis para atribuição:', propsAgents);
+      setAgents(propsAgents);
+      setSelectedAgentId(currentAgentId || '');
     }
-  }, [isOpen]);
+  }, [isOpen, propsAgents, currentAgentId]);
 
   const handleAssign = () => {
     if (!selectedAgentId) {
@@ -110,21 +61,14 @@ export function AssignAgentModal({
       return;
     }
 
-    // Atualizar contador de chats ativos
-    setAgents(prev => prev.map(a => 
-      a.id === selectedAgentId 
-        ? { ...a, activeChats: a.activeChats + 1 }
-        : a
-    ));
-
+    console.log('✅ Atribuindo chat para agente:', { agentId: selectedAgentId, agentName: agent.name });
     onAssign(selectedAgentId, agent.name);
-    toast.success(`Conversa atribuída para ${agent.name}`);
     onClose();
   };
 
   const handleUnassign = () => {
+    console.log('🔄 Desatribuindo chat');
     onAssign('', '');
-    toast.success('Conversa desatribuída');
     onClose();
   };
 

@@ -2,8 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 import { useAuth } from './AuthContext';
-import { syncInstancesStatus } from '../lib/instanceSync';
-import { supabase } from '../lib/supabase';
+import { syncInstancesStatus, syncAllInstancesForAdmin } from '../lib/instanceSync';
 
 const ADMIN_EMAIL = 'rafael@i9place.com.br';
 
@@ -89,31 +88,12 @@ export function InstanceProvider({ children }: { children: React.ReactNode }) {
       
       // REGRA ESPECIAL: rafael@i9place.com.br vê TODAS as instâncias
       if (user.email === ADMIN_EMAIL) {
-        console.log('👑 Usuário admin - Carregando TODAS as instâncias');
+        console.log('👑 Usuário admin - Carregando TODAS as instâncias via sync completo');
         
-        const { data, error } = await supabase
-          .from('instances')
-          .select('*')
-          .eq('is_active', true)
-          .order('created_at', { ascending: false });
+        // Sincronizar com a API UAZAPI e Supabase
+        supabaseInstances = await syncAllInstancesForAdmin();
         
-        if (error) {
-          console.error('❌ Erro ao carregar instâncias:', error);
-          supabaseInstances = [];
-        } else {
-          supabaseInstances = data.map((instance: any) => ({
-            id: instance.id,
-            user_id: instance.user_id,
-            name: instance.name,
-            token: instance.token,
-            phone_connected: instance.phone_connected,
-            status: instance.status,
-            is_active: instance.is_active,
-            organization_id: instance.organization_id,
-            created_at: instance.created_at,
-            updated_at: instance.updated_at
-          }));
-        }
+        console.log(`📊 Total de instâncias sincronizadas: ${supabaseInstances?.length || 0}`);
       } else {
         // Usuários normais: apenas suas instâncias (RLS automático)
         console.log('👤 Usuário normal - Carregando apenas instâncias próprias');

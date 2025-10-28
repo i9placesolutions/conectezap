@@ -10,18 +10,18 @@ import { AppRoutes } from './routes';
 function App() {
   return (
     <BrowserRouter>
-      <ServerProvider>
-        <NotificationProvider>
-          <AuthProvider>
+      <NotificationProvider>
+        <AuthProvider>
+          <ServerProvider>
             <MultiAttendanceProvider>
               <InstanceProvider>
                 <AppRoutes />
                 <Toaster position="top-right" />
               </InstanceProvider>
             </MultiAttendanceProvider>
-          </AuthProvider>
-        </NotificationProvider>
-      </ServerProvider>
+          </ServerProvider>
+        </AuthProvider>
+      </NotificationProvider>
     </BrowserRouter>
   );
 }

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Search, Plus, MessageSquare, Phone, Send, Paperclip, MoreVertical, Clock, Check, CheckCheck, Smartphone, RefreshCw, Archive, User, Wifi, WifiOff, FileText, Tag, Filter, UserCheck, UserX, CheckCircle } from 'lucide-react';
+import { Search, Plus, MessageSquare, Phone, Send, Paperclip, MoreVertical, Clock, Check, CheckCheck, Smartphone, RefreshCw, Archive, User, Wifi, WifiOff, FileText, Tag, Filter, UserCheck, UserX, CheckCircle, Info, Trash2, Ban, MailOpen } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { uazapiService, Chat as UazapiChat } from '../services/uazapiService';
 import { getCurrentServerConfig } from '../services/api';
@@ -15,6 +15,7 @@ import { AssignAgentModal } from '../components/AssignAgentModal';
 import { MediaUploadModal } from '../components/MediaUploadModal';
 import { MediaRenderer } from '../components/MediaRenderer';
 import { LabelsModal } from '../components/LabelsModal';
+import { ChatDetailsPanel } from '../components/ChatDetailsPanel'; // ✅ Painel de detalhes do chat
 import { useInstanceSecurity } from '../hooks/useInstanceSecurity';
 
 interface ChatMessage {
@@ -33,7 +34,8 @@ interface ChatMessage {
 
 interface ExtendedChat extends Omit<UazapiChat, 'lastMessage'> {
   lastMessage?: ChatMessage;
-  agent?: string;
+  agent?: string; // Nome do agente
+  agentId?: string; // ✅ ID do agente para filtros
   status: 'unassigned' | 'assigned' | 'closed';
 }
 
@@ -43,6 +45,7 @@ export function ChatPage() {
   const { 
     isAdministrator, 
     isAgent,
+    currentUserId, // ✅ ID do usuário atual
     agents,
     assignments,
     assignChat,
@@ -58,12 +61,14 @@ export function ChatPage() {
   
   const [chats, setChats] = useState<ExtendedChat[]>([]);
   const [selectedChat, setSelectedChat] = useState<ExtendedChat | null>(null);
+  const [selectedChatDetails, setSelectedChatDetails] = useState<any>(null); // ✅ Detalhes completos do chat
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedFilter, setSelectedFilter] = useState<'all' | 'mine' | 'unassigned'>('all');
   const [loading, setLoading] = useState(false);
   const [loadingMessages, setLoadingMessages] = useState(false);
+  const [loadingChatDetails, setLoadingChatDetails] = useState(false); // ✅ Estado de carregamento dos detalhes
   const [sendingMessage, setSendingMessage] = useState(false);
   const [showInstanceModal, setShowInstanceModal] = useState(false);
   const [showTemplatesModal, setShowTemplatesModal] = useState(false);
@@ -72,6 +77,8 @@ export function ChatPage() {
   const [showMediaModal, setShowMediaModal] = useState(false);
   const [showLabelsModal, setShowLabelsModal] = useState(false);
   const [showFiltersPanel, setShowFiltersPanel] = useState(false);
+  const [showChatDetailsPanel, setShowChatDetailsPanel] = useState(false); // ✅ Estado para painel de detalhes
+  const [showMoreOptionsMenu, setShowMoreOptionsMenu] = useState(false); // ✅ Menu de mais opções
   const [replyingToMessage, setReplyingToMessage] = useState<ChatMessage | null>(null);
   const [showEmojiPicker, setShowEmojiPicker] = useState<string | null>(null); // ID da mensagem para mostrar picker
   const [reactingToMessage, setReactingToMessage] = useState<string | null>(null); // ID da mensagem sendo reagida
@@ -296,12 +303,31 @@ export function ChatPage() {
     }
   }, [showEmojiPicker]);
 
+  // Fechar menu de mais opções ao clicar fora
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (showMoreOptionsMenu && !(event.target as Element).closest('.more-options-menu')) {
+        setShowMoreOptionsMenu(false);
+      }
+    };
+
+    if (showMoreOptionsMenu) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [showMoreOptionsMenu]);
+
   // Carregar agentes quando o componente monta
   useEffect(() => {
     if (selectedInstance) {
       loadAgents();
     }
   }, [selectedInstance, loadAgents]);
+
+  // Monitorar estado do modal de etiquetas (DEBUG)
+  useEffect(() => {
+    console.log('🏷️ [ChatPage] Estado showLabelsModal mudou para:', showLabelsModal);
+  }, [showLabelsModal]);
 
   // Funções para gerenciar etiquetas
   const loadLabels = async () => {
@@ -310,6 +336,7 @@ export function ChatPage() {
     setLabelsLoading(true);
     try {
       const labelsData = await uazapiService.getLabels(selectedInstance.token);
+      console.log('📋 Etiquetas carregadas:', labelsData);
       setLabels(labelsData);
     } catch (error) {
       console.error('Erro ao carregar etiquetas:', error);
@@ -319,17 +346,55 @@ export function ChatPage() {
     }
   };
 
-  const handleCreateLabel = async (name: string, color: string) => {
+  const handleCreateLabel = async (name: string, color: number) => {
     if (!selectedInstance?.token) return;
     
     try {
-      // Usar editLabel com ID vazio para criar uma nova label
-      await uazapiService.editLabel(selectedInstance.token, '', name, parseInt(color.replace('#', ''), 16), false);
-      toast.success('Etiqueta criada com sucesso');
-      loadLabels();
+      console.log('🏷️ Criando etiqueta:', { name, color });
+      // ✅ Criar nova etiqueta usando POST /label/edit com labelid vazio
+      const success = await uazapiService.editLabel(
+        selectedInstance.token, 
+        '', // labelid vazio = criar nova
+        name, 
+        color, 
+        false
+      );
+      
+      if (success) {
+        toast.success('Etiqueta criada com sucesso');
+        loadLabels();
+      } else {
+        toast.error('Erro ao criar etiqueta');
+      }
     } catch (error) {
       console.error('Erro ao criar etiqueta:', error);
       toast.error('Erro ao criar etiqueta');
+    }
+  };
+
+  const handleEditLabel = async (labelId: string, name: string, color: number) => {
+    if (!selectedInstance?.token) return;
+    
+    try {
+      console.log('✏️ Editando etiqueta:', { labelId, name, color });
+      // ✅ Editar etiqueta existente
+      const success = await uazapiService.editLabel(
+        selectedInstance.token, 
+        labelId, 
+        name, 
+        color, 
+        false
+      );
+      
+      if (success) {
+        toast.success('Etiqueta atualizada com sucesso');
+        loadLabels();
+      } else {
+        toast.error('Erro ao atualizar etiqueta');
+      }
+    } catch (error) {
+      console.error('Erro ao atualizar etiqueta:', error);
+      toast.error('Erro ao atualizar etiqueta');
     }
   };
 
@@ -337,10 +402,22 @@ export function ChatPage() {
     if (!selectedInstance?.token) return;
     
     try {
-      // Usar editLabel com deleteLabel=true para excluir
-      await uazapiService.editLabel(selectedInstance.token, labelId, '', 0, true);
-      toast.success('Etiqueta excluída com sucesso');
-      loadLabels();
+      console.log('🗑️ Deletando etiqueta:', labelId);
+      // ✅ Deletar etiqueta usando delete=true
+      const success = await uazapiService.editLabel(
+        selectedInstance.token, 
+        labelId, 
+        '', // nome vazio quando deletando
+        0,  // cor 0 quando deletando
+        true // delete=true
+      );
+      
+      if (success) {
+        toast.success('Etiqueta excluída com sucesso');
+        loadLabels();
+      } else {
+        toast.error('Erro ao excluir etiqueta');
+      }
     } catch (error) {
       console.error('Erro ao excluir etiqueta:', error);
       toast.error('Erro ao excluir etiqueta');
@@ -428,17 +505,108 @@ export function ChatPage() {
     }
   };
 
+  // ✅ Arquivar conversa
+  const handleArchiveChat = async () => {
+    if (!selectedChat || !selectedInstance?.token) return;
+    
+    try {
+      console.log('📦 Arquivando conversa:', selectedChat.name);
+      
+      // Extrair número do chat ID
+      const number = selectedChat.id.includes('@') ? selectedChat.id.split('@')[0] : selectedChat.id;
+      
+      // Chamar API para arquivar (endpoint: POST /chat/archive)
+      await uazapiService.archiveChat(selectedInstance.token, number, true);
+      
+      // Remover da lista de chats
+      setChats(prev => prev.filter(chat => chat.id !== selectedChat.id));
+      setSelectedChat(null);
+      
+      toast.success('Conversa arquivada com sucesso');
+    } catch (error) {
+      console.error('❌ Erro ao arquivar conversa:', error);
+      toast.error('Erro ao arquivar conversa');
+    }
+  };
+
+  // ✅ Bloquear contato
+  const handleBlockContact = async () => {
+    if (!selectedChat || !selectedInstance?.token) return;
+    
+    if (!confirm(`Deseja realmente bloquear ${selectedChat.name}?`)) return;
+    
+    try {
+      console.log('🚫 Bloqueando contato:', selectedChat.name);
+      
+      const number = selectedChat.id.includes('@') ? selectedChat.id.split('@')[0] : selectedChat.id;
+      
+      // Chamar API para bloquear
+      await uazapiService.blockContact(selectedInstance.token, number, true);
+      
+      toast.success('Contato bloqueado com sucesso');
+    } catch (error) {
+      console.error('❌ Erro ao bloquear contato:', error);
+      toast.error('Erro ao bloquear contato');
+    }
+  };
+
+  // ✅ Marcar como não lido
+  const handleMarkAsUnread = async () => {
+    if (!selectedChat || !selectedInstance?.token) return;
+    
+    try {
+      console.log('📬 Marcando como não lido:', selectedChat.name);
+      
+      // Atualizar localmente
+      setChats(prev => prev.map(chat => 
+        chat.id === selectedChat.id 
+          ? { ...chat, unreadCount: (chat.unreadCount || 0) + 1 }
+          : chat
+      ));
+      
+      toast.success('Marcado como não lido');
+    } catch (error) {
+      console.error('❌ Erro ao marcar como não lido:', error);
+      toast.error('Erro ao marcar como não lido');
+    }
+  };
+
+  // ✅ Limpar conversa
+  const handleClearChat = async () => {
+    if (!selectedChat || !selectedInstance?.token) return;
+    
+    if (!confirm(`Deseja realmente limpar todas as mensagens de ${selectedChat.name}? Esta ação não pode ser desfeita.`)) return;
+    
+    try {
+      console.log('🗑️ Limpando conversa:', selectedChat.name);
+      
+      // Limpar mensagens localmente
+      setMessages([]);
+      
+      toast.success('Conversa limpa com sucesso');
+    } catch (error) {
+      console.error('❌ Erro ao limpar conversa:', error);
+      toast.error('Erro ao limpar conversa');
+    }
+  };
+
   const loadChats = async () => {
     if (!selectedInstance?.token) return;
 
     try {
-      // SEGURANÇA: Validar ownership da instância
-      const isValid = await validateInstanceOwnership(selectedInstance.token);
-      if (!isValid) {
-        console.error('🚫 ACESSO NEGADO: Instância não pertence ao usuário');
-        toast.error('Acesso negado: você não tem permissão para esta instância');
-        setSelectedInstance(null);
-        return;
+      // 👑 SUPER ADMIN: Bypass validação de ownership
+      if (!isAdministrator) {
+        // SEGURANÇA: Validar ownership da instância (apenas para usuários normais)
+        const isValid = await validateInstanceOwnership(selectedInstance.token);
+        if (!isValid) {
+          console.error('🚫 ACESSO NEGADO: Instância não pertence ao usuário');
+          toast.error('Acesso negado: você não tem permissão para esta instância');
+          setSelectedInstance(null);
+          return;
+        }
+        console.log('✅ Validação de ownership: APROVADA (usuário normal)');
+      } else {
+        console.log('👑 SUPER ADMIN - Acesso PERMITIDO sem validação de ownership');
       }
 
       setLoading(true);
@@ -446,7 +614,6 @@ export function ChatPage() {
       console.log('🔍 Instância selecionada:', selectedInstance.name);
       const instanceToken = selectedInstance.token;
       console.log('🔍 Token:', instanceToken.substring(0, 10) + '...');
-      console.log('✅ Validação de ownership: APROVADA');
       
       // Diagnóstico da URL base
       const currentServer = getCurrentServerConfig();
@@ -488,6 +655,7 @@ export function ChatPage() {
           ...chat,
           status,
           agent: agent?.name, // Nome do agente atribuído
+          agentId: agent?.id, // ✅ ID do agente para filtros
           // Se a API não retornou lastMessage, criar uma baseada no timestamp
           lastMessage: chat.lastMessage ? {
             id: chat.lastMessage.id,
@@ -548,17 +716,22 @@ export function ChatPage() {
     if (!selectedInstance?.token) return;
 
     try {
-      // SEGURANÇA: Validar ownership da instância
-      const isValid = await validateInstanceOwnership(selectedInstance.token);
-      if (!isValid) {
-        console.error('🚫 ACESSO NEGADO: Instância não pertence ao usuário');
-        toast.error('Acesso negado: você não tem permissão para esta instância');
-        return;
+      // 👑 SUPER ADMIN: Bypass validação de ownership
+      if (!isAdministrator) {
+        // SEGURANÇA: Validar ownership da instância (apenas para usuários normais)
+        const isValid = await validateInstanceOwnership(selectedInstance.token);
+        if (!isValid) {
+          console.error('🚫 ACESSO NEGADO: Instância não pertence ao usuário');
+          toast.error('Acesso negado: você não tem permissão para esta instância');
+          return;
+        }
+        console.log('✅ Validação de ownership: APROVADA (usuário normal)');
+      } else {
+        console.log('👑 SUPER ADMIN - Acesso PERMITIDO sem validação de ownership');
       }
 
       setLoadingMessages(true);
       console.log('💬 Carregando mensagens do chat:', chat.name, 'ID:', chat.id);
-      console.log('✅ Validação de ownership: APROVADA');
 
       // Buscar mensagens reais da API
       const instanceToken = selectedInstance.token;
@@ -800,9 +973,47 @@ export function ChatPage() {
     }
   };
 
+  /**
+   * Carregar detalhes completos de um chat
+   * Usa o endpoint POST /chat/details para obter mais de 60 campos
+   */
+  const loadChatDetails = async (chat: ExtendedChat) => {
+    if (!selectedInstance?.token) return;
+
+    try {
+      setLoadingChatDetails(true);
+      console.log('📋 Carregando detalhes completos do chat:', chat.name);
+
+      // Extrair número do chat ID
+      const number = chat.id.includes('@') ? chat.id.split('@')[0] : chat.id;
+
+      // Buscar detalhes completos (preview = false para imagem full)
+      const details = await uazapiService.getChatDetails(selectedInstance.token, number, false);
+
+      console.log('✅ Detalhes carregados:', {
+        name: details.name || details.wa_name,
+        isGroup: details.wa_isGroup,
+        isBusiness: details.wa_isBusiness,
+        isBlocked: details.wa_isBlocked,
+        fields: Object.keys(details).length
+      });
+
+      setSelectedChatDetails(details);
+    } catch (error) {
+      console.error('❌ Erro ao carregar detalhes do chat:', error);
+      // Não mostrar toast de erro aqui, pois não é crítico
+      setSelectedChatDetails(null);
+    } finally {
+      setLoadingChatDetails(false);
+    }
+  };
+
   const handleSelectChat = async (chat: ExtendedChat) => {
     console.log('🎯 CHAT SELECIONADO:', chat.name);
     setSelectedChat(chat);
+    
+    // ✅ Carregar detalhes completos do chat
+    await loadChatDetails(chat);
     
     // Marcar chat como lido ao selecionar (funcionalidade opcional)
     if (selectedInstance && selectedInstance.token && chat.id) {
@@ -1336,7 +1547,8 @@ export function ChatPage() {
     
     const matchesFilter = 
       selectedFilter === 'all' ||
-      (selectedFilter === 'mine' && chat.agent) ||
+      // 👑 Admin vê todos os chats | Agente vê apenas os atribuídos a ele
+      (selectedFilter === 'mine' && (isAdministrator || (chat.agentId === currentUserId))) ||
       (selectedFilter === 'unassigned' && chat.status === 'unassigned');
     
     return matchesSearch && matchesFilter;
@@ -1466,7 +1678,10 @@ export function ChatPage() {
             <div className="flex items-center gap-2">
               {isAdministrator && (
                 <button
-                  onClick={() => setShowLabelsModal(true)}
+                  onClick={() => {
+                    console.log('🏷️ [ChatPage] Botão Gerenciar Etiquetas clicado!');
+                    setShowLabelsModal(true);
+                  }}
                   className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
                   title="Gerenciar Etiquetas"
                 >
@@ -1781,19 +1996,38 @@ export function ChatPage() {
             >
               <div className="flex items-center gap-3">
                 <div className="relative">
-                    <div className="h-12 w-12 rounded-full bg-primary-100 flex items-center justify-center flex-shrink-0">
+                  {/* Foto de perfil ou avatar com inicial */}
+                  {chat.profilePicUrl ? (
+                    <img
+                      src={uazapiService.getProxiedImageUrl(chat.profilePicUrl)}
+                      alt={chat.name}
+                      className="h-12 w-12 rounded-full object-cover flex-shrink-0 bg-gray-100"
+                      crossOrigin="anonymous"
+                      onError={(e) => {
+                        // Fallback para avatar com inicial se imagem falhar
+                        console.warn('Erro ao carregar imagem de perfil:', chat.profilePicUrl);
+                        e.currentTarget.style.display = 'none';
+                        const fallback = e.currentTarget.nextElementSibling;
+                        if (fallback) (fallback as HTMLElement).style.display = 'flex';
+                      }}
+                    />
+                  ) : null}
+                  <div 
+                    className="h-12 w-12 rounded-full bg-primary-100 flex items-center justify-center flex-shrink-0"
+                    style={{ display: chat.profilePicUrl ? 'none' : 'flex' }}
+                  >
                     <span className="text-primary-600 font-medium">
-                        {chat.name[0]?.toUpperCase() || '?'}
+                      {chat.name[0]?.toUpperCase() || '?'}
                     </span>
                   </div>
-                    {chat.unreadCount > 0 && (
-                      <div className="absolute -top-1 -right-1 h-5 w-5 bg-primary-600 rounded-full flex items-center justify-center">
-                        <span className="text-xs text-white font-medium">
-                          {chat.unreadCount > 9 ? '9+' : chat.unreadCount}
-                        </span>
-                      </div>
-                    )}
-                  </div>
+                  {chat.unreadCount > 0 && (
+                    <div className="absolute -top-1 -right-1 h-5 w-5 bg-primary-600 rounded-full flex items-center justify-center">
+                      <span className="text-xs text-white font-medium">
+                        {chat.unreadCount > 9 ? '9+' : chat.unreadCount}
+                      </span>
+                    </div>
+                  )}
+                </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between mb-1">
                       <h3 className="font-medium text-gray-900 truncate">{chat.name}</h3>
@@ -1864,7 +2098,25 @@ export function ChatPage() {
             <div className="p-4 border-b border-gray-200 bg-white">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="h-10 w-10 rounded-full bg-primary-100 flex items-center justify-center">
+                  {/* Foto de perfil ou avatar no header */}
+                  {selectedChat.profilePicUrl ? (
+                    <img
+                      src={uazapiService.getProxiedImageUrl(selectedChat.profilePicUrl)}
+                      alt={selectedChat.name}
+                      className="h-10 w-10 rounded-full object-cover bg-gray-100"
+                      crossOrigin="anonymous"
+                      onError={(e) => {
+                        console.warn('Erro ao carregar imagem de perfil no header:', selectedChat.profilePicUrl);
+                        e.currentTarget.style.display = 'none';
+                        const fallback = e.currentTarget.nextElementSibling;
+                        if (fallback) (fallback as HTMLElement).style.display = 'flex';
+                      }}
+                    />
+                  ) : null}
+                  <div 
+                    className="h-10 w-10 rounded-full bg-primary-100 flex items-center justify-center"
+                    style={{ display: selectedChat.profilePicUrl ? 'none' : 'flex' }}
+                  >
                     <span className="text-primary-600 font-medium">
                       {selectedChat.name[0]?.toUpperCase() || '?'}
                     </span>
@@ -1880,6 +2132,15 @@ export function ChatPage() {
                   </div>
                 </div>
                                 <div className="flex items-center gap-2">
+                  {/* Botão de Detalhes do Contato */}
+                  <button
+                    onClick={() => setShowChatDetailsPanel(true)}
+                    className="p-2 text-gray-500 hover:text-primary-600 rounded-lg hover:bg-gray-100"
+                    title="Ver detalhes do contato"
+                  >
+                    <Info className="h-5 w-5" />
+                  </button>
+
                   {/* Controles de Multiatendimento */}
                   {isAgent && (
                     <>
@@ -1931,19 +2192,57 @@ export function ChatPage() {
                     <FileText className="h-5 w-5" />
                   </button>
                   <button
-                    onClick={() => toast('Funcionalidade em desenvolvimento')}
-                    className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
-                    title="Arquivar"
+                    onClick={handleArchiveChat}
+                    className="p-2 text-gray-400 hover:text-orange-600 rounded-lg hover:bg-orange-50"
+                    title="Arquivar conversa"
                   >
                     <Archive className="h-5 w-5" />
                   </button>
-                  <button
-                    onClick={() => toast('Funcionalidade em desenvolvimento')}
-                    className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
-                    title="Mais opções"
-                  >
-                    <MoreVertical className="h-5 w-5" />
-                  </button>
+                  <div className="relative more-options-menu">
+                    <button
+                      onClick={() => setShowMoreOptionsMenu(!showMoreOptionsMenu)}
+                      className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
+                      title="Mais opções"
+                    >
+                      <MoreVertical className="h-5 w-5" />
+                    </button>
+                    {showMoreOptionsMenu && (
+                      <div className="absolute right-0 top-full mt-2 w-56 bg-white rounded-lg shadow-xl border border-gray-200 z-50">
+                        <div className="py-2">
+                          <button
+                            onClick={() => {
+                              handleMarkAsUnread();
+                              setShowMoreOptionsMenu(false);
+                            }}
+                            className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-3"
+                          >
+                            <MailOpen className="h-4 w-4" />
+                            Marcar como não lido
+                          </button>
+                          <button
+                            onClick={() => {
+                              handleBlockContact();
+                              setShowMoreOptionsMenu(false);
+                            }}
+                            className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-3"
+                          >
+                            <Ban className="h-4 w-4" />
+                            Bloquear contato
+                          </button>
+                          <button
+                            onClick={() => {
+                              handleClearChat();
+                              setShowMoreOptionsMenu(false);
+                            }}
+                            className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-3"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                            Limpar conversa
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
@@ -2239,6 +2538,8 @@ export function ChatPage() {
           chatId={selectedChat?.id || ''}
           chatName={selectedChat?.name || 'Chat'}
           currentAgent={selectedChat?.agent}
+          currentAgentId={assignments.find(a => a.chatId === selectedChat.id && a.status === 'assigned')?.agentId}
+          agents={agents} // ✅ Passar agentes reais do contexto
           onAssign={handleAssignAgent}
         />
       )}
@@ -2250,6 +2551,7 @@ export function ChatPage() {
         labels={labels}
         onLoadLabels={loadLabels}
         onCreateLabel={handleCreateLabel}
+        onEditLabel={handleEditLabel}
         onDeleteLabel={handleDeleteLabel}
         loading={labelsLoading}
       />
@@ -2260,6 +2562,14 @@ export function ChatPage() {
         onClose={() => setShowMediaModal(false)}
         onSendMedia={handleSendMedia}
         chatName={selectedChat?.name || 'Chat'}
+      />
+
+      {/* Painel de Detalhes do Chat */}
+      <ChatDetailsPanel
+        isOpen={showChatDetailsPanel}
+        onClose={() => setShowChatDetailsPanel(false)}
+        chatDetails={selectedChatDetails}
+        loading={loadingChatDetails}
       />
     </div>
   );

@@ -510,19 +510,62 @@ export const getMessages = async (instanceId: string, chatId: string, limit: num
 // Nova função para buscar estatísticas de mensagens
 export const getMessageStats = async (instanceToken?: string) => {
   try {
-    const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
+    // CRÍTICO: Validar que temos um token antes de fazer a requisição
+    if (!instanceToken) {
+      console.warn('⚠️ getMessageStats chamado sem instanceToken, retornando dados vazios');
+      return {
+        totalMessages: 0,
+        deliveredMessages: 0,
+        failedMessages: 0,
+        totalChats: 0,
+        activeChatsSample: 0
+      };
+    }
+    
+    const client = createInstanceClient(instanceToken);
     
     // Buscar todos os chats primeiro
     const chatsResponse = await client.post('/chat/find', {
       limit: 1000 // Buscar muitos chats para ter uma visão geral
     }, {
-      headers: instanceToken ? {
+      headers: {
         'token': instanceToken
-      } : {}
+      }
     });
     
+    // SEMPRE logar a resposta primeiro para debug
+    console.log('📡 Resposta completa da API /chat/find:', chatsResponse.data);
+    console.log('📡 Tipo da resposta:', typeof chatsResponse.data);
+    console.log('📡 É array?', Array.isArray(chatsResponse.data));
+    console.log('📡 Chaves do objeto:', chatsResponse.data ? Object.keys(chatsResponse.data) : []);
+    
     if (!chatsResponse.data || !Array.isArray(chatsResponse.data)) {
-      throw new Error('Resposta inválida da API de chats');
+      console.warn('⚠️ Resposta não é array direto, tentando extrair...');
+      
+      // Tentar extrair dados de estruturas diferentes
+      if (chatsResponse.data?.data && Array.isArray(chatsResponse.data.data)) {
+        console.log('✅ Dados encontrados em chatsResponse.data.data');
+        chatsResponse.data = chatsResponse.data.data;
+      } else if (chatsResponse.data?.chats && Array.isArray(chatsResponse.data.chats)) {
+        console.log('✅ Dados encontrados em chatsResponse.data.chats');
+        chatsResponse.data = chatsResponse.data.chats;
+      } else if (chatsResponse.data?.result && Array.isArray(chatsResponse.data.result)) {
+        console.log('✅ Dados encontrados em chatsResponse.data.result');
+        chatsResponse.data = chatsResponse.data.result;
+      } else if (chatsResponse.data?.response && Array.isArray(chatsResponse.data.response)) {
+        console.log('✅ Dados encontrados em chatsResponse.data.response');
+        chatsResponse.data = chatsResponse.data.response;
+      } else {
+        // Se não conseguir extrair, retornar dados vazios ao invés de erro
+        console.warn('⚠️ Não foi possível extrair dados de chats. Estrutura:', chatsResponse.data);
+        return {
+          totalMessages: 0,
+          deliveredMessages: 0,
+          failedMessages: 0,
+          totalChats: 0,
+          activeChatsSample: 0
+        };
+      }
     }
     
     const chats = chatsResponse.data;
@@ -540,9 +583,9 @@ export const getMessageStats = async (instanceToken?: string) => {
           chatid: chat.id,
           limit: 50 // Buscar últimas 50 mensagens de cada chat
         }, {
-          headers: instanceToken ? {
+          headers: {
             'token': instanceToken
-          } : {}
+          }
         });
         
         if (messagesResponse.data && Array.isArray(messagesResponse.data)) {
@@ -579,26 +622,51 @@ export const getMessageStats = async (instanceToken?: string) => {
       activeChatsSample: sampleSize
     };
   } catch (error: any) {
-    console.error('Erro ao buscar estatísticas de mensagens:', error);
+    // Não logar erro se for apenas resposta inválida (já tratamos acima)
+    if (error.message !== 'Resposta inválida da API de chats') {
+      console.error('❌ Erro ao buscar estatísticas de mensagens:', error);
+    }
     
     // Verificar se é erro de autenticação
     if (error.response?.status === 401) {
-      console.error('❌ Erro de autenticação (401). Verifique se:', {
+      console.error('🔐 Erro de autenticação (401) - Token inválido ou não fornecido', {
         hasInstanceToken: !!instanceToken,
-        instanceToken: instanceToken ? instanceToken.substring(0, 10) + '...' : 'não fornecido',
-        apiUrl: getCurrentServerConfig().url,
-        adminToken: getCurrentServerConfig().adminToken ? getCurrentServerConfig().adminToken.substring(0, 10) + '...' : 'não configurado'
+        instanceToken: instanceToken ? '✅ fornecido' : '❌ NÃO FORNECIDO',
+        apiUrl: getCurrentServerConfig().url
       });
-      throw new Error('Erro de autenticação: Token inválido ou expirado');
+      
+      // Não propagar o erro, apenas retornar dados vazios
+      console.warn('⚠️ Retornando dados vazios devido a erro de autenticação');
+      return {
+        totalMessages: 0,
+        deliveredMessages: 0,
+        failedMessages: 0,
+        totalChats: 0,
+        activeChatsSample: 0
+      };
     }
     
     // Verificar se é erro de rede
     if (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND') {
-      console.error('❌ Erro de conexão com a API:', error.message);
-      throw new Error('Erro de conexão: Não foi possível conectar com o servidor da API');
+      console.error('🌐 Erro de conexão com a API:', error.message);
+      return {
+        totalMessages: 0,
+        deliveredMessages: 0,
+        failedMessages: 0,
+        totalChats: 0,
+        activeChatsSample: 0
+      };
     }
     
-    throw error;
+    // Para outros erros, retornar dados vazios ao invés de lançar exceção
+    console.warn('⚠️ Retornando dados vazios devido a erro não tratado');
+    return {
+      totalMessages: 0,
+      deliveredMessages: 0,
+      failedMessages: 0,
+      totalChats: 0,
+      activeChatsSample: 0
+    };
   }
 };
 

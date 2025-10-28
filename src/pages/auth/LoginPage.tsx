@@ -1,29 +1,37 @@
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { Eye, EyeOff } from 'lucide-react';
+import { toast } from 'react-hot-toast';
 
 export function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const navigate = useNavigate();
   const { signIn } = useAuth();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!email || !password) {
-      alert('Preencha todos os campos');
+      toast.error('⚠️ Preencha todos os campos');
+      return;
+    }
+
+    // Validação básica de email
+    if (!email.includes('@') || !email.includes('.')) {
+      toast.error('⚠️ Digite um email válido');
       return;
     }
 
     try {
       setIsLoading(true);
       await signIn(email, password);
-      navigate('/');
+      // Navegação é feita dentro do signIn após sucesso
     } catch (error) {
+      // Erro já foi tratado e mostrado no AuthContext
+      // Apenas log para debug
       console.error('Erro no login:', error);
     } finally {
       setIsLoading(false);

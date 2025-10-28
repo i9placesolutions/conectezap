@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
 import { X, RefreshCw, Plus, Smartphone, Copy } from 'lucide-react';
 import { toast } from 'react-hot-toast';
-import { getInstances, chat } from '../../lib/wapi/api';
+import { chat } from '../../lib/wapi/api';
 import { CreateInstanceModal } from './CreateInstanceModal';
 import { cn } from '../../lib/utils';
+import { useInstance } from '../../contexts/InstanceContext';
 
 interface Instance {
   id: string;
@@ -44,20 +45,33 @@ interface SelectInstanceModalProps {
 }
 
 export function SelectInstanceModal({ onClose, onSelect }: SelectInstanceModalProps) {
+  const { instances: contextInstances } = useInstance();
   const [instances, setInstances] = useState<Instance[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
 
   useEffect(() => {
     loadInstances();
-  }, []);
+  }, [contextInstances]);
 
   const loadInstances = async () => {
     try {
       setLoading(true);
-      const response = await getInstances();
-      console.log('Instâncias carregadas:', response);
-      setInstances(response);
+      
+      // Usar instâncias do contexto (que já respeitam as regras de admin)
+      console.log('📋 Carregando instâncias do contexto para modal');
+      console.log(`📊 Total de instâncias disponíveis: ${contextInstances.length}`);
+      
+      // Converter formato do contexto para o formato esperado pelo modal
+      const formattedInstances = contextInstances.map(inst => ({
+        id: inst.id,
+        name: inst.name,
+        status: inst.status,
+        token: inst.token || '',
+        chats: []
+      }));
+      
+      setInstances(formattedInstances);
     } catch (error) {
       console.error('Erro ao carregar instâncias:', error);
       toast.error('Erro ao carregar instâncias');

@@ -3,6 +3,8 @@ import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import { toast } from 'react-hot-toast';
 
+const ADMIN_EMAIL = 'rafael@i9place.com.br';
+
 /**
  * Hook de segurança para validar se uma instância pertence ao usuário atual.
  * Previne acesso não autorizado a instâncias de outros usuários.
@@ -10,7 +12,7 @@ import { toast } from 'react-hot-toast';
  * REGRA CRÍTICA DE SEGURANÇA:
  * - Toda chamada à API UAZAPI DEVE validar ownership do token
  * - Usuários só podem acessar suas próprias instâncias
- * - Super admins podem acessar todas as instâncias
+ * - Super admins (rafael@i9place.com.br) podem acessar todas as instâncias
  */
 export function useInstanceSecurity() {
   const { user } = useAuth();
@@ -33,7 +35,15 @@ export function useInstanceSecurity() {
     try {
       setLoading(true);
 
-      // Verificar se é super admin
+      // Verificar se é o admin especial por email (prioridade máxima)
+      if (user.email === ADMIN_EMAIL) {
+        console.log('👑 SUPER ADMIN detectado por email - ACESSO TOTAL LIBERADO');
+        setIsSuperAdmin(true);
+        setLoading(false);
+        return;
+      }
+
+      // Verificar se é super admin pela tabela
       const { data: superAdminData } = await supabase
         .from('super_admins')
         .select('email')
@@ -45,10 +55,12 @@ export function useInstanceSecurity() {
 
       // Se é super admin, não precisa validar ownership
       if (isAdmin) {
-        console.log('🔓 Super admin detectado - acesso total liberado');
+        console.log('� SUPER ADMIN detectado por tabela - ACESSO TOTAL LIBERADO');
         setLoading(false);
         return;
       }
+
+      console.log('👤 Usuário normal - carregando apenas instâncias próprias');
 
       // Buscar instâncias do usuário no Supabase
       const { data: instances, error } = await supabase
@@ -97,19 +109,19 @@ export function useInstanceSecurity() {
       return false;
     }
 
-    // Super admins têm acesso total
+    // REGRA CRÍTICA: Super admins têm acesso TOTAL a TODAS as instâncias
     if (isSuperAdmin) {
-      console.log('✅ Super admin - acesso permitido');
+      console.log('✅ SUPER ADMIN - Acesso PERMITIDO a todas as instâncias');
       return true;
     }
 
-    // Validação em memória (mais rápida)
+    // Validação em memória (mais rápida) para usuários normais
     if (userInstances.has(tokenOrId)) {
       console.log('✅ Instância pertence ao usuário (cache)');
       return true;
     }
 
-    // Validação no banco (fallback)
+    // Validação no banco (fallback) para usuários normais
     try {
       const { data, error } = await supabase
         .from('instances')

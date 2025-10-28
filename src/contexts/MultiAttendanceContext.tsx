@@ -52,6 +52,7 @@ export interface AttendanceMetrics {
 interface MultiAttendanceContextType {
   // Estado do usuário atual
   currentUserRole: UserRole;
+  currentUserId: string | null; // ✅ ID do usuário atual
   isAdministrator: boolean;
   isAgent: boolean;
   
@@ -109,16 +110,30 @@ export function MultiAttendanceProvider({ children }: { children: ReactNode }) {
 
   const loadUserRole = async () => {
     try {
-      const { data: profile, error } = await supabase
+      // 👑 SUPER ADMIN: rafael@i9place.com.br tem privilégios de administrador
+      const ADMIN_EMAIL = 'rafael@i9place.com.br';
+      
+      if (user?.email === ADMIN_EMAIL) {
+        console.log('👑 SUPER ADMIN DETECTADO - Role: administrator');
+        setCurrentUserRole('administrator');
+        setLoading(false);
+        return;
+      }
+
+      const { data: profile } = await supabase
         .from('profiles')
         .select('id, email, full_name')
         .eq('id', user?.id)
         .single();
 
-      if (error) throw error;
+      if (!profile) {
+        console.warn('Perfil não encontrado, usando role padrão');
+        setCurrentUserRole('agent');
+        return;
+      }
       
-      // Por enquanto, todos os usuários são agentes
-      // Em produção, você pode implementar uma lógica baseada no email ou outro campo
+      // Usuários normais são agentes
+      console.log('👤 Usuário normal - Role: agent');
       setCurrentUserRole('agent');
     } catch (error) {
       console.error('Erro ao carregar perfil do usuário:', error);
@@ -134,6 +149,7 @@ export function MultiAttendanceProvider({ children }: { children: ReactNode }) {
     setAgentsLoading(true);
 
     try {
+      console.log('👥 Carregando agentes do Supabase...');
       const MAX_RETRIES = 3;
       let attempt = 0;
       while (attempt < MAX_RETRIES) {
@@ -159,6 +175,7 @@ export function MultiAttendanceProvider({ children }: { children: ReactNode }) {
             maxConcurrentChats: 10
           }));
 
+          console.log(`✅ ${agentsData.length} agentes carregados:`, agentsData.map(a => ({ id: a.id, name: a.name, email: a.email })));
           setAgents(agentsData);
           break; // sucesso
         } catch (err: any) {
@@ -171,7 +188,7 @@ export function MultiAttendanceProvider({ children }: { children: ReactNode }) {
         }
       }
     } catch (error) {
-      console.error('Erro ao carregar agentes:', error);
+      console.error('❌ Erro ao carregar agentes:', error);
       toast.error('Erro ao carregar agentes');
     } finally {
       setAgentsLoading(false);
@@ -197,6 +214,32 @@ export function MultiAttendanceProvider({ children }: { children: ReactNode }) {
 
   const assignChat = async (chatId: string, agentId: string, notes?: string) => {
     try {
+      // 🔄 Verificar se já existe uma atribuição ativa para este chat
+      const existingAssignment = assignments.find(a => a.chatId === chatId && a.status === 'assigned');
+      
+      if (existingAssignment) {
+        // 🔄 TRANSFERÊNCIA: Fechar atribuição antiga e criar nova
+        console.log('🔄 Transferindo chat:', {
+          from: existingAssignment.agentId,
+          to: agentId,
+          chatId
+        });
+        
+        setAssignments(prev => prev.map(a => 
+          a.chatId === chatId && a.status === 'assigned'
+            ? { ...a, status: 'closed' as ChatStatus, closedAt: Date.now(), closedBy: user?.id, notes: 'Transferido' }
+            : a
+        ));
+        
+        // Decrementar contador do agente anterior
+        setAgents(prev => prev.map(agent => 
+          agent.id === existingAssignment.agentId 
+            ? { ...agent, activeChats: Math.max(0, agent.activeChats - 1) }
+            : agent
+        ));
+      }
+
+      // Criar nova atribuição
       const assignment: ChatAssignment = {
         id: `assignment_${Date.now()}`,
         chatId,
@@ -209,14 +252,15 @@ export function MultiAttendanceProvider({ children }: { children: ReactNode }) {
 
       setAssignments(prev => [...prev, assignment]);
       
-      // Atualizar contador de chats ativos do agente
+      // Atualizar contador de chats ativos do novo agente
       setAgents(prev => prev.map(agent => 
         agent.id === agentId 
           ? { ...agent, activeChats: agent.activeChats + 1 }
           : agent
       ));
 
-      toast.success('Chat atribuído com sucesso');
+      const agentName = agents.find(a => a.id === agentId)?.name || 'Agente';
+      toast.success(existingAssignment ? `Chat transferido para ${agentName}` : `Chat atribuído para ${agentName}`);
     } catch (error) {
       console.error('Erro ao atribuir chat:', error);
       toast.error('Erro ao atribuir chat');
@@ -330,6 +374,7 @@ export function MultiAttendanceProvider({ children }: { children: ReactNode }) {
 
   const contextValue: MultiAttendanceContextType = {
     currentUserRole,
+    currentUserId: user?.id || null, // ✅ ID do usuário logado
     isAdministrator: currentUserRole === 'administrator',
     isAgent: currentUserRole === 'agent' || currentUserRole === 'administrator',
     

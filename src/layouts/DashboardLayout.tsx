@@ -74,7 +74,7 @@ export function DashboardLayout() {
       case '/':
         setPageTitle('Dashboard');
         break;
-      case '/clients':
+      case '/usuarios':
         setPageTitle('Usuários');
         break;
       case '/messages':
@@ -141,7 +141,7 @@ export function DashboardLayout() {
         { label: 'Relatórios', path: '/messages/reports' }
       ]
     },
-    { icon: Users, label: 'Usuários', path: '/clients' },
+    { icon: Users, label: 'Usuários', path: '/usuarios' },
     { icon: CreditCard, label: 'Faturamento', path: '/billing' },
 
     { icon: UserCircle, label: 'Perfil', path: '/settings/profile' }

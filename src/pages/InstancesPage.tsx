@@ -9,10 +9,13 @@ import { getCurrentServerConfig } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { 
   syncInstancesStatus, 
+  syncAllInstancesForAdmin,
   registerInstanceInSupabase,
   deleteInstanceFromSupabase,
   updateInstanceInSupabase
 } from '../lib/instanceSync';
+
+const ADMIN_EMAIL = 'rafael@i9place.com.br';
 
 
 interface Instance {
@@ -75,10 +78,26 @@ export function InstancesPage() {
       if (!isRefreshing) {
         setIsRefreshing(true);
         
-        console.log('🔐 Carregando instâncias do Supabase (filtradas por user_id)...');
+        console.log('🔐 Carregando instâncias...');
+        console.log('👤 Email do usuário:', user.email);
+        console.log('🔑 Admin email:', ADMIN_EMAIL);
+        console.log('✅ É admin?', user.email === ADMIN_EMAIL);
         
-        // SEGURANÇA: Buscar do Supabase com RLS (filtra automaticamente por user_id)
-        const data = await syncInstancesStatus(user.id);
+        let data: any[] = [];
+        
+        // REGRA ESPECIAL: rafael@i9place.com.br vê TODAS as instâncias
+        if (user.email === ADMIN_EMAIL) {
+          console.log('👑 Usuário admin - Carregando TODAS as instâncias via sync completo');
+          
+          // Sincronizar com a API UAZAPI e Supabase
+          data = await syncAllInstancesForAdmin();
+          
+          console.log(`📊 Total de instâncias sincronizadas: ${data?.length || 0}`);
+        } else {
+          // Usuários normais: apenas suas instâncias (RLS automático)
+          console.log('👤 Usuário normal - Carregando apenas instâncias próprias');
+          data = await syncInstancesStatus(user.id);
+        }
         
         // Converter para formato esperado
         const formattedInstances: Instance[] = data.map(instance => ({
@@ -95,7 +114,7 @@ export function InstancesPage() {
           }
         }));
         
-        console.log(`✅ ${formattedInstances.length} instâncias carregadas (seguras)`);
+        console.log(`✅ ${formattedInstances.length} instâncias carregadas`);
         setInstances(formattedInstances);
       }
     } catch (error) {

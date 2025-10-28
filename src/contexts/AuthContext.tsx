@@ -81,6 +81,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (profileError) {
         console.error('Error checking profile:', profileError);
       } else if (profile && !profile.is_active) {
+        toast.error('🚫 Sua conta está desativada. Entre em contato com o suporte.');
         throw new Error('Sua conta está desativada. Entre em contato com o suporte.');
       }
 
@@ -90,8 +91,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         password,
       });
 
-      if (signInError) throw signInError;
-      if (!data.user) throw new Error('Usuário não encontrado');
+      if (signInError) {
+        console.error('Error during login:', signInError);
+        
+        // Tratar erros específicos de autenticação
+        if (signInError.message.includes('Invalid login credentials')) {
+          toast.error('❌ Email ou senha incorretos. Verifique seus dados e tente novamente.');
+          throw new Error('Email ou senha incorretos');
+        }
+        
+        if (signInError.message.includes('Email not confirmed')) {
+          toast.error('⚠️ Confirme seu email antes de fazer login. Verifique sua caixa de entrada.');
+          throw new Error('Email não confirmado');
+        }
+        
+        // Outros erros
+        const errorMessage = handleApiError(signInError);
+        toast.error(errorMessage);
+        throw signInError;
+      }
+      
+      if (!data.user) {
+        toast.error('❌ Erro ao fazer login. Tente novamente.');
+        throw new Error('Usuário não encontrado');
+      }
 
       // Atualiza o estado do usuário
       setUser(data.user);
@@ -137,11 +160,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       }
       
-      toast.success('Login realizado com sucesso!');
+      toast.success('✅ Login realizado com sucesso!');
     } catch (error) {
       console.error('Error during login:', error);
-      const message = handleApiError(error);
-      toast.error(message);
+      // Erro já foi mostrado via toast acima, apenas propagar
       throw error;
     }
   };
@@ -161,8 +183,37 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         },
       });
 
-      if (signUpError) throw signUpError;
-      if (!newUser) throw new Error('Erro ao criar usuário');
+      if (signUpError) {
+        console.error('Error during signup:', signUpError);
+        
+        // Tratar erros específicos de cadastro
+        if (signUpError.message.includes('already registered') || 
+            signUpError.message.includes('already exists') ||
+            signUpError.message.includes('User already registered')) {
+          toast.error('⚠️ Este email já está cadastrado. Faça login ou recupere sua senha.');
+          throw new Error('Email já cadastrado');
+        }
+        
+        if (signUpError.message.includes('Password should be at least')) {
+          toast.error('🔒 Senha muito fraca. Use no mínimo 6 caracteres com letras e números.');
+          throw new Error('Senha fraca');
+        }
+        
+        if (signUpError.message.includes('Invalid email')) {
+          toast.error('⚠️ Email inválido. Verifique o formato do email.');
+          throw new Error('Email inválido');
+        }
+        
+        // Outros erros
+        const errorMessage = handleApiError(signUpError);
+        toast.error(errorMessage);
+        throw signUpError;
+      }
+      
+      if (!newUser) {
+        toast.error('❌ Erro ao criar usuário. Tente novamente.');
+        throw new Error('Erro ao criar usuário');
+      }
 
       // Send welcome message if WhatsApp is provided
       if (cleanWhatsApp) {
@@ -185,13 +236,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       }
 
-      toast.success('Conta criada com sucesso! Verifique seu email para confirmar a conta e depois faça login.', {
+      toast.success('✅ Conta criada com sucesso! Verifique seu email para confirmar a conta e depois faça login.', {
         duration: 8000
       });
     } catch (error) {
       console.error('Error during signup:', error);
-      const message = handleApiError(error);
-      toast.error(message);
+      // Erro já foi mostrado via toast acima, apenas propagar
       throw error;
     }
   };
@@ -208,14 +258,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       const { error } = await supabase.auth.signOut();
-      if (error) throw error;
+      if (error) {
+        console.error('Error during logout:', error);
+        toast.error('❌ Erro ao sair. Tente novamente.');
+        throw error;
+      }
+      
       setUser(null);
       navigate('/login');
-      toast.success('Logout realizado com sucesso!');
+      toast.success('✅ Logout realizado com sucesso! Até logo!');
     } catch (error) {
       console.error('Error during logout:', error);
-      const message = error instanceof Error ? error.message : 'Erro ao sair';
-      toast.error(message);
       throw error;
     }
   };

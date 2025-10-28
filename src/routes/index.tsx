@@ -48,7 +48,7 @@ export function AppRoutes() {
         <Route path="/" element={<HomePage />} />
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="/settings/profile" element={<ProfileSettingsPage />} />
-        <Route path="/clients" element={<ClientsPage />} />
+        <Route path="/usuarios" element={<ClientsPage />} />
         
         <Route path="/messages/multi" element={<ChatPage />} />
         <Route path="/messages/campaigns" element={<MessagesPage />} />

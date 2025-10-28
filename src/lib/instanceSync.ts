@@ -156,6 +156,94 @@ export async function getUserInstancesFromSupabase(
 }
 
 /**
+ * Sincroniza TODAS as instâncias da API UAZAPI para o admin.
+ * APENAS para rafael@i9place.com.br - bypassa RLS.
+ */
+export async function syncAllInstancesForAdmin(): Promise<SupabaseInstance[]> {
+  try {
+    console.log('👑 Sincronizando TODAS as instâncias da UAZAPI para admin...');
+
+    // 1. Buscar TODAS as instâncias da API UAZAPI usando admin token
+    let apiInstances: any[] = [];
+    try {
+      apiInstances = await getUazapiInstances();
+      console.log(`📊 Encontradas ${apiInstances.length} instâncias na UAZAPI`);
+      console.log('📋 Instâncias da API:', apiInstances);
+    } catch (error) {
+      console.error('❌ Erro ao buscar instâncias da API UAZAPI:', error);
+      return [];
+    }
+
+    if (apiInstances.length === 0) {
+      console.warn('⚠️ Nenhuma instância encontrada na API UAZAPI');
+      return [];
+    }
+
+    // 2. Buscar TODAS as instâncias do Supabase via RPC admin
+    const { data: supabaseInstances, error } = await supabase
+      .rpc('get_all_instances_admin', { admin_email: 'rafael@i9place.com.br' });
+
+    if (error) {
+      console.error('❌ Erro ao buscar instâncias do Supabase:', error);
+      // Continuar mesmo com erro - vamos usar só as da API
+    }
+
+    console.log(`📊 Encontradas ${supabaseInstances?.length || 0} instâncias no Supabase`);
+
+    // 3. Converter TODAS as instâncias da API para o formato SupabaseInstance
+    const allInstances: SupabaseInstance[] = [];
+
+    for (const apiInstance of apiInstances) {
+      console.log(`🔍 Processando instância da API: ${apiInstance.name || apiInstance.id}`);
+      
+      // Encontrar no Supabase se existir
+      const supabaseInstance = supabaseInstances?.find(
+        (si: any) => si.id === apiInstance.id || si.token === apiInstance.token
+      );
+
+      if (supabaseInstance) {
+        console.log(`✅ Instância ${apiInstance.id} encontrada no Supabase`);
+        // Atualizar status se mudou
+        if (apiInstance.status !== supabaseInstance.status) {
+          console.log(`🔄 Status mudou para ${apiInstance.id}: ${supabaseInstance.status} -> ${apiInstance.status}`);
+          
+          const updated = await updateInstanceInSupabase(apiInstance.id, {
+            status: apiInstance.status,
+            phone_connected: apiInstance.phoneConnected || supabaseInstance.phone_connected,
+          });
+
+          allInstances.push(updated || supabaseInstance);
+        } else {
+          allInstances.push(supabaseInstance);
+        }
+      } else {
+        console.log(`⚠️ Instância ${apiInstance.id} NÃO está no Supabase, adicionando da API`);
+        // Instância não existe no Supabase, criar objeto temporário da API
+        allInstances.push({
+          id: apiInstance.id,
+          user_id: '', // Admin pode ver todas, user_id não importa
+          name: apiInstance.name || apiInstance.profileName || apiInstance.id,
+          token: apiInstance.token || '',
+          phone_connected: apiInstance.phoneConnected || '',
+          status: apiInstance.status,
+          is_active: true,
+          organization_id: undefined,
+          created_at: undefined,
+          updated_at: undefined,
+        });
+      }
+    }
+
+    console.log(`✅ Total de instâncias para admin: ${allInstances.length}`);
+    console.log('📋 Instâncias finais:', allInstances);
+    return allInstances;
+  } catch (error) {
+    console.error('❌ Erro ao sincronizar todas as instâncias:', error);
+    return [];
+  }
+}
+
+/**
  * Sincroniza status das instâncias do Supabase com a API UAZAPI.
  * Busca dados do Supabase (seguro) e atualiza status da API.
  */
@@ -250,14 +338,42 @@ export async function deleteInstanceFromSupabase(
 }
 
 /**
- * Valida se uma instância pertence ao usuário.
+ * Valida se uma instância pertence ao usuário OU se é super admin.
  * Retorna a instância se válida, null caso contrário.
  */
 export async function validateInstanceOwnership(
   instanceIdOrToken: string,
-  userId: string
+  userId: string,
+  userEmail?: string
 ): Promise<SupabaseInstance | null> {
   try {
+    // REGRA ESPECIAL: Super admin pode acessar qualquer instância
+    if (userEmail === 'rafael@i9place.com.br') {
+      console.log('👑 Super admin - Validando instância sem filtro de user_id');
+      
+      const { data, error } = await supabase
+        .rpc('get_all_instances_admin', { admin_email: userEmail });
+
+      if (error) {
+        console.error('❌ Erro ao buscar instância (admin):', error);
+        return null;
+      }
+
+      // Encontrar a instância específica
+      const instance = data?.find(
+        (inst: any) => inst.id === instanceIdOrToken || inst.token === instanceIdOrToken
+      );
+
+      if (!instance) {
+        console.warn('⚠️ Instância não encontrada');
+        return null;
+      }
+
+      console.log('✅ Super admin - Acesso autorizado à instância:', instance.name);
+      return instance;
+    }
+
+    // Usuários normais: validar ownership
     const { data, error } = await supabase
       .from('instances')
       .select('*')
@@ -288,11 +404,12 @@ export async function validateInstanceOwnership(
  */
 export async function getInstanceSecure(
   instanceIdOrToken: string,
-  userId: string
+  userId: string,
+  userEmail?: string
 ): Promise<SupabaseInstance | null> {
   console.log('🔐 Buscando instância com validação de segurança...');
   
-  const instance = await validateInstanceOwnership(instanceIdOrToken, userId);
+  const instance = await validateInstanceOwnership(instanceIdOrToken, userId, userEmail);
   
   if (!instance) {
     console.error('🚫 ACESSO NEGADO: Instância não pertence ao usuário');

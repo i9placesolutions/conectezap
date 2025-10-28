@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { X, Search, UserPlus, Shield, AlertTriangle } from 'lucide-react';
-import { toast } from 'react-hot-toast';
 import { Avatar } from './ui/Avatar';
+import { uazapiService } from '../services/uazapiService';
 
 interface BlockedContact {
   id: string;
@@ -103,7 +103,7 @@ export function BlocksModal({
                   <div className="flex items-center space-x-3">
                     <div className="relative">
                       <Avatar
-                        src={contact.profileImage?.includes('pps.whatsapp.net') ? undefined : contact.profileImage}
+                        src={uazapiService.getProxiedImageUrl(contact.profileImage || '')}
                           alt={contact.name}
                         name={contact.name}
                         size="lg"

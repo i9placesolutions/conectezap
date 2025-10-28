@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
-import { X, Search, UserPlus, UserMinus, Phone, Mail } from 'lucide-react';
-import { toast } from 'react-hot-toast';
+import { useState, useEffect } from 'react';
+import { X, Search, UserPlus, UserMinus, Phone } from 'lucide-react';
 import { Avatar } from './ui/Avatar';
+import { uazapiService } from '../services/uazapiService';
 
 interface Contact {
   id: string;
@@ -99,7 +99,7 @@ export function ContactsModal({
                 <div key={contact.id} className="p-4 flex items-center justify-between hover:bg-gray-50">
                   <div className="flex items-center space-x-3">
                     <Avatar
-                      src={contact.profileImage?.includes('pps.whatsapp.net') ? undefined : contact.profileImage}
+                      src={uazapiService.getProxiedImageUrl(contact.profileImage || '')}
                           alt={contact.name}
                       name={contact.name}
                       size="lg"

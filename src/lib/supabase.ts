@@ -59,10 +59,52 @@ export interface ApiError {
 
 // Funções utilitárias
 export const handleApiError = (error: any): string => {
+  // Erros de autenticação do Supabase
   if (error?.message) {
+    const message = error.message.toLowerCase();
+    
+    // Credenciais inválidas
+    if (message.includes('invalid login credentials') || 
+        message.includes('invalid credentials') ||
+        message.includes('email not confirmed')) {
+      return '❌ Email ou senha incorretos. Verifique seus dados e tente novamente.';
+    }
+    
+    // Email não confirmado
+    if (message.includes('email not confirmed')) {
+      return '⚠️ Confirme seu email antes de fazer login. Verifique sua caixa de entrada.';
+    }
+    
+    // Muitas tentativas
+    if (message.includes('too many requests')) {
+      return '⏰ Muitas tentativas de login. Aguarde alguns minutos e tente novamente.';
+    }
+    
+    // Usuário não encontrado
+    if (message.includes('user not found')) {
+      return '❌ Usuário não cadastrado. Verifique o email ou crie uma nova conta.';
+    }
+    
+    // Senha fraca
+    if (message.includes('password') && message.includes('weak')) {
+      return '🔒 Senha muito fraca. Use no mínimo 6 caracteres.';
+    }
+    
+    // Email já cadastrado
+    if (message.includes('already registered') || message.includes('already exists')) {
+      return '⚠️ Este email já está cadastrado. Faça login ou recupere sua senha.';
+    }
+    
+    // Erro de rede
+    if (message.includes('network') || message.includes('fetch')) {
+      return '🌐 Erro de conexão. Verifique sua internet e tente novamente.';
+    }
+    
+    // Retorna mensagem original se não houver tradução
     return error.message;
   }
-  return 'Erro desconhecido';
+  
+  return '❌ Erro desconhecido. Tente novamente ou entre em contato com o suporte.';
 };
 
 export const checkApiConnection = async (): Promise<boolean> => {
