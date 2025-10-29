@@ -5,6 +5,7 @@ import { AuthProvider } from './contexts/AuthContext';
 import { InstanceProvider } from './contexts/InstanceContext';
 import { ServerProvider } from './contexts/ServerContext';
 import { MultiAttendanceProvider } from './contexts/MultiAttendanceContext';
+import { SSEProvider } from './contexts/SSEContext';
 import { AppRoutes } from './routes';
 
 function App() {
@@ -15,8 +16,10 @@ function App() {
           <ServerProvider>
             <MultiAttendanceProvider>
               <InstanceProvider>
-                <AppRoutes />
-                <Toaster position="top-right" />
+                <SSEProvider autoStart={true}>
+                  <AppRoutes />
+                  <Toaster position="top-right" />
+                </SSEProvider>
               </InstanceProvider>
             </MultiAttendanceProvider>
           </ServerProvider>

@@ -16,7 +16,6 @@ import { ProfilePage } from '../pages/auth/ProfilePage';
 import { HomePage } from '../pages/HomePage';
 import { ProfileSettingsPage } from '../pages/ProfileSettingsPage';
 import { ClientsPage } from '../pages/ClientsPage';
-import { MessagesPage } from '../pages/MessagesPage';
 import { ChatPage } from '../pages/ChatPage';
 
 import { InstancesPage } from '../pages/InstancesPage';
@@ -51,7 +50,6 @@ export function AppRoutes() {
         <Route path="/usuarios" element={<ClientsPage />} />
         
         <Route path="/messages/multi" element={<ChatPage />} />
-        <Route path="/lead" element={<MessagesPage />} />
         <Route path="/messages/instances" element={<InstancesPage />} />
         <Route path="/messages/mass" element={<MassMessagingPage />} />
         <Route path="/messages/reports" element={<ReportsPage />} />

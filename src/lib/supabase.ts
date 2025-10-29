@@ -34,22 +34,31 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
         // Capturar erros de refresh token
         const urlString = typeof url === 'string' ? url : url.toString();
         if (!response.ok && urlString.includes('/auth/v1/token')) {
-          const errorText = await response.text();
-          if (errorText.includes('Invalid Refresh Token') || errorText.includes('Refresh Token Not Found')) {
-            console.warn('🔄 Refresh token inválido detectado, limpando sessão...');
-            
-            // Limpar dados de autenticação
-            try {
-              localStorage.removeItem('sb-fuojiwpyhoimyrknfcze-auth-token');
-              sessionStorage.clear();
+          // IMPORTANTE: Clonar a response antes de ler o body
+          // para evitar "body stream already read"
+          const clonedResponse = response.clone();
+          
+          try {
+            const errorText = await clonedResponse.text();
+            if (errorText.includes('Invalid Refresh Token') || errorText.includes('Refresh Token Not Found')) {
+              console.warn('🔄 Refresh token inválido detectado, limpando sessão...');
               
-              // Recarregar página para forçar logout
-              setTimeout(() => {
-                window.location.href = '/auth?expired=true';
-              }, 100);
-            } catch (error) {
-              console.error('Erro ao limpar sessão:', error);
+              // Limpar dados de autenticação
+              try {
+                localStorage.removeItem('sb-fuojiwpyhoimyrknfcze-auth-token');
+                sessionStorage.clear();
+                
+                // Recarregar página para forçar logout
+                setTimeout(() => {
+                  window.location.href = '/auth?expired=true';
+                }, 100);
+              } catch (error) {
+                console.error('Erro ao limpar sessão:', error);
+              }
             }
+          } catch (readError) {
+            // Se não conseguir ler o body, apenas ignorar
+            console.warn('Não foi possível ler body da resposta:', readError);
           }
         }
         

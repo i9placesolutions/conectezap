@@ -101,20 +101,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signIn = async (email: string, password: string) => {
     try {
-      // First check if user exists
-      const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('email', email)
-        .maybeSingle();
-
-      if (profileError) {
-        console.error('Error checking profile:', profileError);
-      } else if (profile && !profile.is_active) {
-        toast.error('🚫 Sua conta está desativada. Entre em contato com o suporte.');
-        throw new Error('Sua conta está desativada. Entre em contato com o suporte.');
-      }
-
       // Attempt to sign in
       const { error: signInError, data } = await supabase.auth.signInWithPassword({
         email,
@@ -122,7 +108,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
 
       if (signInError) {
-        console.error('Error during login:', signInError);
+        console.error('❌ Erro durante login:', signInError);
         
         // Tratar erros específicos de autenticação
         if (signInError.message.includes('Invalid login credentials')) {
@@ -135,15 +121,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           throw new Error('Email não confirmado');
         }
         
-        // Outros erros
-        const errorMessage = handleApiError(signInError);
-        toast.error(errorMessage);
-        throw signInError;
+        if (signInError.message.includes('too many requests')) {
+          toast.error('⏰ Muitas tentativas de login. Aguarde alguns minutos e tente novamente.');
+          throw new Error('Muitas tentativas');
+        }
+        
+        // Outros erros - NÃO mostrar toast aqui para evitar duplicação
+        throw new Error(signInError.message || 'Erro ao fazer login');
       }
       
       if (!data.user) {
         toast.error('❌ Erro ao fazer login. Tente novamente.');
         throw new Error('Usuário não encontrado');
+      }
+
+      // Verificar se a conta está ativa APÓS login bem-sucedido
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('is_active')
+        .eq('id', data.user.id)
+        .maybeSingle();
+
+      if (profileError) {
+        console.error('⚠️ Erro ao verificar profile:', profileError);
+      } else if (profile && !profile.is_active) {
+        // Fazer logout se conta está desativada
+        await supabase.auth.signOut();
+        toast.error('🚫 Sua conta está desativada. Entre em contato com o suporte.');
+        throw new Error('Conta desativada');
       }
 
       // Atualiza o estado do usuário

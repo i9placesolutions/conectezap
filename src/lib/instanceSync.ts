@@ -15,7 +15,8 @@ import { toast } from 'react-hot-toast';
  */
 
 export interface SupabaseInstance {
-  id: string;
+  id: string; // UUID gerado pelo Supabase
+  external_id?: string; // ID da UAZAPI (não é UUID)
   user_id: string;
   name: string;
   token: string;
@@ -33,7 +34,7 @@ export interface SupabaseInstance {
  */
 export async function registerInstanceInSupabase(
   instanceData: {
-    id: string;
+    external_id: string; // ID da UAZAPI (não é UUID)
     name: string;
     token: string;
     user_id: string;
@@ -43,12 +44,15 @@ export async function registerInstanceInSupabase(
   }
 ): Promise<SupabaseInstance | null> {
   try {
-    console.log('📝 Registrando instância no Supabase:', instanceData.id);
+    console.log('📝 Registrando instância no Supabase...');
+    console.log('📋 External ID (UAZAPI):', instanceData.external_id);
+    console.log('👤 User ID:', instanceData.user_id);
 
     const { data, error } = await supabase
       .from('instances')
       .insert({
-        id: instanceData.id,
+        // Deixa Supabase gerar UUID automaticamente
+        external_id: instanceData.external_id, // Armazena ID da UAZAPI
         user_id: instanceData.user_id,
         name: instanceData.name,
         token: instanceData.token,
@@ -62,23 +66,39 @@ export async function registerInstanceInSupabase(
 
     if (error) {
       console.error('❌ Erro ao registrar instância no Supabase:', error);
+      console.error('📋 Error code:', error.code);
+      console.error('📋 Error details:', error.details);
+      console.error('📋 Error hint:', error.hint);
       
-      // Se for erro de duplicata, tentar atualizar
-      if (error.code === '23505') {
-        console.log('⚠️ Instância já existe, tentando atualizar...');
-        return await updateInstanceInSupabase(instanceData.id, {
-          name: instanceData.name,
-          token: instanceData.token,
-          phone_connected: instanceData.phone_connected,
-          status: instanceData.status || 'disconnected',
-        });
+      // Se for erro de duplicata no external_id, tentar buscar e atualizar
+      if (error.code === '23505' && error.message?.includes('external_id')) {
+        console.log('⚠️ Instância já existe, tentando buscar e atualizar...');
+        
+        // Buscar instância existente por external_id
+        const { data: existing, error: searchError } = await supabase
+          .from('instances')
+          .select('*')
+          .eq('external_id', instanceData.external_id)
+          .eq('user_id', instanceData.user_id)
+          .single();
+
+        if (!searchError && existing) {
+          console.log('✅ Instância encontrada, atualizando...');
+          return await updateInstanceInSupabase(existing.id, {
+            name: instanceData.name,
+            token: instanceData.token,
+            phone_connected: instanceData.phone_connected,
+            status: instanceData.status || 'disconnected',
+          });
+        }
       }
       
-      toast.error('Erro ao registrar instância');
+      toast.error('Erro ao registrar instância: ' + error.message);
       return null;
     }
 
     console.log('✅ Instância registrada com sucesso no Supabase');
+    console.log('🆔 UUID gerado:', data.id);
     return data;
   } catch (error) {
     console.error('❌ Erro ao registrar instância:', error);
@@ -196,9 +216,9 @@ export async function syncAllInstancesForAdmin(): Promise<SupabaseInstance[]> {
     for (const apiInstance of apiInstances) {
       console.log(`🔍 Processando instância da API: ${apiInstance.name || apiInstance.id}`);
       
-      // Encontrar no Supabase se existir
+      // Encontrar no Supabase se existir (por external_id ou token)
       const supabaseInstance = supabaseInstances?.find(
-        (si: any) => si.id === apiInstance.id || si.token === apiInstance.token
+        (si: any) => si.external_id === apiInstance.id || si.token === apiInstance.token
       );
 
       if (supabaseInstance) {
@@ -207,7 +227,7 @@ export async function syncAllInstancesForAdmin(): Promise<SupabaseInstance[]> {
         if (apiInstance.status !== supabaseInstance.status) {
           console.log(`🔄 Status mudou para ${apiInstance.id}: ${supabaseInstance.status} -> ${apiInstance.status}`);
           
-          const updated = await updateInstanceInSupabase(apiInstance.id, {
+          const updated = await updateInstanceInSupabase(supabaseInstance.id, {
             status: apiInstance.status,
             phone_connected: apiInstance.phoneConnected || supabaseInstance.phone_connected,
           });
@@ -220,7 +240,8 @@ export async function syncAllInstancesForAdmin(): Promise<SupabaseInstance[]> {
         console.log(`⚠️ Instância ${apiInstance.id} NÃO está no Supabase, adicionando da API`);
         // Instância não existe no Supabase, criar objeto temporário da API
         allInstances.push({
-          id: apiInstance.id,
+          id: apiInstance.id, // Temporário: usar ID da API
+          external_id: apiInstance.id,
           user_id: '', // Admin pode ver todas, user_id não importa
           name: apiInstance.name || apiInstance.profileName || apiInstance.id,
           token: apiInstance.token || '',
@@ -276,13 +297,15 @@ export async function syncInstancesStatus(
     for (const supabaseInstance of supabaseInstances) {
       // Encontrar instância correspondente na API
       const apiInstance = apiInstances.find(
-        api => api.id === supabaseInstance.id || api.token === supabaseInstance.token
+        api => 
+          api.id === supabaseInstance.external_id || 
+          api.token === supabaseInstance.token
       );
 
       if (apiInstance) {
         // Atualizar status se mudou
         if (apiInstance.status !== supabaseInstance.status) {
-          console.log(`🔄 Status mudou para ${supabaseInstance.id}: ${apiInstance.status}`);
+          console.log(`🔄 Status mudou para ${supabaseInstance.external_id}: ${apiInstance.status}`);
           
           const updated = await updateInstanceInSupabase(supabaseInstance.id, {
             status: apiInstance.status,
@@ -295,7 +318,7 @@ export async function syncInstancesStatus(
         }
       } else {
         // Instância não existe mais na API
-        console.warn(`⚠️ Instância ${supabaseInstance.id} não encontrada na API`);
+        console.warn(`⚠️ Instância ${supabaseInstance.external_id} não encontrada na API`);
         syncedInstances.push(supabaseInstance);
       }
     }

@@ -2251,15 +2251,15 @@ export function ChatPage() {
               <div className="flex items-center gap-3">
                 <div className="relative">
                   {/* Foto de perfil ou avatar com inicial */}
-                  {chat.profilePicUrl ? (
+                  {chat.profilePicUrl && !chat.profilePicUrl.includes('pps.whatsapp.net') ? (
                     <img
                       src={uazapiService.getProxiedImageUrl(chat.profilePicUrl)}
                       alt={chat.name}
                       className="h-12 w-12 rounded-full object-cover flex-shrink-0 bg-gray-100"
                       crossOrigin="anonymous"
+                      referrerPolicy="no-referrer"
                       onError={(e) => {
                         // Fallback para avatar com inicial se imagem falhar
-                        console.warn('Erro ao carregar imagem de perfil:', chat.profilePicUrl);
                         e.currentTarget.style.display = 'none';
                         const fallback = e.currentTarget.nextElementSibling;
                         if (fallback) (fallback as HTMLElement).style.display = 'flex';
@@ -2268,7 +2268,7 @@ export function ChatPage() {
                   ) : null}
                   <div 
                     className="h-12 w-12 rounded-full bg-primary-100 flex items-center justify-center flex-shrink-0"
-                    style={{ display: chat.profilePicUrl ? 'none' : 'flex' }}
+                    style={{ display: (chat.profilePicUrl && !chat.profilePicUrl.includes('pps.whatsapp.net')) ? 'none' : 'flex' }}
                   >
                     <span className="text-primary-600 font-medium">
                       {chat.name[0]?.toUpperCase() || '?'}
@@ -2362,14 +2362,14 @@ export function ChatPage() {
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   {/* Foto de perfil ou avatar no header */}
-                  {selectedChat.profilePicUrl ? (
+                  {selectedChat.profilePicUrl && !selectedChat.profilePicUrl.includes('pps.whatsapp.net') ? (
                     <img
                       src={uazapiService.getProxiedImageUrl(selectedChat.profilePicUrl)}
                       alt={selectedChat.name}
                       className="h-10 w-10 rounded-full object-cover bg-gray-100"
                       crossOrigin="anonymous"
+                      referrerPolicy="no-referrer"
                       onError={(e) => {
-                        console.warn('Erro ao carregar imagem de perfil no header:', selectedChat.profilePicUrl);
                         e.currentTarget.style.display = 'none';
                         const fallback = e.currentTarget.nextElementSibling;
                         if (fallback) (fallback as HTMLElement).style.display = 'flex';
@@ -2378,7 +2378,7 @@ export function ChatPage() {
                   ) : null}
                   <div 
                     className="h-10 w-10 rounded-full bg-primary-100 flex items-center justify-center"
-                    style={{ display: selectedChat.profilePicUrl ? 'none' : 'flex' }}
+                    style={{ display: (selectedChat.profilePicUrl && !selectedChat.profilePicUrl.includes('pps.whatsapp.net')) ? 'none' : 'flex' }}
                   >
                     <span className="text-primary-600 font-medium">
                       {selectedChat.name[0]?.toUpperCase() || '?'}

@@ -19,7 +19,8 @@ const ADMIN_EMAIL = 'rafael@i9place.com.br';
 
 
 interface Instance {
-  id: string;
+  id: string; // UUID do Supabase
+  external_id?: string; // ID da UAZAPI
   name: string;
   status: 'connected' | 'disconnected' | 'connecting';
   token: string;
@@ -101,7 +102,8 @@ export function InstancesPage() {
         
         // Converter para formato esperado
         const formattedInstances: Instance[] = data.map(instance => ({
-          id: instance.id,
+          id: instance.id, // UUID do Supabase
+          external_id: instance.external_id, // ID da UAZAPI
           name: instance.name,
           status: instance.status,
           token: instance.token,
@@ -156,7 +158,7 @@ export function InstancesPage() {
       // SEGURANÇA CRÍTICA: Registrar instância no Supabase com user_id
       console.log('🔐 Registrando instância no Supabase...');
       const supabaseInstance = await registerInstanceInSupabase({
-        id: responseData.instance?.id || responseData.id,
+        external_id: responseData.instance?.id || responseData.id, // ID da UAZAPI
         name: data.instanceName || data.name,
         token: responseData.instance?.token || responseData.token,
         user_id: user.id, // CRÍTICO: Vincular ao usuário

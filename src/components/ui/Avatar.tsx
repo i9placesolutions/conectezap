@@ -29,7 +29,12 @@ export function Avatar({
   const [isLoading, setIsLoading] = useState(true);
 
   const handleImageError = () => {
-    console.log('🖼️ Avatar: Falha ao carregar imagem, usando fallback', { src, name });
+    // Silenciar erro 403 do WhatsApp (é esperado devido a CORS)
+    if (src?.includes('pps.whatsapp.net')) {
+      console.debug('🖼️ Avatar WhatsApp bloqueado por CORS (403), usando fallback');
+    } else {
+      console.warn('🖼️ Avatar: Falha ao carregar imagem', { src, name });
+    }
     setHasError(true);
     setIsLoading(false);
   };
@@ -99,6 +104,8 @@ export function Avatar({
         onError={handleImageError}
         onLoad={handleImageLoad}
         loading="lazy"
+        referrerPolicy="no-referrer"
+        crossOrigin="anonymous"
       />
     </div>
   );

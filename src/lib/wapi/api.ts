@@ -1963,11 +1963,251 @@ export const searchAllMessages = async (
   }
 };
 
+/**
+ * Atualiza o mapa de campos personalizados da instância
+ * Define os nomes/labels para os 20 campos customizáveis (lead_field01 a lead_field20)
+ */
+export const updateLeadFieldsMap = async (
+  fieldsMap: Record<string, string>,
+  instanceToken: string
+) => {
+  try {
+    console.log('🔧 updateLeadFieldsMap - Atualizando configuração de campos:', fieldsMap);
+    
+    const client = createInstanceClient(instanceToken);
+    const response = await client.post('/instance/updateFieldsMap', fieldsMap);
+    
+    console.log('✅ updateLeadFieldsMap - Campos atualizados com sucesso');
+    return response.data;
+  } catch (error: any) {
+    console.error('❌ updateLeadFieldsMap - Erro:', error.response?.data || error.message);
+    throw error;
+  }
+};
+
+/**
+ * Edita informações de lead associadas a um chat
+ * Permite atualizar status, atendente, posição no kanban, tags e campos customizados
+ * 
+ * IMPORTANTE: As alterações são refletidas imediatamente no banco de dados do UAZAPI
+ * e disparam eventos webhook/SSE para manter a aplicação sincronizada.
+ */
+export const editLead = async (
+  leadData: {
+    id: string; // wa_chatid (ex: "5511999999999@s.whatsapp.net") ou wa_fastid
+    chatbot_disableUntil?: number;
+    lead_isTicketOpen?: boolean;
+    lead_assignedAttendant_id?: string;
+    lead_kanbanOrder?: number;
+    lead_tags?: string[];
+    lead_name?: string;
+    lead_fullName?: string;
+    lead_email?: string;
+    lead_personalId?: string;
+    lead_status?: string;
+    lead_notes?: string;
+    lead_field01?: string;
+    lead_field02?: string;
+    lead_field03?: string;
+    lead_field04?: string;
+    lead_field05?: string;
+    lead_field06?: string;
+    lead_field07?: string;
+    lead_field08?: string;
+    lead_field09?: string;
+    lead_field10?: string;
+    lead_field11?: string;
+    lead_field12?: string;
+    lead_field13?: string;
+    lead_field14?: string;
+    lead_field15?: string;
+    lead_field16?: string;
+    lead_field17?: string;
+    lead_field18?: string;
+    lead_field19?: string;
+    lead_field20?: string;
+  },
+  instanceToken: string
+) => {
+  try {
+    console.log('💾 ==========================================');
+    console.log('💾 EDITANDO LEAD');
+    console.log('💾 ==========================================');
+    console.log('💾 ID do Lead:', leadData.id);
+    console.log('💾 Status NOVO:', leadData.lead_status);
+    console.log('💾 Dados completos:', JSON.stringify(leadData, null, 2));
+    
+    const client = createInstanceClient(instanceToken);
+    
+    // Validar campos de texto (máximo 255 caracteres conforme documentação)
+    const sanitizedData: any = { id: leadData.id };
+    
+    Object.keys(leadData).forEach(key => {
+      if (key === 'id') return;
+      
+      const value = (leadData as any)[key];
+      
+      if (typeof value === 'string' && value.length > 255) {
+        console.warn(`⚠️ Campo ${key} truncado de ${value.length} para 255 caracteres`);
+        sanitizedData[key] = value.substring(0, 255);
+      } else {
+        sanitizedData[key] = value;
+      }
+    });
+    
+    console.log('💾 Enviando para POST /chat/editLead');
+    const response = await client.post('/chat/editLead', sanitizedData);
+    
+    console.log('💾 ==========================================');
+    console.log('💾 RESPOSTA DA API:');
+    console.log('💾 ==========================================');
+    console.log('💾 Status HTTP:', response.status);
+    console.log('💾 Lead atualizado:', response.data?.id || response.data?.wa_chatid);
+    console.log('💾 Status do lead:', response.data?.lead_status);
+    console.log('💾 ==========================================');
+    
+    return response.data;
+  } catch (error: any) {
+    console.error('💾 ==========================================');
+    console.error('💾 ERRO AO SALVAR LEAD');
+    console.error('💾 ==========================================');
+    console.error('💾 Mensagem:', error.message);
+    console.error('💾 Status HTTP:', error.response?.status);
+    console.error('💾 Dados do erro:', JSON.stringify(error.response?.data, null, 2));
+    console.error('💾 ==========================================');
+    throw error;
+  }
+};
+
+/**
+ * Busca leads (chats) com filtros personalizados
+ * 
+ * Filtros suportados:
+ * - lead_status: Status do lead (ex: "novo", "qualificado", "~novo" para negação)
+ * - lead_tags: Tags do lead
+ * - wa_isGroup: true/false para filtrar grupos
+ * - wa_label: Label do WhatsApp
+ * - sort: Ordenação (ex: "-wa_lastMsgTimestamp" para mais recente primeiro)
+ * - limit: Quantidade de resultados (padrão: 50)
+ * - offset: Paginação
+ */
+export const findLeads = async (
+  filters: {
+    operator?: 'AND' | 'OR';
+    sort?: string; // Ex: "-wa_lastMsgTimestamp" (- para DESC)
+    limit?: number;
+    offset?: number;
+    lead_status?: string; // Use ~ para negação (ex: "~novo")
+    lead_tags?: string;
+    wa_isGroup?: boolean;
+    wa_label?: string;
+    [key: string]: any;
+  },
+  instanceToken: string
+) => {
+  try {
+    console.log('🔍 findLeads - Filtros recebidos:', filters);
+    
+    const client = createInstanceClient(instanceToken);
+    
+    const defaultFilters = {
+      operator: 'AND',
+      sort: '-wa_lastMsgTimestamp',
+      limit: 50,
+      offset: 0,
+      ...filters
+    };
+    
+    console.log('📤 findLeads - Enviando para POST /chat/find:', defaultFilters);
+    
+    const response = await client.post('/chat/find', defaultFilters);
+    
+    console.log('📥 findLeads - Resposta da API:', {
+      totalChats: response.data?.chats?.length || 0,
+      hasChatsArray: Array.isArray(response.data?.chats),
+      isDirectArray: Array.isArray(response.data)
+    });
+    
+    if (response.data && Array.isArray(response.data.chats)) {
+      return response.data;
+    } else if (response.data && Array.isArray(response.data)) {
+      return { chats: response.data };
+    }
+    
+    return { chats: [] };
+  } catch (error: any) {
+    console.error('❌ findLeads - Erro:', error.response?.data || error.message);
+    throw error;
+  }
+};
+
+/**
+ * Busca todos os chats individuais (sem grupos) para importação como leads
+ */
+export const getChatsForLeads = async (
+  instanceToken: string,
+  limit: number = 100,
+  offset: number = 0
+) => {
+  try {
+    console.log('📥 Buscando chats para leads (sem grupos)...');
+    
+    const client = createInstanceClient(instanceToken);
+    
+    const filters = {
+      operator: 'AND',
+      sort: '-wa_lastMsgTimestamp', // Mais recentes primeiro
+      limit,
+      offset,
+      wa_isGroup: false // APENAS chats individuais, SEM grupos
+    };
+    
+    console.log('📤 Enviando para POST /chat/find:', filters);
+    
+    const response = await client.post('/chat/find', filters);
+    
+    console.log('📥 Resposta:', {
+      totalChats: response.data?.chats?.length || 0,
+      hasChatsArray: Array.isArray(response.data?.chats)
+    });
+    
+    let chats = [];
+    if (response.data && Array.isArray(response.data.chats)) {
+      chats = response.data.chats;
+    } else if (Array.isArray(response.data)) {
+      chats = response.data;
+    }
+    
+    // Ordenar no lado do cliente como garantia (mais recentes primeiro)
+    chats.sort((a: any, b: any) => {
+      const timeA = a.wa_lastMsgTimestamp || a.lastMessage?.timestamp || 0;
+      const timeB = b.wa_lastMsgTimestamp || b.lastMessage?.timestamp || 0;
+      return timeB - timeA; // Decrescente (mais recente primeiro)
+    });
+    
+    console.log('📊 Primeiros 3 chats ordenados:', 
+      chats.slice(0, 3).map((c: any) => ({
+        name: c.name || c.pushname,
+        timestamp: c.wa_lastMsgTimestamp || c.lastMessage?.timestamp,
+        date: c.wa_lastMsgTimestamp 
+          ? new Date((c.wa_lastMsgTimestamp > 10000000000 ? c.wa_lastMsgTimestamp : c.wa_lastMsgTimestamp * 1000)).toLocaleString()
+          : 'sem data'
+      }))
+    );
+    
+    return chats;
+  } catch (error: any) {
+    console.error('❌ Erro ao buscar chats:', error.response?.data || error.message);
+    throw error;
+  }
+};
+
 export default {
   getInstances,
   sendMessage,
   sendTextMessage,
   getChats,
+  getChatsForLeads,
   getMessages,
   getProfilePicture,
   getProfileInfo,
@@ -1978,6 +2218,9 @@ export default {
   deleteInstance,
   logoutInstance,
   getGroups,
+  updateLeadFieldsMap,
+  editLead,
+  findLeads,
   downloadMessageMedia,
   chat,
   message,

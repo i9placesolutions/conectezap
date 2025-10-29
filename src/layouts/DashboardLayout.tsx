@@ -136,7 +136,6 @@ export function DashboardLayout() {
         { label: 'Instâncias', path: '/messages/instances' },
         
         { label: 'Multiatendimento', path: '/messages/multi' },
-        { label: 'Lead', path: '/lead' },
         { label: 'Disparo em Massa', path: '/messages/mass' },
         { label: 'Relatórios', path: '/messages/reports' }
       ]
