@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { useInstance } from '../contexts/InstanceContext';
-import { getInstances } from '../lib/wapi/api';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 
@@ -18,7 +17,8 @@ export function InstanceModal() {
   const { 
     showInstanceModal, 
     setShowInstanceModal,
-    setSelectedInstance
+    setSelectedInstance,
+    instances: contextInstances // Usar instâncias do contexto
   } = useInstance();
   
   const [apiInstances, setApiInstances] = useState<ApiInstance[]>([]);
@@ -29,22 +29,34 @@ export function InstanceModal() {
     if (showInstanceModal) {
       loadConnectedInstances();
     }
-  }, [showInstanceModal]);
+  }, [showInstanceModal, contextInstances]); // Adicionar contextInstances como dependência
 
   const loadConnectedInstances = async () => {
     try {
       setLoading(true);
-      const instances = await getInstances();
+      
+      // ✅ CORREÇÃO: Usar instâncias do contexto (já filtradas por usuário)
+      console.log('📋 Carregando instâncias do contexto para InstanceModal');
+      console.log(`📊 Total de instâncias disponíveis: ${contextInstances.length}`);
       
       // Filtrar apenas instâncias conectadas
-      const connectedInstances = instances.filter(instance => 
-        instance.status === 'connected'
-      );
+      const connectedInstances = contextInstances
+        .filter(instance => instance.status === 'connected')
+        .map(inst => ({
+          id: inst.id,
+          name: inst.name,
+          status: inst.status,
+          token: inst.token || '',
+          phoneConnected: inst.phoneConnected || '',
+          profileName: inst.profileName || inst.name,
+          systemName: inst.systemName || inst.name
+        }));
       
       setApiInstances(connectedInstances);
       
       if (connectedInstances.length === 0) {
-        toast.error('Nenhuma instância conectada encontrada');
+        console.warn('⚠️ Nenhuma instância conectada encontrada');
+        toast.error('Nenhuma instância conectada encontrada. Conecte uma instância primeiro.');
       }
     } catch (error) {
       console.error('Erro ao carregar instâncias:', error);

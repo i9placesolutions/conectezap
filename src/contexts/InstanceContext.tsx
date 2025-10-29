@@ -89,6 +89,10 @@ export function InstanceProvider({ children }: { children: React.ReactNode }) {
       setLoading(true);
       
       console.log('🔐 Carregando instâncias...');
+      console.log('👤 Email do usuário:', user.email);
+      console.log('👤 ID do usuário:', user.id);
+      console.log('🔑 Admin email:', ADMIN_EMAIL);
+      console.log('✅ É admin?', user.email === ADMIN_EMAIL);
       
       let supabaseInstances: any[] = [];
       
@@ -103,7 +107,9 @@ export function InstanceProvider({ children }: { children: React.ReactNode }) {
       } else {
         // Usuários normais: apenas suas instâncias (RLS automático)
         console.log('👤 Usuário normal - Carregando apenas instâncias próprias');
+        console.log('🔍 Buscando instâncias para user_id:', user.id);
         supabaseInstances = await syncInstancesStatus(user.id);
+        console.log(`📋 Instâncias encontradas: ${supabaseInstances?.length || 0}`);
       }
       
       // Converter para o formato do contexto
