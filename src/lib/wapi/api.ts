@@ -1,4 +1,4 @@
-// Configuração da API UAZAPI
+       // Configuração da API UAZAPI
 
 // Variáveis de ambiente (fallback para o servidor 1)
 export const API_URL = import.meta.env.VITE_API_URL || 'https://i9place1.uazapi.com';

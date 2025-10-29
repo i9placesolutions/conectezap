@@ -69,17 +69,15 @@ export function InstanceProvider({ children }: { children: React.ReactNode }) {
           // Se há apenas uma instância, selecionar automaticamente
           setSelectedInstance(instances[0]);
           setShowInstanceModal(false);
-        } else if (defaultInstance) {
-          // Se há instância padrão, usar ela
-          setSelectedInstance(defaultInstance);
-          setShowInstanceModal(false);
         } else {
-          // Se há múltiplas e nenhuma padrão, mostrar modal
+          // Se há múltiplas instâncias, SEMPRE mostrar modal para escolher
+          // (removida verificação de defaultInstance que pulava o modal)
+          console.log('📋 Múltiplas instâncias disponíveis, mostrando modal de seleção');
           setShowInstanceModal(true);
         }
       }
     }
-  }, [location.pathname, instances.length, defaultInstance]);
+  }, [location.pathname, instances.length, selectedInstance]);
 
   const loadInstances = async () => {
     if (!user) {
