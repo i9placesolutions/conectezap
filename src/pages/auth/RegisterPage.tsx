@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { useForm, Controller } from 'react-hook-form';
 import { toast } from 'react-hot-toast';
 import { useAuth } from '../../contexts/AuthContext';
@@ -21,7 +21,6 @@ export function RegisterPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const { signUp } = useAuth();
-  const navigate = useNavigate();
   const { register, handleSubmit, watch, formState: { errors }, control } = useForm<RegisterForm>({
     defaultValues: {
       whatsapp: '55'
@@ -56,7 +55,7 @@ export function RegisterPage() {
         fullName: data.fullName,
         whatsapp: cleanWhatsApp,
       });
-      navigate('/profile');
+      // O signUp já redireciona para o dashboard
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Erro ao criar conta');
     } finally {

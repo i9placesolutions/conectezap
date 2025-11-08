@@ -116,11 +116,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           throw new Error('Email ou senha incorretos');
         }
         
-        if (signInError.message.includes('Email not confirmed')) {
-          toast.error('⚠️ Confirme seu email antes de fazer login. Verifique sua caixa de entrada.');
-          throw new Error('Email não confirmado');
-        }
-        
         if (signInError.message.includes('too many requests')) {
           toast.error('⏰ Muitas tentativas de login. Aguarde alguns minutos e tente novamente.');
           throw new Error('Muitas tentativas');
@@ -215,6 +210,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             full_name: fullName,
             whatsapp: cleanWhatsApp,
           },
+          // IMPORTANTE: Desabilitar confirmação de email
+          emailRedirectTo: undefined,
         },
       });
 
@@ -250,6 +247,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         throw new Error('Erro ao criar usuário');
       }
 
+      // Se o usuário foi criado com sucesso, fazer login automático
+      setUser(newUser);
+
       // Send welcome message if WhatsApp is provided
       if (cleanWhatsApp) {
         try {
@@ -271,8 +271,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       }
 
-      toast.success('✅ Conta criada com sucesso! Verifique seu email para confirmar a conta e depois faça login.', {
-        duration: 8000
+      // Registrar acesso após cadastro bem-sucedido
+      try {
+        await logUserAccess(
+          newUser.id,
+          undefined, // IP será capturado pelo servidor
+          navigator.userAgent,
+          'signup'
+        );
+      } catch (error) {
+        console.error('Erro ao registrar acesso:', error);
+      }
+
+      // Redirecionar para o dashboard
+      navigate('/');
+      
+      toast.success('✅ Conta criada com sucesso! Bem-vindo ao CONECTEZAP! 🎉', {
+        duration: 5000
       });
     } catch (error) {
       console.error('Error during signup:', error);

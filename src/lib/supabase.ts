@@ -104,14 +104,8 @@ export const handleApiError = (error: any): string => {
     
     // Credenciais inválidas
     if (message.includes('invalid login credentials') || 
-        message.includes('invalid credentials') ||
-        message.includes('email not confirmed')) {
+        message.includes('invalid credentials')) {
       return '❌ Email ou senha incorretos. Verifique seus dados e tente novamente.';
-    }
-    
-    // Email não confirmado
-    if (message.includes('email not confirmed')) {
-      return '⚠️ Confirme seu email antes de fazer login. Verifique sua caixa de entrada.';
     }
     
     // Muitas tentativas

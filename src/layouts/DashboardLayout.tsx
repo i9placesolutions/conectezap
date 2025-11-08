@@ -169,31 +169,20 @@ export function DashboardLayout() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Mobile menu overlay */}
-      {isMobileMenuOpen && (
-        <div 
-          className="fixed inset-0 z-50 bg-black bg-opacity-50 lg:hidden"
-          onClick={() => setIsMobileMenuOpen(false)}
-        />
-      )}
-      
+    <div className="min-h-screen bg-gray-50 flex">
+      {/* Sidebar - Static position on desktop, overlay on mobile */}
       <aside
         className={cn(
-          'fixed left-0 top-0 z-50 h-screen bg-white border-r border-gray-200',
-          'flex flex-col transition-all duration-300 ease-in-out',
-          // Desktop behavior
-          'lg:translate-x-0',
-          isCollapsed ? 'lg:w-20' : 'lg:w-64',
-          // Mobile behavior
-          'w-64 lg:w-auto',
-          isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
+          'bg-white border-r border-gray-200 flex-shrink-0 transition-all duration-300 ease-in-out',
+          // Desktop behavior - static positioning
+          'hidden lg:flex lg:flex-col',
+          isCollapsed ? 'lg:w-20' : 'lg:w-64'
         )}
       >
         {/* Toggle button - Desktop only */}
         <button
           onClick={() => setIsCollapsed(!isCollapsed)}
-          className="hidden lg:flex absolute -right-3 top-6 h-6 w-6 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 z-50"
+          className="absolute -right-3 top-6 h-6 w-6 flex items-center justify-center rounded-full border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 z-10"
         >
           <ChevronRight
             className={cn(
@@ -201,14 +190,6 @@ export function DashboardLayout() {
               isCollapsed ? '' : 'rotate-180'
             )}
           />
-        </button>
-        
-        {/* Close button - Mobile only */}
-        <button
-          onClick={() => setIsMobileMenuOpen(false)}
-          className="lg:hidden absolute right-4 top-4 flex h-8 w-8 items-center justify-center rounded-full text-gray-500 hover:bg-gray-100 z-50"
-        >
-          <X className="h-5 w-5" />
         </button>
 
         {/* Logo section */}
@@ -232,7 +213,7 @@ export function DashboardLayout() {
                   className={() =>
                     cn(
                       'flex items-center rounded-lg py-3 text-gray-600 transition-colors',
-                      isCollapsed && !isMobileMenuOpen ? 'justify-center px-0' : 'px-3',
+                      isCollapsed ? 'justify-center px-0' : 'px-3',
                       'hover:bg-primary-50 hover:text-primary-600',
                       isMenuActive(item) && 'bg-primary-50 text-primary-600'
                     )
@@ -240,9 +221,9 @@ export function DashboardLayout() {
                 >
                   <item.icon className={cn(
                     "flex-shrink-0",
-                    isCollapsed && !isMobileMenuOpen ? 'h-6 w-6' : 'h-5 w-5'
+                    isCollapsed ? 'h-6 w-6' : 'h-5 w-5'
                   )} />
-                  {(!isCollapsed || isMobileMenuOpen) && (
+                  {!isCollapsed && (
                     <>
                       <span className="ml-3 text-sm font-medium flex-1">{item.label}</span>
                       {item.submenu && (
@@ -256,7 +237,7 @@ export function DashboardLayout() {
                     </>
                   )}
                 </NavLink>
-                {(!isCollapsed || isMobileMenuOpen) && item.submenu && expandedMenu === item.path && (
+                {!isCollapsed && item.submenu && expandedMenu === item.path && (
                   <div className="ml-4 mt-1 space-y-1">
                     {item.submenu.map((subItem) => (
                       <NavLink
@@ -283,12 +264,12 @@ export function DashboardLayout() {
         {/* User profile */}
         <div className={cn(
           'border-t border-gray-200 bg-white',
-          isCollapsed && !isMobileMenuOpen ? 'p-3' : 'p-4'
+          isCollapsed ? 'p-3' : 'p-4'
         )}>
           <div className="flex items-center justify-between gap-2">
             <div className={cn(
               "flex items-center gap-2 min-w-0",
-              isCollapsed && !isMobileMenuOpen && "flex-col"
+              isCollapsed && "flex-col"
             )}>
               <div className="relative flex-shrink-0">
                 {profileData?.avatar_url ? (
@@ -314,7 +295,7 @@ export function DashboardLayout() {
                   <span className="absolute right-0 top-0 h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-white" />
                 )}
               </div>
-              {(!isCollapsed || isMobileMenuOpen) && (
+              {!isCollapsed && (
                 <div className="min-w-0">
                   <p className="truncate text-sm font-medium text-gray-700">
                     {profileData?.full_name || 'Usuário'}
@@ -325,7 +306,7 @@ export function DashboardLayout() {
                 </div>
               )}
             </div>
-            {(!isCollapsed || isMobileMenuOpen) && (
+            {!isCollapsed && (
               <button
                 onClick={handleSignOut}
                 disabled={isLoading}
@@ -338,17 +319,130 @@ export function DashboardLayout() {
         </div>
       </aside>
 
-      {/* Main content */}
-      <div className={cn(
-        'transition-all duration-300 ease-in-out',
-        // Desktop margins
-        'lg:ml-64',
-        isCollapsed && 'lg:ml-20',
-        // Mobile margins
-        'ml-0'
-      )}>
+      {/* Mobile sidebar overlay */}
+      {isMobileMenuOpen && (
+        <>
+          <div 
+            className="fixed inset-0 z-40 bg-black bg-opacity-50 lg:hidden"
+            onClick={() => setIsMobileMenuOpen(false)}
+          />
+          <aside className="fixed left-0 top-0 z-50 h-screen w-64 bg-white border-r border-gray-200 flex flex-col lg:hidden">
+            {/* Close button */}
+            <button
+              onClick={() => setIsMobileMenuOpen(false)}
+              className="absolute right-4 top-4 flex h-8 w-8 items-center justify-center rounded-full text-gray-500 hover:bg-gray-100"
+            >
+              <X className="h-5 w-5" />
+            </button>
+
+            {/* Logo section */}
+            <div className="bg-primary-600 p-4 flex items-center justify-center h-16">
+              <div className="flex items-center gap-3">
+                <MessageCircle className="h-8 w-8 text-white" />
+                <h1 className="text-xl font-bold text-white truncate">ConecteZap</h1>
+              </div>
+            </div>
+
+            {/* Navigation - Mobile */}
+            <div className="flex-1 overflow-y-auto p-4">
+              <nav className="space-y-3">
+                {menuItems.map((item) => (
+                  <div key={item.path}>
+                    <NavLink
+                      to={item.submenu ? '#' : item.path}
+                      onClick={() => handleMenuClick(item)}
+                      className={() =>
+                        cn(
+                          'flex items-center rounded-lg py-3 px-3 text-gray-600 transition-colors',
+                          'hover:bg-primary-50 hover:text-primary-600',
+                          isMenuActive(item) && 'bg-primary-50 text-primary-600'
+                        )
+                      }
+                    >
+                      <item.icon className="flex-shrink-0 h-5 w-5" />
+                      <span className="ml-3 text-sm font-medium flex-1">{item.label}</span>
+                      {item.submenu && (
+                        <ChevronRight
+                          className={cn(
+                            'h-4 w-4 transition-transform',
+                            expandedMenu === item.path && 'rotate-90'
+                          )}
+                        />
+                      )}
+                    </NavLink>
+                    {item.submenu && expandedMenu === item.path && (
+                      <div className="ml-4 mt-1 space-y-1">
+                        {item.submenu.map((subItem) => (
+                          <NavLink
+                            key={subItem.path}
+                            to={subItem.path}
+                            onClick={() => setIsMobileMenuOpen(false)}
+                            className={({ isActive }) =>
+                              cn(
+                                'flex items-center rounded-lg px-3 py-2 text-sm text-gray-600 transition-colors',
+                                'hover:bg-primary-50 hover:text-primary-600',
+                                isActive && 'bg-primary-50 text-primary-600'
+                              )
+                            }
+                          >
+                            <span className="ml-3">{subItem.label}</span>
+                          </NavLink>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </nav>
+            </div>
+
+            {/* User profile - Mobile */}
+            <div className="border-t border-gray-200 bg-white p-4">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  <div className="relative flex-shrink-0">
+                    {profileData?.avatar_url ? (
+                      <img
+                        src={profileData.avatar_url}
+                        alt={profileData.full_name || 'Avatar'}
+                        className="h-10 w-10 rounded-full object-cover"
+                      />
+                    ) : (
+                      <div className="h-10 w-10 rounded-full bg-primary-100 flex items-center justify-center">
+                        <span className="text-sm font-medium text-primary-700">
+                          {profileData?.full_name?.[0]?.toUpperCase() || 'U'}
+                        </span>
+                      </div>
+                    )}
+                    {hasNotifications && (
+                      <span className="absolute right-0 top-0 h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-white" />
+                    )}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium text-gray-700">
+                      {profileData?.full_name || 'Usuário'}
+                    </p>
+                    <p className="truncate text-xs text-gray-500">
+                      {profileData?.email || 'usuário@exemplo.com'}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={handleSignOut}
+                  disabled={isLoading}
+                  className="rounded-full p-1.5 text-gray-500 hover:bg-gray-100 hover:text-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+                >
+                  <LogOut className="h-5 w-5" />
+                </button>
+              </div>
+            </div>
+          </aside>
+        </>
+      )}
+
+      {/* Main content - Flex-grow to fill remaining space */}
+      <div className="flex-1 flex flex-col min-h-screen">
         {/* Header */}
-        <header className="sticky top-0 z-30 bg-white border-b border-gray-200 shadow-sm">
+        <header className="sticky top-0 z-10 bg-white border-b border-gray-200 shadow-sm">
           <div className="flex h-16 items-center justify-between px-4 sm:px-6">
             <div className="flex items-center gap-3">
               {/* Mobile menu button */}
@@ -408,7 +502,7 @@ export function DashboardLayout() {
         </header>
 
         {/* Page content */}
-        <main className="p-3 sm:p-4 lg:p-6">
+        <main className="flex-1 p-3 sm:p-4 lg:p-6">
           <Outlet />
         </main>
       </div>

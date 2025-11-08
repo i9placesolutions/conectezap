@@ -1,0 +1,1304 @@
+{
+  "mcpServers": {
+    "supabase-conectezap": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@supabase/mcp-server-supabase@latest",
+        "--access-token",
+        "sbp_4250e96606d45916b183ec4b64f01d9c14187be4",
+        "--project-ref",
+        "fuojiwpyhoimyrknfcze"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "context7": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@upstash/context7-mcp"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "gemini-benchmark-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "gemini-benchmark-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "agentenv-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "agentenv-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.bedrock-kb-retrieval-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/bedrock-kb-retrieval-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-rules-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-rules-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-codetranformation-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-codetranformation-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-dependency-graph-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-dependency-graph-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-planning-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-planning-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-security-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-security-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-test-generation-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-test-generation-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-search-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-search-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-transform-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-transform-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-index-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-index-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-oss-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-oss-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-ide-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-ide-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-context-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-context-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-cloudformation-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-cloudformation-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-s3-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-s3-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-ec2-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-ec2-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-ecs-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-ecs-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-eks-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-eks-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-lambda-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-lambda-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-rds-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-rds-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-dynamodb-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-dynamodb-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-vpc-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-vpc-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-route53-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-route53-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-roles-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-roles-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-users-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-users-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-policies-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-policies-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-groups-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-groups-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-instance-profiles-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-instance-profiles-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-server-certificates-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-server-certificates-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-saml-providers-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-saml-providers-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-oidc-providers-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-oidc-providers-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-virtual-mfa-devices-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-virtual-mfa-devices-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-access-keys-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-access-keys-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-signing-certificates-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-signing-certificates-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-ssh-public-keys-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-ssh-public-keys-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-service-specific-credentials-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-service-specific-credentials-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-mfa-devices-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-mfa-devices-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-account-password-policy-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-account-password-policy-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-account-summary-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-account-summary-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-account-aliases-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-account-aliases-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-credential-report-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-credential-report-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-organizations-access-report-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-organizations-access-report-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-service-last-accessed-details-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-service-last-accessed-details-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-generate-credential-report-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-generate-credential-report-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-get-credential-report-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-get-credential-report-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-get-organizations-access-report-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-get-organizations-access-report-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-get-service-last-accessed-details-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-get-service-last-accessed-details-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-get-service-last-accessed-details-with-entities-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-get-service-last-accessed-details-with-entities-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-generate-service-last-accessed-details-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-generate-service-last-accessed-details-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-list-account-aliases-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-list-account-aliases-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-create-account-alias-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-create-account-alias-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-delete-account-alias-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-delete-account-alias-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-update-account-password-policy-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-update-account-password-policy-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-delete-account-password-policy-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-delete-account-password-policy-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-get-account-password-policy-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-get-account-password-policy-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-get-account-summary-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-get-account-summary-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-list-groups-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-list-groups-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-create-group-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-create-group-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-delete-group-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-delete-group-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-update-group-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-update-group-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-get-group-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-get-group-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-list-group-policies-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-list-group-policies-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-put-group-policy-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-put-group-policy-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-get-group-policy-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-get-group-policy-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-delete-group-policy-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-delete-group-policy-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-list-attached-group-policies-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-list-attached-group-policies-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-attach-group-policy-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-attach-group-policy-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-detach-group-policy-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-detach-group-policy-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-list-users-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-list-users-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-create-user-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-create-user-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-delete-user-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-delete-user-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-update-user-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-update-user-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-get-user-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-get-user-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-list-user-policies-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-list-user-policies-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-put-user-policy-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-put-user-policy-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-get-user-policy-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-get-user-policy-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-delete-user-policy-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-delete-user-policy-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-list-attached-user-policies-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-list-attached-user-policies-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-attach-user-policy-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-attach-user-policy-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-detach-user-policy-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-detach-user-policy-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-list-groups-for-user-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-list-groups-for-user-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-add-user-to-group-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-add-user-to-group-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-remove-user-from-group-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-remove-user-from-group-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-list-roles-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-list-roles-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-create-role-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-create-role-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-delete-role-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-delete-role-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-update-role-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-update-role-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-get-role-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-get-role-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-list-role-policies-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-list-role-policies-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-put-role-policy-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-put-role-policy-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-get-role-policy-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-get-role-policy-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-delete-role-policy-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-delete-role-policy-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-list-attached-role-policies-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-list-attached-role-policies-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-attach-role-policy-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-attach-role-policy-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-detach-role-policy-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-detach-role-policy-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-list-instance-profiles-for-role-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-list-instance-profiles-for-role-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-add-role-to-instance-profile-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-add-role-to-instance-profile-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-remove-role-from-instance-profile-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-remove-role-from-instance-profile-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-update-assume-role-policy-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-update-assume-role-policy-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-list-policies-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-list-policies-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-create-policy-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-create-policy-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-delete-policy-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-delete-policy-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-get-policy-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-get-policy-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-list-policy-versions-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-list-policy-versions-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-create-policy-version-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-create-policy-version-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-delete-policy-version-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-delete-policy-version-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-get-policy-version-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-get-policy-version-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-set-default-policy-version-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-set-default-policy-version-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-list-entities-for-policy-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-list-entities-for-policy-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-list-instance-profiles-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-list-instance-profiles-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-create-instance-profile-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-create-instance-profile-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-delete-instance-profile-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-delete-instance-profile-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-get-instance-profile-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-get-instance-profile-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-list-server-certificates-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-list-server-certificates-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-upload-server-certificate-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-upload-server-certificate-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-delete-server-certificate-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-delete-server-certificate-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-update-server-certificate-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-update-server-certificate-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-get-server-certificate-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-get-server-certificate-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-list-saml-providers-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-list-saml-providers-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-create-saml-provider-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-create-saml-provider-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-delete-saml-provider-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-delete-saml-provider-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-update-saml-provider-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-update-saml-provider-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-get-saml-provider-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-get-saml-provider-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-list-oidc-providers-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-list-oidc-providers-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-create-oidc-provider-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-create-oidc-provider-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-delete-oidc-provider-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-delete-oidc-provider-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-update-oidc-provider-thumbprint-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-update-oidc-provider-thumbprint-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-get-oidc-provider-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-get-oidc-provider-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-list-virtual-mfa-devices-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-list-virtual-mfa-devices-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-create-virtual-mfa-device-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-create-virtual-mfa-device-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-delete-virtual-mfa-device-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-delete-virtual-mfa-device-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-enable-mfa-device-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-enable-mfa-device-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-deactivate-mfa-device-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-deactivate-mfa-device-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-resync-mfa-device-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-resync-mfa-device-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-list-mfa-devices-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-list-mfa-devices-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-list-access-keys-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-list-access-keys-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-create-access-key-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-create-access-key-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-delete-access-key-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-delete-access-key-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-update-access-key-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-update-access-key-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-get-access-key-last-used-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-get-access-key-last-used-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-list-signing-certificates-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-list-signing-certificates-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-upload-signing-certificate-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-upload-signing-certificate-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-delete-signing-certificate-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-delete-signing-certificate-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-update-signing-certificate-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-update-signing-certificate-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-list-ssh-public-keys-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-list-ssh-public-keys-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-upload-ssh-public-key-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-upload-ssh-public-key-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-delete-ssh-public-key-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-delete-ssh-public-key-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-update-ssh-public-key-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-update-ssh-public-key-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-get-ssh-public-key-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-get-ssh-public-key-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-list-service-specific-credentials-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-list-service-specific-credentials-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-create-service-specific-credential-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-create-service-specific-credential-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-delete-service-specific-credential-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-delete-service-specific-credential-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-update-service-specific-credential-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-update-service-specific-credential-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-reset-service-specific-credential-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-reset-service-specific-credential-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "awslabs.amazon-q-iam-get-service-specific-credential-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@awslabs/amazon-q-iam-get-service-specific-credential-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    },
+    "terraform-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "terraform-mcp-server"
+      ],
+      "convert_schemas_to_strict": true
+    }
+  }
+}
