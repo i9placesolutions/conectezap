@@ -14,8 +14,6 @@ class BlacklistManager {
   // Adicionar número à blacklist
   addToBlacklist(number: string, reason: BlacklistEntry['reason'], instanceId: string): void {
     const blacklist = this.getBlacklist();
-    const key = `${instanceId}_${number}`;
-    
     const existing = blacklist.find(entry => entry.number === number && entry.instanceId === instanceId);
     
     if (existing) {

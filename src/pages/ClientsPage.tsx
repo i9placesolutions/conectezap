@@ -26,7 +26,7 @@ export function ClientsPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [stats, setStats] = useState<any>(null);
+  const [stats, setStats] = useState<Record<string, unknown>>(null);
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [showAccessLogs, setShowAccessLogs] = useState(false);
   const [accessLogs, setAccessLogs] = useState<UserAccessLog[]>([]);
@@ -35,6 +35,7 @@ export function ClientsPage() {
 
   useEffect(() => {
     loadClients();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadClients = async () => {
@@ -47,7 +48,7 @@ export function ClientsPage() {
       console.log('🔑 Admin email:', ADMIN_EMAIL);
       console.log('✅ É admin?', user?.email === ADMIN_EMAIL);
       
-      let data: any[] = [];
+      let data: Record<string, unknown>[] = [];
       let organizationId: string | null = null;
 
       // REGRA ESPECIAL: rafael@i9place.com.br vê TODOS os clientes

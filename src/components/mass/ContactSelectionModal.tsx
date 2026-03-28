@@ -32,6 +32,7 @@ export function ContactSelectionModal({
     if (isOpen && instanceToken) {
       loadContacts();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, instanceToken]);
 
   // Resetar seleção baseado nas props

@@ -240,7 +240,7 @@ export async function getLeads(
     // Log detalhado dos primeiros 5 leads
     if (leads.length > 0) {
       console.log('📅 Primeiros 5 leads (verificar ordem):', 
-        leads.slice(0, 5).map((lead: any) => ({
+        leads.slice(0, 5).map((lead: Lead) => ({
           name: lead.wa_name,
           phone: lead.phone,
           lastMessageAt: lead.last_message_at,

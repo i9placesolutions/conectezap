@@ -4,7 +4,7 @@ import { getCurrentServerConfig } from '../services/api';
 
 interface RealTimeEvent {
   type: 'message' | 'chat_update' | 'presence' | 'typing';
-  data: any;
+  data: unknown;
   instanceId: string;
   chatId?: string;
 }
@@ -12,10 +12,10 @@ interface RealTimeEvent {
 interface UseRealTimeChatProps {
   instanceToken?: string;
   instanceId?: string;
-  onNewMessage?: (message: any) => void;
-  onChatUpdate?: (chat: any) => void;
-  onPresenceUpdate?: (presence: any) => void;
-  onTyping?: (typing: any) => void;
+  onNewMessage?: (message: unknown) => void;
+  onChatUpdate?: (chat: unknown) => void;
+  onPresenceUpdate?: (presence: unknown) => void;
+  onTyping?: (typing: unknown) => void;
 }
 
 export function useRealTimeChat({
@@ -165,6 +165,7 @@ export function useRealTimeChat({
     return () => {
       disconnect();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [instanceToken, instanceId]);
 
   // Limpeza na desmontagem
@@ -172,6 +173,7 @@ export function useRealTimeChat({
     return () => {
       disconnect();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return {

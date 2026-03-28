@@ -7,9 +7,7 @@ import {
   Pencil, 
   Trash2, 
   X,
-  Check,
   AlertCircle,
-  MessageCircle,
   Users,
   Bot,
   Headphones,
@@ -167,7 +165,7 @@ export function PlanManager() {
       toast.success(isEditing ? 'Plano atualizado com sucesso!' : 'Plano criado com sucesso!');
       setIsCreating(false);
       setIsEditing(null);
-    } catch (error) {
+    } catch {
       toast.error('Erro ao salvar plano');
     }
   };
@@ -177,7 +175,7 @@ export function PlanManager() {
       setPlans(plans.filter(p => p.id !== planId));
       toast.success('Plano excluído com sucesso!');
       setShowDeleteConfirm(null);
-    } catch (error) {
+    } catch {
       toast.error('Erro ao excluir plano');
     }
   };

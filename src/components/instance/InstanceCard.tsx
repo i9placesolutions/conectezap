@@ -32,7 +32,7 @@ export function InstanceCard({
     try {
       await navigator.clipboard.writeText(instance.token);
       toast.success('Token copiado!');
-    } catch (error) {
+    } catch {
       toast.error('Erro ao copiar token');
     }
   };

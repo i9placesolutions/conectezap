@@ -141,7 +141,7 @@ export const getInstances = async (): Promise<Instance[]> => {
     // Formatar os dados para o formato esperado pelo aplicativo
     // De acordo com a documentação Postman, o endpoint /instance/all retorna um array de instâncias
     return Array.isArray(response.data) 
-      ? response.data.map((instance: any) => ({
+      ? response.data.map((instance: Record<string, unknown>) => ({
           id: instance.id || '',
           name: instance.name || instance.profileName || instance.id || 'Sem nome',
           status: mapInstanceStatus(instance.state || instance.status),
@@ -155,34 +155,37 @@ export const getInstances = async (): Promise<Instance[]> => {
           }
         }))
       : [];
-  } catch (error: any) {
+  } catch (error: unknown) {
     const timestamp = new Date().toLocaleTimeString();
     const config = getCurrentServerConfig();
+    const axiosError = error as Record<string, unknown>;
+    const response = axiosError.response as Record<string, unknown> | undefined;
+    const errorConfig = axiosError.config as Record<string, unknown> | undefined;
     console.error(`[${timestamp}] ❌ Erro ao obter instâncias:`, {
-      message: error.message,
-      status: error.response?.status,
-      statusText: error.response?.statusText,
-      data: error.response?.data,
-      url: error.config?.url,
+      message: (axiosError.message as string),
+      status: response?.status,
+      statusText: response?.statusText,
+      data: response?.data,
+      url: errorConfig?.url,
       serverUrl: config.url,
       adminToken: config.adminToken.substring(0, 10) + '...'
     });
-    
+
     // Verificar tipos específicos de erro
-    if (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND') {
+    if (axiosError.code === 'ECONNREFUSED' || axiosError.code === 'ENOTFOUND') {
       console.error('🌐 Erro de conectividade: Não foi possível conectar à API UAZAPI');
       console.error('💡 Verifique se a URL da API está correta:', config.url);
-    } else if (error.response?.status === 401) {
+    } else if (response?.status === 401) {
       console.error('🔐 Erro de autenticação: ADMIN_TOKEN inválido ou expirado');
       console.error('💡 Verifique o ADMIN_TOKEN no arquivo .env');
-    } else if (error.response?.status === 403) {
+    } else if (response?.status === 403) {
       console.error('🚫 Erro de autorização: Sem permissão para acessar instâncias');
-    } else if (error.response?.status === 404) {
+    } else if (response?.status === 404) {
       console.error('📂 Recurso não encontrado: Endpoint /instance/all não existe');
-    } else if (error.response?.status >= 500) {
+    } else if ((response?.status as number) >= 500) {
       console.error('🔥 Erro do servidor: API UAZAPI está com problemas internos');
     }
-    
+
     throw error;
   }
 };
@@ -247,7 +250,7 @@ export const getChats = async (instanceId: string, searchTerm?: string, instance
     const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
     
     // Parâmetros para a API UAZAPI v2
-    const params: any = {
+    const params: Record<string, unknown> = {
       instanceId,
       count: 100,
       onlyGroups: false,
@@ -271,11 +274,11 @@ export const getChats = async (instanceId: string, searchTerm?: string, instance
         console.log(`Sucesso! Encontrados ${response.data.chats.length} chats reais da API.`);
         
         // Mapear os chats para o formato esperado pela aplicação
-        return response.data.chats.map((chat: any) => {
+        return response.data.chats.map((chat: Record<string, unknown>) => {
           console.log('Processando chat:', chat);
           
           // Verificar se é um grupo
-          const isGroup = chat.isGroup || (chat.id && chat.id.includes('g.us'));
+          const isGroup = chat.isGroup || (chat.id && (chat.id as string).includes('g.us'));
           
           let displayName = '';
           
@@ -393,21 +396,23 @@ export const getMessages = async (instanceId: string, chatId: string, limit: num
       console.log('Resposta de mensagens:', JSON.stringify(response.data));
       
       if (response.data && response.data.messages) {
-        return response.data.messages.map((msg: any) => {
+        return response.data.messages.map((msg: Record<string, unknown>) => {
           // Normaliza a estrutura das mensagens para um formato consistente
           const isExtendedTextMessage = msg.messageType === 'ExtendedTextMessage';
-          const textContent = isExtendedTextMessage && msg.content?.text 
-            ? msg.content.text 
-            : (typeof msg.content === 'string' ? msg.content : msg.text || '');
-          
+          const msgContent = msg.content as Record<string, unknown> | string | undefined;
+          const msgKey = msg.key as Record<string, unknown> | undefined;
+          const textContent = isExtendedTextMessage && typeof msgContent === 'object' && msgContent?.text
+            ? msgContent.text
+            : (typeof msgContent === 'string' ? msgContent : msg.text || '');
+
           return {
-            id: msg.id || msg.messageid || msg.key?.id,
+            id: msg.id || msg.messageid || msgKey?.id,
             body: textContent,
-            fromMe: msg.fromMe || msg.key?.fromMe,
+            fromMe: msg.fromMe || msgKey?.fromMe,
             type: msg.messageType || msg.type,
             timestamp: msg.messageTimestamp || msg.timestamp,
-            sender: msg.sender || msg.key?.participant || msg.key?.remoteJid,
-            isGroup: msg.isGroup || (msg.key?.remoteJid ? msg.key.remoteJid.includes('g.us') : false),
+            sender: msg.sender || msgKey?.participant || msgKey?.remoteJid,
+            isGroup: msg.isGroup || (msgKey?.remoteJid ? (msgKey.remoteJid as string).includes('g.us') : false),
             quotedMsg: msg.quotedMsg,
             isForwarded: msg.isForwarded
           };
@@ -593,7 +598,7 @@ export const getMessageStats = async (instanceToken?: string) => {
           totalMessages += messages.length;
           
           // Contar mensagens por status
-          messages.forEach((msg: any) => {
+          messages.forEach((msg: Record<string, unknown>) => {
             const status = msg.status || 'unknown';
             if (status === 'delivered' || status === 'read') {
               deliveredMessages++;
@@ -621,20 +626,22 @@ export const getMessageStats = async (instanceToken?: string) => {
       totalChats: chats.length,
       activeChatsSample: sampleSize
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const axiosError = error as Record<string, unknown>;
+    const response = axiosError.response as Record<string, unknown> | undefined;
     // Não logar erro se for apenas resposta inválida (já tratamos acima)
-    if (error.message !== 'Resposta inválida da API de chats') {
+    if ((axiosError.message as string) !== 'Resposta inválida da API de chats') {
       console.error('❌ Erro ao buscar estatísticas de mensagens:', error);
     }
-    
+
     // Verificar se é erro de autenticação
-    if (error.response?.status === 401) {
+    if (response?.status === 401) {
       console.error('🔐 Erro de autenticação (401) - Token inválido ou não fornecido', {
         hasInstanceToken: !!instanceToken,
         instanceToken: instanceToken ? '✅ fornecido' : '❌ NÃO FORNECIDO',
         apiUrl: getCurrentServerConfig().url
       });
-      
+
       // Não propagar o erro, apenas retornar dados vazios
       console.warn('⚠️ Retornando dados vazios devido a erro de autenticação');
       return {
@@ -645,10 +652,10 @@ export const getMessageStats = async (instanceToken?: string) => {
         activeChatsSample: 0
       };
     }
-    
+
     // Verificar se é erro de rede
-    if (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND') {
-      console.error('🌐 Erro de conexão com a API:', error.message);
+    if (axiosError.code === 'ECONNREFUSED' || axiosError.code === 'ENOTFOUND') {
+      console.error('🌐 Erro de conexão com a API:', axiosError.message);
       return {
         totalMessages: 0,
         deliveredMessages: 0,
@@ -779,13 +786,12 @@ export const getProfileInfo = async (
 };
 
 // Função para criar uma nova instância
-export const createInstance = async (instanceName: string): Promise<any> => {
+export const createInstance = async (instanceName: string): Promise<Record<string, unknown>> => {
   try {
     const uazapiClient = createUazapiClient();
     const response = await uazapiClient.post('/instance/init', {
-      instanceName,
-      webhook: "", // Opcional
-      webhookEvents: ["all"], // Opcional
+      name: instanceName,
+      systemName: instanceName,
     });
 
     return response.data;
@@ -796,12 +802,11 @@ export const createInstance = async (instanceName: string): Promise<any> => {
 };
 
 // Função para conectar uma instância
-export const connectInstance = async (instanceId: string, instanceToken?: string): Promise<any> => {
+export const connectInstance = async (instanceId: string, instanceToken?: string, phone?: string): Promise<Record<string, unknown>> => {
   try {
     const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
-    const response = await client.post('/instance/connect', {
-      id: instanceId
-    });
+    const body = phone ? { phone } : {};
+    const response = await client.post('/instance/connect', body);
     return response.data;
   } catch (error) {
     console.error('Erro ao conectar instância:', error);
@@ -813,7 +818,7 @@ export const connectInstance = async (instanceId: string, instanceToken?: string
 export const getQrCode = async (instanceId: string, instanceToken?: string): Promise<string> => {
   try {
     const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
-    const response = await client.get(`/instance/qrcode?id=${instanceId}`);
+    const response = await client.get('/instance/status');
     return response.data;
   } catch (error) {
     console.error('Erro ao obter QR code:', error);
@@ -825,7 +830,7 @@ export const getQrCode = async (instanceId: string, instanceToken?: string): Pro
 export const checkInstanceStatus = async (instanceId: string, instanceToken?: string): Promise<string> => {
   try {
     const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
-    const response = await client.get(`/instance/info?id=${instanceId}`);
+    const response = await client.get('/instance/status');
     return response.data.status;
   } catch (error) {
     console.error('Erro ao verificar status da instância:', error);
@@ -834,10 +839,10 @@ export const checkInstanceStatus = async (instanceId: string, instanceToken?: st
 };
 
 // Função para desconectar uma instância
-export const disconnectInstance = async (instanceId: string, instanceToken?: string): Promise<any> => {
+export const disconnectInstance = async (instanceId: string, instanceToken?: string): Promise<Record<string, unknown>> => {
   try {
     const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
-    const response = await client.delete(`/instance/logout?id=${instanceId}`);
+    const response = await client.post('/instance/disconnect', {});
     return response.data;
   } catch (error) {
     console.error('Erro ao desconectar instância:', error);
@@ -846,10 +851,10 @@ export const disconnectInstance = async (instanceId: string, instanceToken?: str
 };
 
 // Função para deletar uma instância
-export const deleteInstance = async (instanceId: string, instanceToken?: string): Promise<any> => {
+export const deleteInstance = async (instanceId: string, instanceToken?: string): Promise<Record<string, unknown>> => {
   try {
     const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
-    const response = await client.delete(`/instance/delete?id=${instanceId}`);
+    const response = await client.delete('/instance');
     return response.data;
   } catch (error) {
     console.error('Erro ao deletar instância:', error);
@@ -858,10 +863,12 @@ export const deleteInstance = async (instanceId: string, instanceToken?: string)
 };
 
 // Função para reiniciar uma instância
-export const restartInstance = async (instanceId: string, instanceToken?: string): Promise<any> => {
+export const restartInstance = async (instanceId: string, instanceToken?: string): Promise<Record<string, unknown>> => {
   try {
     const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
-    const response = await client.post(`/api/instance/restart`, { instanceId });
+    // UAZAPI v2.0: restart = disconnect + connect
+    await client.post('/instance/disconnect', {});
+    const response = await client.post('/instance/connect', {});
     return response.data;
   } catch (error) {
     console.error('Erro ao reiniciar instância:', error);
@@ -870,10 +877,10 @@ export const restartInstance = async (instanceId: string, instanceToken?: string
 };
 
 // Função para fazer logout de uma instância
-export const logoutInstance = async (instanceId: string, instanceToken?: string): Promise<any> => {
+export const logoutInstance = async (instanceId: string, instanceToken?: string): Promise<Record<string, unknown>> => {
   try {
     const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
-    const response = await client.post(`/api/instance/logout`, { instanceId });
+    const response = await client.post('/instance/disconnect', {});
     return response.data;
   } catch (error) {
     console.error('Erro ao fazer logout da instância:', error);
@@ -887,7 +894,7 @@ export const getGroups = async (instanceId: string, instanceToken: string): Prom
     const client = createInstanceClient(instanceToken);
     
     // Chamar a API de busca de chats para grupos
-    const params: any = {
+    const params: Record<string, unknown> = {
       instanceId,
       wa_isGroup: true, // Buscar apenas grupos
       limit: 50,
@@ -900,18 +907,18 @@ export const getGroups = async (instanceId: string, instanceToken: string): Prom
       
       if (response.data && Array.isArray(response.data.chats)) {
         // Mapear os grupos para o formato esperado pela aplicação
-        return response.data.chats.map((group: any) => ({
+        return response.data.chats.map((group: Record<string, unknown>) => ({
           id: group.id || group.jid,
           name: group.name || group.subject || 'Grupo',
           ownerJID: group.owner || '',
-          participants: (group.groupMetadata?.participants || []).map((participant: any) => ({
+          participants: (((group.groupMetadata as Record<string, unknown>)?.participants as Record<string, unknown>[]) || []).map((participant: Record<string, unknown>) => ({
             JID: participant.id || participant.jid || '',
             isAdmin: participant.isAdmin || false,
             isSuperAdmin: participant.isSuperAdmin || false,
             displayName: participant.name || participant.displayName || ''
           })),
-          participantsCount: group.groupMetadata?.participantsCount || 0,
-          subject: group.groupMetadata?.subject || '',
+          participantsCount: (group.groupMetadata as Record<string, unknown>)?.participantsCount || 0,
+          subject: (group.groupMetadata as Record<string, unknown>)?.subject || '',
           creation: group.creation || new Date().toISOString(),
           owner: group.owner || '',
           isAnnounce: group.isAnnounce || false,
@@ -1091,21 +1098,25 @@ export const chat = {
         console.warn('Formato de resposta inesperado:', response.data);
         return { chats: [] };
       }
-    } catch (error: any) {
-      console.error('Erro ao obter chats:', error.response?.data || error.message);
-      if (error.response?.status === 502) {
+    } catch (error: unknown) {
+      const axiosError = error as Record<string, unknown>;
+      const response = axiosError.response as Record<string, unknown> | undefined;
+      console.error('Erro ao obter chats:', response?.data || axiosError.message);
+      if (response?.status === 502) {
         throw new Error('Erro de conexão com o servidor. Por favor, tente novamente em alguns instantes.');
       }
       throw error;
     }
   },
 
-  // Obter mensagens de um chat
+  // Obter mensagens de um chat (UAZAPI v2: POST /message/find)
   fetchMessages: async (instanceId: string, chatId: string, limit: number = 50, instanceToken?: string) => {
     try {
       const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
-      const response = await client.get('/chat/fetchMessages', {
-        params: { instanceId, chatId, limit }
+      const normalizedChatId = chatId.includes('@') ? chatId : chatId + '@s.whatsapp.net';
+      const response = await client.post('/message/find', {
+        chatid: normalizedChatId,
+        limit
       });
       return response.data;
     } catch (error) {
@@ -1119,9 +1130,8 @@ export const chat = {
     try {
       const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
       const response = await client.post('/chat/GetNameAndImageURL', {
-        number: number.includes('@') ? number : number + '@s.whatsapp.net'
-      }, {
-        params: { instanceId }
+        number: number.includes('@') ? number : number + '@s.whatsapp.net',
+        preview: true
       });
       return response.data;
     } catch (error) {
@@ -1130,12 +1140,12 @@ export const chat = {
     }
   },
 
-  // Obter todas mensagens não lidas
+  // Obter todas mensagens não lidas (UAZAPI v2: POST /chat/find com filtro)
   getUnreadMessages: async (instanceId: string, instanceToken?: string) => {
     try {
       const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
-      const response = await client.get('/chat/getUnreadMessages', {
-        params: { instanceId }
+      const response = await client.post('/chat/find', {
+        wa_unreadCount: 1
       });
       return response.data;
     } catch (error) {
@@ -1144,14 +1154,12 @@ export const chat = {
     }
   },
 
-  // Marcar mensagens como lidas
+  // Marcar mensagens como lidas (UAZAPI v2: POST /message/markread)
   markMessageAsRead: async (instanceId: string, messageId: string, instanceToken?: string) => {
     try {
       const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
-      const response = await client.post('/chat/markMessageAsRead', {
-        messageId
-      }, {
-        params: { instanceId }
+      const response = await client.post('/message/markread', {
+        id: [messageId]
       });
       return response.data;
     } catch (error) {
@@ -1165,9 +1173,8 @@ export const chat = {
     try {
       const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
       const response = await client.post('/chat/archive', {
-        chatId, action
-      }, {
-        params: { instanceId }
+        number: chatId,
+        archive: action
       });
       return response.data;
     } catch (error) {
@@ -1176,20 +1183,10 @@ export const chat = {
     }
   },
 
-  // Limpar mensagens de um chat
+  // Limpar mensagens de um chat (endpoint não existe na UAZAPI v2)
   clear: async (instanceId: string, chatId: string, instanceToken?: string) => {
-    try {
-      const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
-      const response = await client.post('/chat/clear', {
-        chatId
-      }, {
-        params: { instanceId }
-      });
-      return response.data;
-    } catch (error) {
-      console.error('Erro ao limpar chat:', error);
-      throw error;
-    }
+    console.warn('chat.clear() não está disponível na UAZAPI v2. Use chat.delete() para remover o chat.');
+    return { success: false, message: 'Endpoint não disponível na UAZAPI v2' };
   },
 
   // Deletar um chat
@@ -1197,9 +1194,10 @@ export const chat = {
     try {
       const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
       const response = await client.post('/chat/delete', {
-        chatId
-      }, {
-        params: { instanceId }
+        number: chatId,
+        deleteChatWhatsApp: true,
+        deleteChatDB: true,
+        deleteMessagesDB: true
       });
       return response.data;
     } catch (error) {
@@ -1208,14 +1206,13 @@ export const chat = {
     }
   },
 
-  // Marcar chat como não lido
+  // Marcar chat como não lido (UAZAPI v2: POST /chat/read com read: false)
   markAsUnread: async (instanceId: string, chatId: string, instanceToken?: string) => {
     try {
       const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
-      const response = await client.post('/chat/markAsUnread', {
-        chatId
-      }, {
-        params: { instanceId }
+      const response = await client.post('/chat/read', {
+        number: chatId,
+        read: false
       });
       return response.data;
     } catch (error) {
@@ -1229,9 +1226,8 @@ export const chat = {
     try {
       const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
       const response = await client.post('/chat/pin', {
-        chatId, action
-      }, {
-        params: { instanceId }
+        number: chatId,
+        pin: action
       });
       return response.data;
     } catch (error) {
@@ -1240,14 +1236,13 @@ export const chat = {
     }
   },
 
-  // Mutar um chat
+  // Mutar um chat (UAZAPI v2: muteEndTime - 8=8h, 168=1sem, -1=forever, 0=unmute)
   mute: async (instanceId: string, chatId: string, timeInSeconds: number = 8 * 60 * 60, instanceToken?: string) => {
     try {
       const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
       const response = await client.post('/chat/mute', {
-        chatId, timeInSeconds
-      }, {
-        params: { instanceId }
+        number: chatId,
+        muteEndTime: timeInSeconds
       });
       return response.data;
     } catch (error) {
@@ -1256,14 +1251,13 @@ export const chat = {
     }
   },
 
-  // Desmutar um chat
+  // Desmutar um chat (UAZAPI v2: usa /chat/mute com muteEndTime: 0)
   unmute: async (instanceId: string, chatId: string, instanceToken?: string) => {
     try {
       const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
-      const response = await client.post('/chat/unmute', {
-        chatId
-      }, {
-        params: { instanceId }
+      const response = await client.post('/chat/mute', {
+        number: chatId,
+        muteEndTime: 0
       });
       return response.data;
     } catch (error) {
@@ -1272,15 +1266,12 @@ export const chat = {
     }
   },
 
-  // Verificar se um número existe no WhatsApp
+  // Verificar se um número existe no WhatsApp (UAZAPI v2: POST /chat/check)
   whatsappNumberExists: async (instanceId: string, number: string, instanceToken?: string) => {
     try {
       const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
-      const response = await client.get('/chat/whatsappNumberExists', {
-        params: { 
-          instanceId,
-          number: number.includes('@') ? number : number + '@s.whatsapp.net'
-        }
+      const response = await client.post('/chat/check', {
+        numbers: [number]
       });
       return response.data;
     } catch (error) {
@@ -1292,13 +1283,11 @@ export const chat = {
 
 export const message = {
   // Enviar mensagem de texto
-  sendText: async (instanceId: string, chatId: string, text: string, options: any = {}, instanceToken?: string) => {
+  sendText: async (instanceId: string, chatId: string, text: string, options: Record<string, unknown> = {}, instanceToken?: string) => {
     try {
       const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
-      const response = await client.post('/message/sendText', {
-        chatId, text, ...options
-      }, {
-        params: { instanceId }
+      const response = await client.post('/send/text', {
+        number: chatId, text, linkPreview: false, readchat: true, delay: 0, ...options
       });
       return response.data;
     } catch (error) {
@@ -1308,13 +1297,11 @@ export const message = {
   },
 
   // Enviar imagem
-  sendImage: async (instanceId: string, chatId: string, imageUrl: string, caption: string = '', options: any = {}, instanceToken?: string) => {
+  sendImage: async (instanceId: string, chatId: string, imageUrl: string, caption: string = '', options: Record<string, unknown> = {}, instanceToken?: string) => {
     try {
       const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
-      const response = await client.post('/message/sendImage', {
-        chatId, imageUrl, caption, ...options
-      }, {
-        params: { instanceId }
+      const response = await client.post('/send/media', {
+        number: chatId, type: "image", file: imageUrl, text: caption, readchat: true, ...options
       });
       return response.data;
     } catch (error) {
@@ -1324,13 +1311,11 @@ export const message = {
   },
 
   // Enviar vídeo
-  sendVideo: async (instanceId: string, chatId: string, videoUrl: string, caption: string = '', options: any = {}, instanceToken?: string) => {
+  sendVideo: async (instanceId: string, chatId: string, videoUrl: string, caption: string = '', options: Record<string, unknown> = {}, instanceToken?: string) => {
     try {
       const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
-      const response = await client.post('/message/sendVideo', {
-        chatId, videoUrl, caption, ...options
-      }, {
-        params: { instanceId }
+      const response = await client.post('/send/media', {
+        number: chatId, type: "video", file: videoUrl, text: caption, readchat: true, ...options
       });
       return response.data;
     } catch (error) {
@@ -1340,13 +1325,11 @@ export const message = {
   },
 
   // Enviar áudio
-  sendAudio: async (instanceId: string, chatId: string, audioUrl: string, options: any = {}, instanceToken?: string) => {
+  sendAudio: async (instanceId: string, chatId: string, audioUrl: string, options: Record<string, unknown> = {}, instanceToken?: string) => {
     try {
       const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
-      const response = await client.post('/message/sendAudio', {
-        chatId, audioUrl, ...options
-      }, {
-        params: { instanceId }
+      const response = await client.post('/send/media', {
+        number: chatId, type: "audio", file: audioUrl, readchat: true, ...options
       });
       return response.data;
     } catch (error) {
@@ -1356,13 +1339,11 @@ export const message = {
   },
 
   // Enviar documento
-  sendDocument: async (instanceId: string, chatId: string, documentUrl: string, fileName: string = '', caption: string = '', options: any = {}, instanceToken?: string) => {
+  sendDocument: async (instanceId: string, chatId: string, documentUrl: string, fileName: string = '', caption: string = '', options: Record<string, unknown> = {}, instanceToken?: string) => {
     try {
       const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
-      const response = await client.post('/message/sendDocument', {
-        chatId, documentUrl, fileName, caption, ...options
-      }, {
-        params: { instanceId }
+      const response = await client.post('/send/media', {
+        number: chatId, type: "document", file: documentUrl, docName: fileName, text: caption, readchat: true, ...options
       });
       return response.data;
     } catch (error) {
@@ -1375,7 +1356,7 @@ export const message = {
   sendMedia: async (number: string, type: string, file: string, text?: string, docName?: string, mimetype?: string, replyid?: string, mentions?: string, readchat: boolean = true, delay: number = 0, instanceToken?: string) => {
     try {
       const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
-      const payload: any = {
+      const payload: Record<string, unknown> = {
         number,
         type,
         file,
@@ -1398,13 +1379,11 @@ export const message = {
   },
 
   // Enviar localização
-  sendLocation: async (instanceId: string, chatId: string, latitude: number, longitude: number, title: string = '', address: string = '', options: any = {}, instanceToken?: string) => {
+  sendLocation: async (instanceId: string, chatId: string, latitude: number, longitude: number, title: string = '', address: string = '', options: Record<string, unknown> = {}, instanceToken?: string) => {
     try {
       const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
-      const response = await client.post('/message/sendLocation', {
-        chatId, latitude, longitude, title, address, ...options
-      }, {
-        params: { instanceId }
+      const response = await client.post('/send/location', {
+        number: chatId, name: title, address, lat: latitude, lng: longitude
       });
       return response.data;
     } catch (error) {
@@ -1413,14 +1392,13 @@ export const message = {
     }
   },
 
-  // Encaminhar mensagem
-  forward: async (instanceId: string, chatId: string, messageId: string, options: any = {}, instanceToken?: string) => {
+  // Encaminhar mensagem (UAZAPI v2.0 nao suporta forward nativo - envia como texto)
+  forward: async (instanceId: string, chatId: string, messageId: string, options: Record<string, unknown> = {}, instanceToken?: string) => {
     try {
+      console.warn('UAZAPI v2.0 nao suporta encaminhamento nativo. Usando /send/text como fallback.');
       const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
-      const response = await client.post('/message/forward', {
-        chatId, messageId, ...options
-      }, {
-        params: { instanceId }
+      const response = await client.post('/send/text', {
+        number: chatId, text: `[Mensagem encaminhada] ID: ${messageId}`, readchat: true, delay: 0, ...options
       });
       return response.data;
     } catch (error) {
@@ -1430,7 +1408,7 @@ export const message = {
   },
 
   // Responder a uma mensagem
-  reply: async (chatId: string, text: string, messageId: string, options: any = {}, instanceToken?: string) => {
+  reply: async (chatId: string, text: string, messageId: string, options: Record<string, unknown> = {}, instanceToken?: string) => {
     try {
       const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
       
@@ -1455,9 +1433,7 @@ export const message = {
     try {
       const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
       const response = await client.post('/message/react', {
-        messageId, emoji
-      }, {
-        params: { instanceId }
+        number: instanceId, text: emoji, id: messageId
       });
       return response.data;
     } catch (error) {
@@ -1471,9 +1447,7 @@ export const message = {
     try {
       const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
       const response = await client.post('/message/delete', {
-        messageId, deleteMediaInDevice
-      }, {
-        params: { instanceId }
+        id: messageId
       });
       return response.data;
     } catch (error) {
@@ -1489,9 +1463,7 @@ export const group = {
     try {
       const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
       const response = await client.post('/group/create', {
-        groupName, participants
-      }, {
-        params: { instanceId }
+        name: groupName, participants
       });
       return response.data;
     } catch (error) {
@@ -1504,8 +1476,8 @@ export const group = {
   getInfo: async (instanceId: string, groupId: string, instanceToken?: string) => {
     try {
       const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
-      const response = await client.get('/group/getInfo', {
-        params: { instanceId, groupId }
+      const response = await client.post('/group/info', {
+        GroupJID: groupId, getInviteLink: true, force: true
       });
       return response.data;
     } catch (error) {
@@ -1518,10 +1490,8 @@ export const group = {
   addParticipants: async (instanceId: string, groupId: string, participants: string[], instanceToken?: string) => {
     try {
       const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
-      const response = await client.post('/group/addParticipants', {
-        groupId, participants
-      }, {
-        params: { instanceId }
+      const response = await client.post('/group/updateParticipants', {
+        groupjid: groupId, action: 'add', participants
       });
       return response.data;
     } catch (error) {
@@ -1534,10 +1504,8 @@ export const group = {
   removeParticipants: async (instanceId: string, groupId: string, participants: string[], instanceToken?: string) => {
     try {
       const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
-      const response = await client.post('/group/removeParticipants', {
-        groupId, participants
-      }, {
-        params: { instanceId }
+      const response = await client.post('/group/updateParticipants', {
+        groupjid: groupId, action: 'remove', participants
       });
       return response.data;
     } catch (error) {
@@ -1550,10 +1518,8 @@ export const group = {
   promoteParticipants: async (instanceId: string, groupId: string, participants: string[], instanceToken?: string) => {
     try {
       const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
-      const response = await client.post('/group/promoteParticipants', {
-        groupId, participants
-      }, {
-        params: { instanceId }
+      const response = await client.post('/group/updateParticipants', {
+        groupjid: groupId, action: 'promote', participants
       });
       return response.data;
     } catch (error) {
@@ -1566,10 +1532,8 @@ export const group = {
   demoteParticipants: async (instanceId: string, groupId: string, participants: string[], instanceToken?: string) => {
     try {
       const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
-      const response = await client.post('/group/demoteParticipants', {
-        groupId, participants
-      }, {
-        params: { instanceId }
+      const response = await client.post('/group/updateParticipants', {
+        groupjid: groupId, action: 'demote', participants
       });
       return response.data;
     } catch (error) {
@@ -1582,10 +1546,8 @@ export const group = {
   setDescription: async (instanceId: string, groupId: string, description: string, instanceToken?: string) => {
     try {
       const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
-      const response = await client.post('/group/setDescription', {
-        groupId, description
-      }, {
-        params: { instanceId }
+      const response = await client.post('/group/updateDescription', {
+        groupjid: groupId, description
       });
       return response.data;
     } catch (error) {
@@ -1598,10 +1560,8 @@ export const group = {
   updateProfilePicture: async (instanceId: string, groupId: string, imageUrl: string, instanceToken?: string) => {
     try {
       const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
-      const response = await client.post('/group/updateProfilePicture', {
-        groupId, imageUrl
-      }, {
-        params: { instanceId }
+      const response = await client.post('/group/updateImage', {
+        groupjid: groupId, image: imageUrl
       });
       return response.data;
     } catch (error) {
@@ -1615,9 +1575,7 @@ export const group = {
     try {
       const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
       const response = await client.post('/group/leave', {
-        groupId
-      }, {
-        params: { instanceId }
+        groupjid: groupId
       });
       return response.data;
     } catch (error) {
@@ -1632,9 +1590,7 @@ export const label = {
   getAll: async (instanceId: string, instanceToken?: string) => {
     try {
       const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
-      const response = await client.get('/label/getAll', {
-        params: { instanceId }
-      });
+      const response = await client.get('/labels');
       return response.data;
     } catch (error) {
       console.error('Erro ao obter etiquetas:', error);
@@ -1646,10 +1602,8 @@ export const label = {
   create: async (instanceId: string, labelName: string, labelColor: string, instanceToken?: string) => {
     try {
       const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
-      const response = await client.post('/label/create', {
-        labelName, labelColor
-      }, {
-        params: { instanceId }
+      const response = await client.post('/label/edit', {
+        id: '', name: labelName, color: labelColor, delete: false
       });
       return response.data;
     } catch (error) {
@@ -1662,10 +1616,8 @@ export const label = {
   delete: async (instanceId: string, labelId: string, instanceToken?: string) => {
     try {
       const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
-      const response = await client.post('/label/delete', {
-        labelId
-      }, {
-        params: { instanceId }
+      const response = await client.post('/label/edit', {
+        labelid: labelId, delete: true
       });
       return response.data;
     } catch (error) {
@@ -1678,10 +1630,8 @@ export const label = {
   addToChat: async (instanceId: string, chatId: string, labelId: string, instanceToken?: string) => {
     try {
       const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
-      const response = await client.post('/label/addToChat', {
-        chatId, labelId
-      }, {
-        params: { instanceId }
+      const response = await client.post('/chat/labels', {
+        number: chatId, labelids: [labelId]
       });
       return response.data;
     } catch (error) {
@@ -1694,10 +1644,8 @@ export const label = {
   removeFromChat: async (instanceId: string, chatId: string, labelId: string, instanceToken?: string) => {
     try {
       const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
-      const response = await client.post('/label/removeFromChat', {
-        chatId, labelId
-      }, {
-        params: { instanceId }
+      const response = await client.post('/chat/labels', {
+        number: chatId, labelids: []
       });
       return response.data;
     } catch (error) {
@@ -1712,10 +1660,8 @@ export const webhook = {
   set: async (instanceId: string, url: string, allowedEvents: string[] = [], instanceToken?: string) => {
     try {
       const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
-      const response = await client.post('/webhook/set', {
-        url, allowedEvents
-      }, {
-        params: { instanceId }
+      const response = await client.post('/webhook', {
+        enabled: true, url, events: allowedEvents
       });
       return response.data;
     } catch (error) {
@@ -1728,9 +1674,7 @@ export const webhook = {
   get: async (instanceId: string, instanceToken?: string) => {
     try {
       const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
-      const response = await client.get('/webhook/get', {
-        params: { instanceId }
-      });
+      const response = await client.get('/webhook');
       return response.data;
     } catch (error) {
       console.error('Erro ao obter configuração do webhook:', error);
@@ -1742,8 +1686,8 @@ export const webhook = {
   delete: async (instanceId: string, instanceToken?: string) => {
     try {
       const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
-      const response = await client.post('/webhook/delete', {}, {
-        params: { instanceId }
+      const response = await client.post('/webhook', {
+        enabled: false, url: ''
       });
       return response.data;
     } catch (error) {
@@ -1753,7 +1697,7 @@ export const webhook = {
   }
 };
 
-export const connectToSSE = (instanceId: string, onEvent: (event: any) => void, instanceToken?: string) => {
+export const connectToSSE = (instanceId: string, onEvent: (event: Record<string, unknown>) => void, instanceToken?: string) => {
   const apiURL = API_URL;
   const token = instanceToken || ADMIN_TOKEN;
   
@@ -1810,7 +1754,7 @@ export const searchMessages = async (
     const client = instanceToken ? createInstanceClient(instanceToken) : createUazapiClient();
     
     // Parâmetros para a pesquisa de mensagens conforme a API Uazapi v2.0
-    const params: any = {
+    const params: Record<string, unknown> = {
       instanceId,
       query
     };
@@ -1979,8 +1923,10 @@ export const updateLeadFieldsMap = async (
     
     console.log('✅ updateLeadFieldsMap - Campos atualizados com sucesso');
     return response.data;
-  } catch (error: any) {
-    console.error('❌ updateLeadFieldsMap - Erro:', error.response?.data || error.message);
+  } catch (error: unknown) {
+    const axiosError = error as Record<string, unknown>;
+    const response = axiosError.response as Record<string, unknown> | undefined;
+    console.error('❌ updateLeadFieldsMap - Erro:', response?.data || axiosError.message);
     throw error;
   }
 };
@@ -2040,12 +1986,12 @@ export const editLead = async (
     const client = createInstanceClient(instanceToken);
     
     // Validar campos de texto (máximo 255 caracteres conforme documentação)
-    const sanitizedData: any = { id: leadData.id };
-    
+    const sanitizedData: Record<string, unknown> = { id: leadData.id };
+
     Object.keys(leadData).forEach(key => {
       if (key === 'id') return;
-      
-      const value = (leadData as any)[key];
+
+      const value = (leadData as Record<string, unknown>)[key];
       
       if (typeof value === 'string' && value.length > 255) {
         console.warn(`⚠️ Campo ${key} truncado de ${value.length} para 255 caracteres`);
@@ -2067,13 +2013,15 @@ export const editLead = async (
     console.log('💾 ==========================================');
     
     return response.data;
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const axiosError = error as Record<string, unknown>;
+    const response = axiosError.response as Record<string, unknown> | undefined;
     console.error('💾 ==========================================');
     console.error('💾 ERRO AO SALVAR LEAD');
     console.error('💾 ==========================================');
-    console.error('💾 Mensagem:', error.message);
-    console.error('💾 Status HTTP:', error.response?.status);
-    console.error('💾 Dados do erro:', JSON.stringify(error.response?.data, null, 2));
+    console.error('💾 Mensagem:', axiosError.message);
+    console.error('💾 Status HTTP:', response?.status);
+    console.error('💾 Dados do erro:', JSON.stringify(response?.data, null, 2));
     console.error('💾 ==========================================');
     throw error;
   }
@@ -2101,7 +2049,7 @@ export const findLeads = async (
     lead_tags?: string;
     wa_isGroup?: boolean;
     wa_label?: string;
-    [key: string]: any;
+    [key: string]: unknown;
   },
   instanceToken: string
 ) => {
@@ -2135,8 +2083,10 @@ export const findLeads = async (
     }
     
     return { chats: [] };
-  } catch (error: any) {
-    console.error('❌ findLeads - Erro:', error.response?.data || error.message);
+  } catch (error: unknown) {
+    const axiosError = error as Record<string, unknown>;
+    const response = axiosError.response as Record<string, unknown> | undefined;
+    console.error('❌ findLeads - Erro:', response?.data || axiosError.message);
     throw error;
   }
 };
@@ -2179,25 +2129,27 @@ export const getChatsForLeads = async (
     }
     
     // Ordenar no lado do cliente como garantia (mais recentes primeiro)
-    chats.sort((a: any, b: any) => {
-      const timeA = a.wa_lastMsgTimestamp || a.lastMessage?.timestamp || 0;
-      const timeB = b.wa_lastMsgTimestamp || b.lastMessage?.timestamp || 0;
+    chats.sort((a: Record<string, unknown>, b: Record<string, unknown>) => {
+      const timeA = (a.wa_lastMsgTimestamp || (a.lastMessage as Record<string, unknown>)?.timestamp || 0) as number;
+      const timeB = (b.wa_lastMsgTimestamp || (b.lastMessage as Record<string, unknown>)?.timestamp || 0) as number;
       return timeB - timeA; // Decrescente (mais recente primeiro)
     });
     
     console.log('📊 Primeiros 3 chats ordenados:', 
-      chats.slice(0, 3).map((c: any) => ({
+      chats.slice(0, 3).map((c: Record<string, unknown>) => ({
         name: c.name || c.pushname,
-        timestamp: c.wa_lastMsgTimestamp || c.lastMessage?.timestamp,
-        date: c.wa_lastMsgTimestamp 
-          ? new Date((c.wa_lastMsgTimestamp > 10000000000 ? c.wa_lastMsgTimestamp : c.wa_lastMsgTimestamp * 1000)).toLocaleString()
+        timestamp: c.wa_lastMsgTimestamp || (c.lastMessage as Record<string, unknown>)?.timestamp,
+        date: c.wa_lastMsgTimestamp
+          ? new Date(((c.wa_lastMsgTimestamp as number) > 10000000000 ? (c.wa_lastMsgTimestamp as number) : (c.wa_lastMsgTimestamp as number) * 1000)).toLocaleString()
           : 'sem data'
       }))
     );
     
     return chats;
-  } catch (error: any) {
-    console.error('❌ Erro ao buscar chats:', error.response?.data || error.message);
+  } catch (error: unknown) {
+    const axiosError = error as Record<string, unknown>;
+    const response = axiosError.response as Record<string, unknown> | undefined;
+    console.error('❌ Erro ao buscar chats:', response?.data || axiosError.message);
     throw error;
   }
 };

@@ -57,7 +57,7 @@ export const secureUazapiService = {
   async searchChatsSecure(
     instanceToken: string,
     userId: string,
-    params: any
+    params: Record<string, unknown>
   ) {
     return secureApiCall(
       instanceToken,
@@ -72,7 +72,7 @@ export const secureUazapiService = {
   async searchMessagesSecure(
     instanceToken: string,
     userId: string,
-    params: any
+    params: Record<string, unknown>
   ) {
     return secureApiCall(
       instanceToken,
@@ -87,7 +87,7 @@ export const secureUazapiService = {
   async sendSimpleMessageSecure(
     instanceToken: string,
     userId: string,
-    data: any
+    data: Record<string, unknown>
   ) {
     return secureApiCall(
       instanceToken,
@@ -141,7 +141,7 @@ export const secureUazapiService = {
   async sendMassMessageSecure(
     instanceToken: string,
     userId: string,
-    data: any
+    data: Record<string, unknown>
   ) {
     return secureApiCall(
       instanceToken,
@@ -174,22 +174,22 @@ export function useSecureUazapiService(userId: string | undefined) {
   }
 
   return {
-    searchChats: (token: string, params: any) => 
+    searchChats: (token: string, params: Record<string, unknown>) =>
       secureUazapiService.searchChatsSecure(token, userId, params),
-    
-    searchMessages: (token: string, params: any) =>
+
+    searchMessages: (token: string, params: Record<string, unknown>) =>
       secureUazapiService.searchMessagesSecure(token, userId, params),
-    
-    sendSimpleMessage: (token: string, data: any) =>
+
+    sendSimpleMessage: (token: string, data: Record<string, unknown>) =>
       secureUazapiService.sendSimpleMessageSecure(token, userId, data),
     
     reactToMessage: (token: string, chatId: string, messageId: string, emoji: string) =>
       secureUazapiService.reactToMessageSecure(token, userId, chatId, messageId, emoji),
     
-    sendMultipleMedia: (token: string, chatId: string, mediaFiles: any[], onProgress?: any) =>
+    sendMultipleMedia: (token: string, chatId: string, mediaFiles: Array<{ id: string; file: File; type: 'image' | 'video' | 'audio' | 'document'; caption?: string }>, onProgress?: (current: number, total: number, currentFile: string) => void) =>
       secureUazapiService.sendMultipleMediaSecure(token, userId, chatId, mediaFiles, onProgress),
-    
-    sendMassMessage: (token: string, data: any) =>
+
+    sendMassMessage: (token: string, data: Record<string, unknown>) =>
       secureUazapiService.sendMassMessageSecure(token, userId, data),
     
     testInstanceConnection: (token: string) =>

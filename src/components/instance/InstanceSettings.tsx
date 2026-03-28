@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, RefreshCw, Power, Copy, Eye, EyeOff } from 'lucide-react';
+import { X, Copy, Eye, EyeOff } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
@@ -34,7 +34,7 @@ export function InstanceSettings({ instanceId, isOpen, onClose }: InstanceSettin
     syncFullHistory: false,
     readStatus: true
   });
-  const [instanceData, setInstanceData] = useState<any>(null);
+  const [instanceData, setInstanceData] = useState<Record<string, unknown>>(null);
 
   useEffect(() => {
     loadInstanceData();
@@ -93,7 +93,7 @@ export function InstanceSettings({ instanceId, isOpen, onClose }: InstanceSettin
     try {
       await navigator.clipboard.writeText(instanceData?.apiKey || '');
       toast.success('Chave API copiada para a área de transferência!');
-    } catch (error) {
+    } catch {
       toast.error('Erro ao copiar chave API');
     }
   };

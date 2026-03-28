@@ -54,6 +54,7 @@ export function InstancesPage() {
       const interval = setInterval(loadInstances, 5000);
       return () => clearInterval(interval);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
   useEffect(() => {
@@ -84,7 +85,7 @@ export function InstancesPage() {
         console.log('🔑 Admin email:', ADMIN_EMAIL);
         console.log('✅ É admin?', user.email === ADMIN_EMAIL);
         
-        let data: any[] = [];
+        let data: Record<string, unknown>[] = [];
         
         // REGRA ESPECIAL: rafael@i9place.com.br vê TODAS as instâncias
         if (user.email === ADMIN_EMAIL) {
@@ -127,7 +128,7 @@ export function InstancesPage() {
     }
   };
 
-  const handleCreateInstance = async (data: any) => {
+  const handleCreateInstance = async (data: Record<string, unknown>) => {
     if (!user) {
       toast.error('Usuário não autenticado');
       return;

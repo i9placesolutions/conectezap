@@ -19,7 +19,7 @@ interface ProfileForm {
 export function ProfilePage() {
   const [isLoading, setIsLoading] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
-  const [profileData, setProfileData] = useState<any>(null);
+  const [profileData, setProfileData] = useState<Record<string, unknown>>(null);
   const { user } = useAuth();
   const navigate = useNavigate();
   
@@ -67,7 +67,7 @@ export function ProfilePage() {
       // Simulado - não estamos realmente fazendo upload
       setTimeout(() => {
         // Atualizando o perfil simulado com uma URL simulada
-        setProfileData((prev: any) => ({
+        setProfileData((prev: Record<string, unknown>) => ({
           ...prev,
           avatar_url: URL.createObjectURL(file)
         }));

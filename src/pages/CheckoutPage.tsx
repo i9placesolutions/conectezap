@@ -43,7 +43,7 @@ export function CheckoutPage() {
       await new Promise(resolve => setTimeout(resolve, 2000));
       toast.success('Pagamento processado com sucesso!');
       navigate('/');
-    } catch (error) {
+    } catch {
       toast.error('Erro ao processar pagamento');
     } finally {
       setIsLoading(false);

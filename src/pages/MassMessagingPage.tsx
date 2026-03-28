@@ -908,7 +908,7 @@ export function MassMessagingPage() {
             if (result && result.success) {
               // Atualizar status da campanha para completed e salvar o folder_id
               if (savedCampaign?.id) {
-                const updateData: any = {
+                const updateData: Partial<MassCampaign> & Record<string, unknown> = {
                   status: 'completed',
                   sent_count: numbers.length
                 };

@@ -24,9 +24,9 @@ interface APIChat {
   profilePic?: string;
   imgUrl?: string;
   isGroup?: boolean;
-  participants?: any[];
+  participants?: Record<string, unknown>[];
   unreadCount?: number;
-  lastMessage?: any;
+  lastMessage?: Record<string, unknown>;
 }
 
 interface Chat {
@@ -34,9 +34,9 @@ interface Chat {
   name: string;
   profileImage?: string;
   isGroup: boolean;
-  participants: any[];
+  participants: Record<string, unknown>[];
   unreadCount: number;
-  lastMessage: any;
+  lastMessage: Record<string, unknown> | null;
 }
 
 interface SelectInstanceModalProps {
@@ -52,6 +52,7 @@ export function SelectInstanceModal({ onClose, onSelect }: SelectInstanceModalPr
 
   useEffect(() => {
     loadInstances();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [contextInstances]);
 
   const loadInstances = async () => {
@@ -147,9 +148,12 @@ export function SelectInstanceModal({ onClose, onSelect }: SelectInstanceModalPr
       onSelect(updatedInstance);
       
       toast.success('Instância selecionada com sucesso!');
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Erro ao carregar dados da instância:', error);
-      const errorMessage = error.response?.data?.message || error.message || 'Erro desconhecido';
+      const err = error as Record<string, unknown>;
+      const errResponse = err.response as Record<string, unknown> | undefined;
+      const errData = errResponse?.data as Record<string, unknown> | undefined;
+      const errorMessage = (errData?.message as string) || (err.message as string) || 'Erro desconhecido';
       toast.error(`Erro ao carregar dados da instância: ${errorMessage}`);
     } finally {
       setLoading(false);

@@ -27,6 +27,7 @@ export function useInstanceSecurity() {
     }
 
     loadUserInstances();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
   const loadUserInstances = async () => {

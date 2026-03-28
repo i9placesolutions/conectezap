@@ -46,6 +46,7 @@ export function InstanceProvider({ children }: { children: React.ReactNode }) {
     if (user) {
       loadInstances();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
   useEffect(() => {
@@ -77,6 +78,7 @@ export function InstanceProvider({ children }: { children: React.ReactNode }) {
         }
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.pathname, instances.length, selectedInstance]);
 
   const loadInstances = async () => {
@@ -94,7 +96,7 @@ export function InstanceProvider({ children }: { children: React.ReactNode }) {
       console.log('🔑 Admin email:', ADMIN_EMAIL);
       console.log('✅ É admin?', user.email === ADMIN_EMAIL);
       
-      let supabaseInstances: any[] = [];
+      let supabaseInstances: Record<string, unknown>[] = [];
       
       // REGRA ESPECIAL: rafael@i9place.com.br vê TODAS as instâncias
       if (user.email === ADMIN_EMAIL) {
@@ -113,15 +115,15 @@ export function InstanceProvider({ children }: { children: React.ReactNode }) {
       }
       
       // Converter para o formato do contexto
-      const formattedInstances: Instance[] = supabaseInstances.map((instance: any, index: number) => ({
-        id: instance.id,
-        name: instance.name,
-        status: instance.status,
+      const formattedInstances: Instance[] = supabaseInstances.map((instance: Record<string, unknown>, index: number) => ({
+        id: instance.id as string,
+        name: instance.name as string,
+        status: instance.status as 'connected' | 'disconnected' | 'connecting',
         isDefault: index === 0, // Primeira instância como padrão
-        token: instance.token,
-        phoneConnected: instance.phone_connected || undefined,
-        profileName: instance.name,
-        systemName: instance.name
+        token: instance.token as string | undefined,
+        phoneConnected: (instance.phone_connected as string) || undefined,
+        profileName: instance.name as string,
+        systemName: instance.name as string
       }));
       
       console.log(`✅ ${formattedInstances.length} instâncias carregadas`);

@@ -32,7 +32,7 @@ interface WhatsAppMessage {
     fromMe?: boolean;
     id?: string;
   };
-  message?: any;
+  message?: Record<string, unknown>;
   messageTimestamp?: number;
 }
 
@@ -261,7 +261,7 @@ export class UazapiSSEService {
   /**
    * Processa atualização de chat (chamado via handleMessage)
    */
-  private async processChatUpdate(chat: any): Promise<void> {
+  private async processChatUpdate(chat: Record<string, unknown>): Promise<void> {
     console.log('💬 Chat atualizado:', chat);
     // Implementar se necessário (ex: atualizar unread_count)
   }
@@ -269,7 +269,7 @@ export class UazapiSSEService {
   /**
    * Processa atualização de contato (chamado via handleMessage)
    */
-  private async processContactUpdate(contact: any): Promise<void> {
+  private async processContactUpdate(contact: Record<string, unknown>): Promise<void> {
     console.log('👤 Contato atualizado:', contact);
     // Implementar se necessário (ex: atualizar wa_contact_name, profile_picture_url)
   }

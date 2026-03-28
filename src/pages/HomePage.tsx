@@ -121,7 +121,7 @@ export function HomePage() {
         console.log('👑 É Super Admin?', isSuperAdmin);
         
         // ✅ Buscar instâncias usando EXATAMENTE a mesma lógica da InstancesPage
-        let instances: any[] = [];
+        let instances: Record<string, unknown>[] = [];
         
         if (isSuperAdmin) {
           console.log('👑 Super Admin: usando syncAllInstancesForAdmin()');

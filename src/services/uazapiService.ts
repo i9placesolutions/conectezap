@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import axios from 'axios';
 import { getCurrentServerConfig } from './api';
 
@@ -24,7 +25,7 @@ export interface Group {
   jid?: string;
   owner?: string;
   creation?: number;
-  participants?: any[];
+  participants?: Record<string, unknown>[];
   isGroup: boolean;
 }
 
@@ -1235,7 +1236,7 @@ export const uazapiService = {
   // Métodos para gerenciar campanhas na API UAZAPI
   async pauseCampaign(instanceToken: string, campaignId: string): Promise<boolean> {
     try {
-      const api = createApiClient(); const response = await api.post('/message/queue/pause', { id: campaignId }, {
+      const api = createApiClient(); const response = await api.post('/sender/edit', { folder_id: campaignId, action: 'stop' }, {
         headers: {
           'Accept': 'application/json',
           'token': instanceToken
@@ -1253,7 +1254,7 @@ export const uazapiService = {
   async resumeCampaign(instanceToken: string, campaignId: string): Promise<boolean> {
     try {
       const api = createApiClient();
-      const response = await api.post('/message/queue/resume', { id: campaignId }, {
+      const response = await api.post('/sender/edit', { folder_id: campaignId, action: 'continue' }, {
         headers: {
           'Accept': 'application/json',
           'token': instanceToken
@@ -1271,7 +1272,7 @@ export const uazapiService = {
   async deleteCampaign(instanceToken: string, campaignId: string): Promise<boolean> {
     try {
       const api = createApiClient();
-      const response = await api.delete(`/message/queue/folder/${campaignId}`, {
+      const response = await api.post('/sender/edit', { folder_id: campaignId, action: 'delete' }, {
         headers: {
           'Accept': 'application/json',
           'token': instanceToken
@@ -2039,6 +2040,7 @@ export const uazapiService = {
   },
 
   // Função obsoleta - mantida para compatibilidade
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   getNextProxyUrl(_imageUrl: string, _currentProxyIndex: number = 0): string | null {
     console.warn('⚠️ getNextProxyUrl obsoleta - proxies públicos não funcionam');
     return null; // Sempre retorna null (sem proxies disponíveis)
@@ -2269,7 +2271,7 @@ export const uazapiService = {
       // 5. Testar informações da instância
       console.log('🔍 5/5 - Verificando informações da instância...');
       try {
-        const infoResponse = await api.get('/instance/info', {
+        const infoResponse = await api.get('/instance/status', {
           headers: { 'token': instanceToken }
         });
         
@@ -2356,7 +2358,7 @@ export const uazapiService = {
     // 3. Testando endpoint alternativo
     console.log('3️⃣ TESTANDO ENDPOINT /chat/list...');
     try {
-      const chatListResponse = await api.get('/chat/list', {
+      const chatListResponse = await api.post('/chat/find', {}, {
         headers: { 'token': instanceToken }
       });
       
@@ -2850,9 +2852,10 @@ export const uazapiService = {
 
       const api = createApiClient();
 
-      const response = await api.post('/chat/details', {
+      const response = await api.post('/chat/GetNameAndImageURL', {
         number,
-        preview
+        preview,
+        returnMoreNames: true
       }, {
         headers: {
           'Accept': 'application/json',
@@ -2889,7 +2892,7 @@ export const uazapiService = {
 
       const api = createApiClient();
 
-      const response = await api.post('/contact/block', {
+      const response = await api.post('/chat/block', {
         number,
         block
       }, {

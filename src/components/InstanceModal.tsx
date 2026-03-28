@@ -29,7 +29,8 @@ export function InstanceModal() {
     if (showInstanceModal) {
       loadConnectedInstances();
     }
-  }, [showInstanceModal, contextInstances]); // Adicionar contextInstances como dependência
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showInstanceModal, contextInstances]);
 
   const loadConnectedInstances = async () => {
     try {

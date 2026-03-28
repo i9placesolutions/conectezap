@@ -31,8 +31,8 @@ const createApiClient = () => {
 let api = createApiClient();
 
 // Adiciona o token de autenticação a todas as requisições
-const setupInterceptors = (apiInstance: any) => {
-  apiInstance.interceptors.request.use((config: any) => {
+const setupInterceptors = (apiInstance: ReturnType<typeof axios.create>) => {
+  apiInstance.interceptors.request.use((config: import('axios').InternalAxiosRequestConfig) => {
     const serverConfig = getCurrentServerConfig();
     
     // Se for uma requisição de instância (que usa token específico), usa o token da instância

@@ -8,7 +8,6 @@ import {
   Trash2, 
   AlertTriangle,
   X,
-  MessageCircle,
   Users,
   Bot,
   Headphones,

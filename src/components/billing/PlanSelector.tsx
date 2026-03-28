@@ -99,7 +99,7 @@ export function PlanSelector() {
           }
         }
       });
-    } catch (error) {
+    } catch {
       toast.error('Erro ao processar assinatura');
     }
   };

@@ -13,8 +13,8 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey)
 export interface User {
   id: string;
   email: string;
-  user_metadata: Record<string, any>;
-  app_metadata: Record<string, any>;
+  user_metadata: Record<string, unknown>;
+  app_metadata: Record<string, unknown>;
   created_at: string;
 }
 
@@ -33,8 +33,8 @@ export const authService = {
   async signUp({ email, password, options }: { 
     email: string; 
     password: string; 
-    options?: { 
-      data?: Record<string, any> 
+    options?: {
+      data?: Record<string, unknown>
     } 
   }) {
     const { data, error } = await supabase.auth.signUp({

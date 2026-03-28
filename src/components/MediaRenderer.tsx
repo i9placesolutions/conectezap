@@ -42,10 +42,10 @@ export function MediaRenderer({ message, instanceToken }: MediaRendererProps) {
     console.log('📎 DETALHES DO OBJETO DE MÍDIA:', {
       messageId: message.id,
       fullContent: message.content,
-      hasCaption: !!(message.content as any).caption,
-      hasUrl: !!(message.content as any).url,
-      hasMimetype: !!(message.content as any).mimetype,
-      hasFileName: !!(message.content as any).fileName
+      hasCaption: !!(message.content as Record<string, unknown>).caption,
+      hasUrl: !!(message.content as Record<string, unknown>).url,
+      hasMimetype: !!(message.content as Record<string, unknown>).mimetype,
+      hasFileName: !!(message.content as Record<string, unknown>).fileName
     });
   }
 
@@ -127,17 +127,19 @@ export function MediaRenderer({ message, instanceToken }: MediaRendererProps) {
         throw new Error('URL do arquivo não encontrada na resposta da API');
       }
       
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const err = error as Record<string, unknown>;
+      const errResponse = err.response as Record<string, unknown> | undefined;
       console.error('❌ ERRO DETALHADO ao baixar mídia:', {
-        message: error.message,
-        stack: error.stack,
-        response: error.response,
-        status: error.response?.status,
-        statusText: error.response?.statusText,
-        data: error.response?.data
+        message: err.message,
+        stack: err.stack,
+        response: errResponse,
+        status: errResponse?.status,
+        statusText: errResponse?.statusText,
+        data: errResponse?.data
       });
-      
-      const errorMessage = error.message || 'Erro desconhecido ao baixar arquivo';
+
+      const errorMessage = (err.message as string) || 'Erro desconhecido ao baixar arquivo';
       toast.error(`Erro ao baixar arquivo: ${errorMessage}`);
     } finally {
       console.log('🔚 Finalizando processo de download');
@@ -439,7 +441,7 @@ export function MediaRenderer({ message, instanceToken }: MediaRendererProps) {
     console.log('📊 Content completo:', message.content);
     
     if (typeof message.content === 'object' && message.content !== null) {
-      const mediaObj = message.content as any;
+      const mediaObj = message.content as Record<string, unknown>;
       const result = {
         caption: mediaObj.caption || null,
         fileName: mediaObj.fileName || null,

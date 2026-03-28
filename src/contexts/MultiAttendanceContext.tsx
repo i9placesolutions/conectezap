@@ -106,6 +106,7 @@ export function MultiAttendanceProvider({ children }: { children: ReactNode }) {
     if (user) {
       loadUserRole();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
   const loadUserRole = async () => {
@@ -162,10 +163,10 @@ export function MultiAttendanceProvider({ children }: { children: ReactNode }) {
 
           if (error) throw error;
 
-          const agentsData: Agent[] = (profiles || []).map((profile: any) => ({
-            id: profile.id,
-            name: profile.full_name || profile.email,
-            email: profile.email,
+          const agentsData: Agent[] = (profiles || []).map((profile: Record<string, unknown>) => ({
+            id: profile.id as string,
+            name: (profile.full_name as string) || (profile.email as string),
+            email: profile.email as string,
             status: 'online' as AgentStatus,
             role: 'agent' as UserRole,
             activeChats: Math.floor(Math.random() * 5),
@@ -178,9 +179,10 @@ export function MultiAttendanceProvider({ children }: { children: ReactNode }) {
           console.log(`✅ ${agentsData.length} agentes carregados:`, agentsData.map(a => ({ id: a.id, name: a.name, email: a.email })));
           setAgents(agentsData);
           break; // sucesso
-        } catch (err: any) {
+        } catch (err: unknown) {
           attempt++;
-          const isNetworkError = typeof err?.message === 'string' && /Failed to fetch|NetworkError|TypeError/i.test(err.message);
+          const errObj = err as Record<string, unknown>;
+          const isNetworkError = typeof errObj?.message === 'string' && /Failed to fetch|NetworkError|TypeError/i.test(errObj.message as string);
           if (attempt >= MAX_RETRIES || !isNetworkError) {
             throw err;
           }

@@ -32,6 +32,7 @@ export function ChatSelectionModal({
     if (isOpen && instanceToken) {
       loadChats();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, instanceToken]);
 
   // Resetar seleção baseado nas props

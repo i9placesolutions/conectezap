@@ -184,7 +184,7 @@ export async function syncAllInstancesForAdmin(): Promise<SupabaseInstance[]> {
     console.log('👑 Sincronizando TODAS as instâncias da UAZAPI para admin...');
 
     // 1. Buscar TODAS as instâncias da API UAZAPI usando admin token
-    let apiInstances: any[] = [];
+    let apiInstances: Record<string, unknown>[] = [];
     try {
       apiInstances = await getUazapiInstances();
       console.log(`📊 Encontradas ${apiInstances.length} instâncias na UAZAPI`);
@@ -218,7 +218,7 @@ export async function syncAllInstancesForAdmin(): Promise<SupabaseInstance[]> {
       
       // Encontrar no Supabase se existir (por external_id ou token)
       const supabaseInstance = supabaseInstances?.find(
-        (si: any) => si.external_id === apiInstance.id || si.token === apiInstance.token
+        (si: Record<string, unknown>) => si.external_id === apiInstance.id || si.token === apiInstance.token
       );
 
       if (supabaseInstance) {
@@ -283,10 +283,10 @@ export async function syncInstancesStatus(
     }
 
     // 2. Buscar status atualizado da API UAZAPI
-    let apiInstances: any[] = [];
+    let apiInstances: Record<string, unknown>[] = [];
     try {
       apiInstances = await getUazapiInstances();
-    } catch (error) {
+    } catch {
       console.warn('⚠️ Erro ao buscar status da API UAZAPI, usando dados do Supabase');
       return supabaseInstances;
     }
@@ -384,7 +384,7 @@ export async function validateInstanceOwnership(
 
       // Encontrar a instância específica
       const instance = data?.find(
-        (inst: any) => inst.id === instanceIdOrToken || inst.token === instanceIdOrToken
+        (inst: Record<string, unknown>) => inst.id === instanceIdOrToken || inst.token === instanceIdOrToken
       );
 
       if (!instance) {

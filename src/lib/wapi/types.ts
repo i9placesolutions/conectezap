@@ -113,7 +113,7 @@ export interface ChatDetails {
   chatbot_disableUntil?: number;
   
   // Informações de Grupo (se aplicável)
-  wa_group_participants?: any[];
+  wa_group_participants?: Record<string, unknown>[];
   wa_group_description?: string;
   wa_group_creation?: number;
   
@@ -124,7 +124,7 @@ export interface ChatDetails {
   updatedAt?: string;
   
   // Campos extras que podem existir
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 /**

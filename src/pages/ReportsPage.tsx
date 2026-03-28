@@ -157,19 +157,20 @@ export function ReportsPage() {
       if (!isAutoRefresh) {
         toast.success(`Campanhas carregadas para ${selectedInstance.name}`);
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Erro ao buscar campanhas:', error);
+      const err = error as Record<string, unknown>;
+      const response = err.response as Record<string, unknown> | undefined;
       if (!isAutoRefresh) {
-        // Fornecer feedback específico baseado no tipo de erro
-        if (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND') {
+        if (err.code === 'ECONNREFUSED' || err.code === 'ENOTFOUND') {
           toast.error('Erro de conectividade: Não foi possível conectar à API UAZAPI');
-        } else if (error.response?.status === 401) {
+        } else if (response?.status === 401) {
           toast.error('Token de instância inválido ou expirado');
-        } else if (error.response?.status === 403) {
+        } else if (response?.status === 403) {
           toast.error('Sem permissão para acessar as campanhas desta instância');
-        } else if (error.response?.status === 404) {
+        } else if (response?.status === 404) {
           toast.error('Endpoint de campanhas não encontrado na API');
-        } else if (error.response?.status >= 500) {
+        } else if ((response?.status as number) >= 500) {
           toast.error('Erro interno da API UAZAPI');
         } else {
           toast.error('Erro ao carregar campanhas da instância');
@@ -187,6 +188,7 @@ export function ReportsPage() {
     } else {
       setCampaigns([]);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedInstance]);
 
   // Atualização automática a cada 2 minutos se houver campanhas ativas
@@ -195,10 +197,10 @@ export function ReportsPage() {
 
     const interval = setInterval(() => {
        // Verificar se há campanhas ativas (running, ativo, scheduled)
-       const hasActiveCampaigns = campaigns.some(campaign => 
+       const hasActiveCampaigns = campaigns.some(campaign =>
          ['running', 'ativo', 'scheduled'].includes(campaign.status)
        );
-       
+
        if (hasActiveCampaigns) {
          console.log('Atualizando campanhas automaticamente...');
          fetchCampaigns(true); // true indica que é auto-refresh
@@ -206,6 +208,7 @@ export function ReportsPage() {
      }, 120000); // Atualizar a cada 2 minutos
 
     return () => clearInterval(interval);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedInstance?.token, campaigns]);
 
   // Converter campanhas para formato de relatórios

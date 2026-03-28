@@ -4,7 +4,7 @@ import { cn } from '../lib/utils';
 interface ChatDetailsPanelProps {
   isOpen: boolean;
   onClose: () => void;
-  chatDetails: any;
+  chatDetails: Record<string, unknown>;
   loading: boolean;
 }
 

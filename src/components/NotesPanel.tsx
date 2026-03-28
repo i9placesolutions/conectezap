@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { FileText, Plus, Edit2, Trash2, Save, X, User, Clock, Search } from 'lucide-react';
-import { cn } from '../lib/utils';
+
 import { toast } from 'react-hot-toast';
 
 interface Note {

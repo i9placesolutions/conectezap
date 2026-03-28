@@ -92,7 +92,7 @@ export const generatePDF = (reports: Report[], dateRange: [string, string]) => {
   ]);
 
   autoTable(doc, {
-    startY: (doc as any).lastAutoTable.finalY + 15,
+    startY: (doc as unknown as Record<string, { finalY: number }>).lastAutoTable.finalY + 15,
     head: [['Campanha', 'Total', 'Entregues', 'Lidas', 'Falhadas', 'Resp.', 'Data', 'Status']],
     body: tableData,
     theme: 'striped',

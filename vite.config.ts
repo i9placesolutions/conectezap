@@ -24,11 +24,11 @@ export default defineConfig({
         ws: true,
         xfwd: true,
         rewrite: (path) => path.replace(/^\/api/, ''),
-        configure: (proxy, _options) => {
-          proxy.on('error', (err, _req, _res) => {
+        configure: (proxy) => {
+          proxy.on('error', (err) => {
             console.log('Erro no proxy:', err);
           });
-          proxy.on('proxyReq', (proxyReq, req, _res) => {
+          proxy.on('proxyReq', (proxyReq, req) => {
             proxyReq.removeHeader('Origin');
             proxyReq.removeHeader('Referer');
             
@@ -47,7 +47,7 @@ export default defineConfig({
               headers: proxyReq.getHeaders()
             });
           });
-          proxy.on('proxyRes', (proxyRes, req, _res) => {
+          proxy.on('proxyRes', (proxyRes, req) => {
             console.log('Resposta recebida:', {
               statusCode: proxyRes.statusCode,
               url: req.url,

@@ -77,6 +77,7 @@ interface TabsTriggerProps extends React.ComponentPropsWithoutRef<typeof Tab> {
 const TabsTrigger = React.forwardRef<
   React.ElementRef<typeof Tab>,
   TabsTriggerProps
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 >(({ className, children, value, ...props }, ref) => (
   <Tab
     ref={ref}
@@ -103,6 +104,7 @@ interface TabsContentProps extends React.ComponentPropsWithoutRef<typeof Tab.Pan
 const TabsContent = React.forwardRef<
   React.ElementRef<typeof Tab.Panel>,
   TabsContentProps
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 >(({ className, children, value, ...props }, ref) => (
   <Tab.Panel
     ref={ref}

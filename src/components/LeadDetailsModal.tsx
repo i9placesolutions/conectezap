@@ -52,7 +52,7 @@ export default function LeadDetailsModal({
     lead_is_ticket_open: lead.lead_is_ticket_open || false,
     // Campos personalizados
     ...Object.keys(fieldsConfig).reduce((acc, key) => {
-      acc[key] = (lead as any)[key] || '';
+      acc[key] = (lead as Record<string, unknown>)[key] as string || '';
       return acc;
     }, {} as Record<string, string>)
   });
@@ -72,7 +72,7 @@ export default function LeadDetailsModal({
       ? formData.lead_tags.split(',').map(tag => tag.trim()).filter(tag => tag)
       : [];
 
-    const leadData: any = {
+    const leadData: Record<string, unknown> = {
       id: formData.id,
       lead_name: formData.lead_name,
       lead_full_name: formData.lead_full_name,

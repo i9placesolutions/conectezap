@@ -35,6 +35,7 @@ export function CampaignsListView({ onRefresh, instanceToken }: CampaignsListVie
     }, 5000);
     
     return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refreshCount]);
 
   const loadCampaigns = async () => {
@@ -256,7 +257,7 @@ export function CampaignsListView({ onRefresh, instanceToken }: CampaignsListVie
             <div>
               <h4 className="text-sm font-medium mb-2">Resultados recentes</h4>
               <div className="max-h-40 overflow-y-auto border border-gray-200 rounded-md">
-                {details.results.slice(-5).map((result: any, index: number) => (
+                {details.results.slice(-5).map((result: { success: boolean; number: string; error?: string }, index: number) => (
                   <div 
                     key={index} 
                     className={`p-2 text-xs ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50'} ${result.success ? '' : 'text-red-600'}`}

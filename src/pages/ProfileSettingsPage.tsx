@@ -26,7 +26,7 @@ export function ProfileSettingsPage() {
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [profileData, setProfileData] = useState<any>(null);
+  const [profileData, setProfileData] = useState<Record<string, unknown>>(null);
   const { user } = useAuth();
   
   const { register, handleSubmit, formState: { errors }, control, setValue, watch } = useForm<ProfileForm>({
@@ -100,7 +100,7 @@ export function ProfileSettingsPage() {
 
       if (updateError) throw updateError;
 
-      setProfileData((prev: any) => ({
+      setProfileData((prev: Record<string, unknown>) => ({
         ...prev,
         avatar_url: publicUrl
       }));
@@ -153,7 +153,7 @@ export function ProfileSettingsPage() {
       }
 
       toast.success('Perfil atualizado com sucesso!');
-      setProfileData((prev: any) => ({
+      setProfileData((prev: Record<string, unknown>) => ({
         ...prev,
         full_name: data.fullName,
         company_name: data.companyName,

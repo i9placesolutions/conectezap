@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Search, Plus, MessageSquare, Phone, Send, Paperclip, MoreVertical, Clock, Check, CheckCheck, Smartphone, RefreshCw, Archive, User, Wifi, WifiOff, FileText, Tag, Filter, UserCheck, UserX, CheckCircle, Info, Trash2, Ban, MailOpen } from 'lucide-react';
 import { cn } from '../lib/utils';
-import { uazapiService, Chat as UazapiChat } from '../services/uazapiService';
+import { uazapiService, Chat as UazapiChat, Label } from '../services/uazapiService';
 import { getCurrentServerConfig } from '../services/api';
 import { useInstance } from '../contexts/InstanceContext';
 import { useMultiAttendance } from '../contexts/MultiAttendanceContext';
@@ -18,6 +18,24 @@ import { LabelsModal } from '../components/LabelsModal';
 import { ChatDetailsPanel } from '../components/ChatDetailsPanel'; // ✅ Painel de detalhes do chat
 import { useInstanceSecurity } from '../hooks/useInstanceSecurity';
 
+interface QuotedMessage {
+  id?: string;
+  messageId?: string;
+  stanzaId?: string;
+  body?: string | object;
+  text?: string;
+  conversation?: string;
+  type?: string;
+  pushName?: string;
+  participant?: string;
+  author?: string;
+  fromMe?: boolean;
+  timestamp?: number;
+  messageTimestamp?: number;
+  message?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
 interface ChatMessage {
   id: string;
   chatId: string;
@@ -28,7 +46,7 @@ interface ChatMessage {
   status?: 'sending' | 'sent' | 'delivered' | 'read';
   author?: string;
   mediaUrl?: string;
-  quotedMsg?: any;
+  quotedMsg?: QuotedMessage | null;
   reactions?: { [emoji: string]: string[] }; // emoji -> array de usuários que reagiram
 }
 
@@ -61,7 +79,7 @@ export function ChatPage() {
   
   const [chats, setChats] = useState<ExtendedChat[]>([]);
   const [selectedChat, setSelectedChat] = useState<ExtendedChat | null>(null);
-  const [selectedChatDetails, setSelectedChatDetails] = useState<any>(null); // ✅ Detalhes completos do chat
+  const [selectedChatDetails, setSelectedChatDetails] = useState<Record<string, unknown> | null>(null); // ✅ Detalhes completos do chat
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
@@ -82,7 +100,7 @@ export function ChatPage() {
   const [replyingToMessage, setReplyingToMessage] = useState<ChatMessage | null>(null);
   const [showEmojiPicker, setShowEmojiPicker] = useState<string | null>(null); // ID da mensagem para mostrar picker
   const [reactingToMessage, setReactingToMessage] = useState<string | null>(null); // ID da mensagem sendo reagida
-  const [labels, setLabels] = useState<any[]>([]);
+  const [labels, setLabels] = useState<Label[]>([]);
   const [labelsLoading, setLabelsLoading] = useState(false);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -101,9 +119,10 @@ export function ChatPage() {
         const now = Date.now();
         
         // Filtrar entradas expiradas
-        const validCache = Object.entries(parsedCache).reduce((acc, [key, value]: [string, any]) => {
-          if (value.timestamp && (now - value.timestamp) < CACHE_EXPIRY_MS) {
-            acc[key] = value;
+        const validCache = Object.entries(parsedCache).reduce((acc, [key, value]: [string, unknown]) => {
+          const entry = value as { name: string; timestamp: number };
+          if (entry.timestamp && (now - entry.timestamp) < CACHE_EXPIRY_MS) {
+            acc[key] = entry;
           }
           return acc;
         }, {} as Record<string, { name: string; timestamp: number }>);
@@ -195,11 +214,12 @@ export function ChatPage() {
   // ✅ Limpar cache expirado ao montar o componente
   useEffect(() => {
     cleanExpiredCache();
-    
+
     // Limpar cache a cada 1 hora
     const intervalId = setInterval(cleanExpiredCache, 60 * 60 * 1000);
-    
+
     return () => clearInterval(intervalId);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Função para analisar se uma mensagem pode ser uma resposta baseado em padrões
@@ -215,53 +235,66 @@ export function ChatPage() {
       // Se a mensagem for do chat atualmente selecionado, adicionar às mensagens
       if (selectedChat && message.chatId === selectedChat.id) {
         // Aplicar a mesma lógica de processamento de citações usada no carregamento
-        let processedQuotedMsg = null;
-        const msgAny = message as any;
-        
+        let processedQuotedMsg: QuotedMessage | null = null;
+        const msgRecord = message as unknown as Record<string, unknown>;
+        const msgMessage = msgRecord.message as Record<string, unknown> | undefined;
+        const msgKey = msgRecord.key as Record<string, unknown> | undefined;
+        const msgBody = msgRecord.body as Record<string, unknown> | undefined;
+        const extTextMsg = msgRecord.extendedTextMessage as Record<string, unknown> | undefined;
+        const msgContextInfo = msgRecord.contextInfo as Record<string, unknown> | undefined;
+        const extTextMsgInMsg = msgMessage?.extendedTextMessage as Record<string, unknown> | undefined;
+        const convInMsg = msgMessage?.conversation as Record<string, unknown> | undefined;
+        const keyContextInfo = msgKey?.contextInfo as Record<string, unknown> | undefined;
+        const extCtxInfo = extTextMsg?.contextInfo as Record<string, unknown> | undefined;
+        const msgCtxInfo = msgContextInfo?.quotedMessage;
+        const extMsgCtxInfo = extTextMsgInMsg?.contextInfo as Record<string, unknown> | undefined;
+        const convCtxInfo = convInMsg?.contextInfo as Record<string, unknown> | undefined;
+
         // Verificar todos os campos possíveis onde mensagens citadas podem estar
-        const quotedSource = message.quotedMsg || 
-                           msgAny.quoted || 
-                           msgAny.quotedMessage || 
-                           msgAny.contextInfo?.quotedMessage ||
-                           msgAny.message?.extendedTextMessage?.contextInfo?.quotedMessage ||
-                           msgAny.message?.conversation?.contextInfo?.quotedMessage ||
-                           msgAny.key?.contextInfo?.quotedMessage ||
-                           msgAny.quotedStanzaId || 
-                           msgAny.quotedParticipant || 
-                           msgAny.quotedStanza || 
-                           msgAny.extendedTextMessage?.contextInfo?.quotedMessage ||
-                           (msgAny.body && typeof msgAny.body === 'object' && msgAny.body.quotedMessage) ||
-                           msgAny.replyTo ||
-                           msgAny.repliedTo ||
-                           msgAny.inReplyTo ||
-                           msgAny.quotedContent ||
-                           msgAny.quotedText ||
-                           msgAny.quotedBody ||
-                           msgAny.reference ||
-                           msgAny.messageRef ||
-                           msgAny.quotedMessageId ||
-                           msgAny.originalMessage ||
-                           msgAny.parentMessage ||
-                           msgAny.message?.quotedMessage ||
-                           msgAny.message?.quoted ||
-                           msgAny.message?.contextInfo ||
-                           msgAny.stanzaId ||
-                           msgAny.participant ||
-                           msgAny.quotedStanzaId ||
-                           (msgAny.key && msgAny.key.participant && msgAny.key.id);
+        const quotedSource = message.quotedMsg ||
+                           msgRecord.quoted ||
+                           msgRecord.quotedMessage ||
+                           msgCtxInfo ||
+                           extMsgCtxInfo?.quotedMessage ||
+                           convCtxInfo?.quotedMessage ||
+                           keyContextInfo?.quotedMessage ||
+                           msgRecord.quotedStanzaId ||
+                           msgRecord.quotedParticipant ||
+                           msgRecord.quotedStanza ||
+                           extCtxInfo?.quotedMessage ||
+                           (msgBody && typeof msgBody === 'object' && (msgBody as Record<string, unknown>).quotedMessage) ||
+                           msgRecord.replyTo ||
+                           msgRecord.repliedTo ||
+                           msgRecord.inReplyTo ||
+                           msgRecord.quotedContent ||
+                           msgRecord.quotedText ||
+                           msgRecord.quotedBody ||
+                           msgRecord.reference ||
+                           msgRecord.messageRef ||
+                           msgRecord.quotedMessageId ||
+                           msgRecord.originalMessage ||
+                           msgRecord.parentMessage ||
+                           msgMessage?.quotedMessage ||
+                           msgMessage?.quoted ||
+                           msgMessage?.contextInfo ||
+                           msgRecord.stanzaId ||
+                           msgRecord.participant ||
+                           msgRecord.quotedStanzaId ||
+                           (msgKey && msgKey.participant && msgKey.id);
         
         if (quotedSource) {
           console.log('📋 ✅ ENCONTROU mensagem citada em tempo real! Processando:', quotedSource);
           
-          const quotedData = quotedSource.quotedMessage || quotedSource;
-          
+          const quotedSourceObj = quotedSource as Record<string, unknown>;
+          const quotedData = (quotedSourceObj.quotedMessage || quotedSource) as Record<string, unknown>;
+
           processedQuotedMsg = {
             ...quotedData,
-            body: quotedData.body || quotedData.text || quotedData.conversation,
-            type: quotedData.type || 'text',
-            pushName: quotedData.pushName || quotedData.participant || quotedData.author,
-            id: quotedData.id || quotedData.messageId,
-            timestamp: quotedData.timestamp || quotedData.messageTimestamp
+            body: (quotedData.body || quotedData.text || quotedData.conversation) as string | undefined,
+            type: (quotedData.type || 'text') as string,
+            pushName: (quotedData.pushName || quotedData.participant || quotedData.author) as string | undefined,
+            id: (quotedData.id || quotedData.messageId) as string | undefined,
+            timestamp: (quotedData.timestamp || quotedData.messageTimestamp) as number | undefined
           };
           
           console.log('✅ Mensagem citada processada em tempo real:', processedQuotedMsg);
@@ -369,6 +402,7 @@ export function ChatPage() {
       
       return () => clearTimeout(timer);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // ✅ Array vazio = executa APENAS na montagem
 
   // Carregar chats quando instância for selecionada
@@ -379,6 +413,7 @@ export function ChatPage() {
       const interval = setInterval(loadChats, 30000);
       return () => clearInterval(interval);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedInstance]);
 
   // Fechar seletor de emojis ao clicar fora
@@ -955,7 +990,7 @@ export function ChatPage() {
           messageType = 'text';
         } else if (typeof msg.body === 'object' && msg.body !== null) {
           // Mensagem de mídia - msg.body contém metadados da mídia
-          const mediaObj = msg.body as any;
+          const mediaObj = msg.body as Record<string, unknown>;
           
           console.log('📎 Processando mídia:', {
             messageId: msg.id,
@@ -1331,7 +1366,7 @@ export function ChatPage() {
     }
   };
 
-  const handleSelectTemplate = (template: any) => {
+  const handleSelectTemplate = (template: { content: string }) => {
     setNewMessage(template.content);
     setShowTemplatesModal(false);
     // Focar no input após aplicar template
@@ -1470,7 +1505,7 @@ export function ChatPage() {
   };
 
   // Função para renderizar mensagem citada/de resposta - estilo WhatsApp Web
-  const renderQuotedMessage = (quotedMsg: any, isFromMe: boolean) => {
+  const renderQuotedMessage = (quotedMsg: QuotedMessage, isFromMe: boolean) => {
     if (!quotedMsg) {
       console.log('❌ renderQuotedMessage chamada com quotedMsg vazio');
       return null;
@@ -1570,7 +1605,7 @@ export function ChatPage() {
   };
 
   // Função para extrair conteúdo da mensagem citada - melhorada para API UAZAPI
-  const getQuotedMessageContent = (quotedMsg: any): string => {
+  const getQuotedMessageContent = (quotedMsg: QuotedMessage | string | unknown): string => {
     console.log('🔍 Extraindo conteúdo da mensagem citada:', quotedMsg);
     
     // Se é string simples, retornar diretamente
@@ -1583,28 +1618,31 @@ export function ChatPage() {
       return String(quotedMsg || 'Mensagem');
     }
 
+    // A partir daqui, quotedMsg é um objeto - usar como Record para acesso seguro
+    const msg = quotedMsg as Record<string, unknown>;
+
     // Prioridade 1: Campo body (mais comum na UAZAPI)
-    if (quotedMsg.body) {
-      if (typeof quotedMsg.body === 'string') {
-        return quotedMsg.body;
+    if (msg.body) {
+      if (typeof msg.body === 'string') {
+        return msg.body;
       }
-      
+
       // Se body é um objeto (mensagem de mídia)
-      if (typeof quotedMsg.body === 'object' && quotedMsg.body !== null) {
-        const mediaObj = quotedMsg.body;
-        
+      if (typeof msg.body === 'object' && msg.body !== null) {
+        const mediaObj = msg.body as Record<string, unknown>;
+
         // Para mídia com legenda
         if (mediaObj.caption) {
-          return mediaObj.caption;
+          return String(mediaObj.caption);
         }
-        
+
         // Para documentos com nome
         if (mediaObj.fileName) {
-          return mediaObj.fileName;
+          return String(mediaObj.fileName);
         }
-        
+
         // Para outros tipos de mídia, usar tipo genérico
-        return getMediaTypeName(quotedMsg.type || 'document');
+        return getMediaTypeName(String(msg.type || 'document'));
       }
     }
 
@@ -1620,13 +1658,13 @@ export function ChatPage() {
     ];
 
     for (const field of textFields) {
-      if (quotedMsg[field] && typeof quotedMsg[field] === 'string') {
-        return quotedMsg[field];
+      if (msg[field] && typeof msg[field] === 'string') {
+        return msg[field] as string;
       }
     }
 
     // Prioridade 3: Mensagens de mídia específicas
-    if (quotedMsg.type && quotedMsg.type !== 'text') {
+    if (msg.type && msg.type !== 'text') {
       // Para diferentes tipos de mídia
       const mediaTypes = {
         'image': '📷 Foto',
@@ -1646,23 +1684,23 @@ export function ChatPage() {
         'contact': '👤 Contato',
         'contactMessage': '👤 Contato'
       };
-      
-             return mediaTypes[quotedMsg.type as keyof typeof mediaTypes] || `📎 ${getMediaTypeName(quotedMsg.type)}`;
+
+             return mediaTypes[msg.type as keyof typeof mediaTypes] || `📎 ${getMediaTypeName(String(msg.type))}`;
     }
 
     // Prioridade 4: Verificar estruturas aninhadas
-    if (quotedMsg.message) {
-      const nestedContent = getQuotedMessageContent(quotedMsg.message);
+    if (msg.message) {
+      const nestedContent = getQuotedMessageContent(msg.message);
       if (nestedContent !== 'Mensagem') {
         return nestedContent;
       }
     }
 
     // Prioridade 5: Usar qualquer campo de string disponível
-    const allKeys = Object.keys(quotedMsg);
+    const allKeys = Object.keys(msg);
     for (const key of allKeys) {
-      const value = quotedMsg[key];
-      if (typeof value === 'string' && value.length > 0 && value !== quotedMsg.id) {
+      const value = msg[key];
+      if (typeof value === 'string' && value.length > 0 && value !== msg.id) {
         console.log(`🔍 Usando campo '${key}' como conteúdo:`, value);
         return value;
       }
@@ -1739,16 +1777,16 @@ export function ChatPage() {
     
     // Se content é objeto (mídia sem token)
     if (typeof message.content === 'object' && message.content !== null) {
-      const mediaObj = message.content as any;
+      const mediaObj = message.content as Record<string, unknown>;
       
       // Priorizar legenda se disponível
       if (mediaObj.caption) {
-        return mediaObj.caption;
+        return String(mediaObj.caption);
       }
-      
+
       // Fallback para nome do arquivo
       if (mediaObj.fileName) {
-        return `📁 ${mediaObj.fileName}`;
+        return `📁 ${String(mediaObj.fileName)}`;
       }
       
       // Indicador genérico por tipo
@@ -1789,7 +1827,7 @@ export function ChatPage() {
   // Método de debug para console do navegador
   useEffect(() => {
     // Expor método de debug no window para acesso via console
-    (window as any).debugConversas = async (token?: string) => {
+    (window as unknown as Record<string, unknown>).debugConversas = async (token?: string) => {
       const instanceToken = token || selectedInstance?.token;
       if (!instanceToken) {
         console.error('❌ Token não fornecido. Use: debugConversas("SEU_TOKEN_AQUI")');
@@ -1852,7 +1890,7 @@ export function ChatPage() {
     console.log('🔧 Debug disponível via console: debugConversas("SEU_TOKEN")');
     
     return () => {
-      delete (window as any).debugConversas;
+      delete (window as unknown as Record<string, unknown>).debugConversas;
     };
   }, [selectedInstance]);
 
@@ -1890,9 +1928,9 @@ export function ChatPage() {
       
       toast.success(`${mediaFiles.length} mídia(s) enviada(s) com sucesso!`);
       
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('❌ ERRO AO ENVIAR MÍDIAS:', error);
-      toast.error(error.message || 'Erro ao enviar mídias');
+      toast.error(error instanceof Error ? error.message : 'Erro ao enviar mídias');
       throw error; // Re-throw para o modal tratar
     }
   };
@@ -2039,7 +2077,7 @@ export function ChatPage() {
                 <label className="block text-xs font-medium text-gray-700 mb-1">Por Status</label>
                 <select
                   value={filterByStatus || ''}
-                  onChange={(e) => setFilterByStatus(e.target.value as any || null)}
+                  onChange={(e) => setFilterByStatus((e.target.value as 'unassigned' | 'assigned' | 'closed') || null)}
                   className="w-full text-xs border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-primary-500"
                 >
                   <option value="">Todos os status</option>
@@ -2212,7 +2250,7 @@ export function ChatPage() {
                   <button
                     onClick={() => {
                       console.log('🔧 Executando debug via botão...');
-                      (window as any).debugConversas?.(selectedInstance?.token);
+                      ((window as unknown as Record<string, unknown>).debugConversas as ((token?: string) => void) | undefined)?.(selectedInstance?.token);
                     }}
                     className="block mx-auto px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 text-sm"
                   >
@@ -2812,7 +2850,7 @@ export function ChatPage() {
       {/* Instance Modal */}
       {showInstanceModal && (
         <SelectInstanceModal
-          onSelect={(instance: any) => {
+          onSelect={(instance) => {
             setSelectedInstance(instance);
             setShowInstanceModal(false);
           }}

@@ -322,7 +322,7 @@ export function LeadsPage() {
         // Debug: mostrar timestamps dos primeiros 3 chats
         if (offset === 0 && chats.length > 0) {
           console.log('📅 Timestamps dos primeiros chats:', 
-            chats.slice(0, 3).map((c: any) => ({
+            chats.slice(0, 3).map((c: Record<string, unknown>) => ({
               name: c.name || c.pushname,
               timestamp: c.wa_lastMsgTimestamp || c.lastMessage?.timestamp,
               date: c.wa_lastMsgTimestamp ? new Date(c.wa_lastMsgTimestamp * 1000).toLocaleString() : 'sem data'
@@ -462,6 +462,7 @@ export function LeadsPage() {
       loadLeads();
       loadFieldsConfig();
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id, instanceId]);
 
   // Importação automática de chats quando não há leads
@@ -473,6 +474,7 @@ export function LeadsPage() {
         autoImportChatsIfNeeded();
       }
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [leads.length, user?.id, instanceId, selectedInstance?.token, loading]);
 
   // Listener para eventos SSE de novos leads
@@ -496,6 +498,7 @@ export function LeadsPage() {
     return () => {
       window.removeEventListener('lead-updated', handleLeadUpdated);
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id, instanceId]);
 
   // ========================================
@@ -923,8 +926,8 @@ export function LeadsPage() {
       {/* Modais */}
       {showFieldsConfigModal && (
         <LeadFieldsConfigModal
-          currentConfig={fieldsConfig as any}
-          onSave={handleSaveFieldsConfig as any}
+          currentConfig={fieldsConfig as Record<string, unknown>}
+          onSave={handleSaveFieldsConfig as unknown as (config: Record<string, unknown>) => void}
           onClose={() => setShowFieldsConfigModal(false)}
         />
       )}
@@ -945,9 +948,9 @@ export function LeadsPage() {
 
       {selectedLead && (
         <LeadDetailsModal
-          lead={selectedLead as any}
-          fieldsConfig={fieldsConfig as any}
-          onSave={handleEditLead as any}
+          lead={selectedLead as Record<string, unknown>}
+          fieldsConfig={fieldsConfig as Record<string, unknown>}
+          onSave={handleEditLead as unknown as (lead: Record<string, unknown>) => void}
           onClose={() => setSelectedLead(null)}
         />
       )}
