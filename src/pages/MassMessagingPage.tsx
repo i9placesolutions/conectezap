@@ -3,7 +3,6 @@ import {
   Send, 
   Image, 
   Mic, 
-  Smile, 
   AlertTriangle, 
   Clock, 
   Calendar, 
@@ -66,16 +65,6 @@ interface AntiSpamConfig {
   deliveryThreshold: number; // % mínimo de entrega para continuar
 }
 
-
-
-// Monitoramento de entrega
-interface DeliveryStats {
-  sent: number;
-  delivered: number;
-  failed: number;
-  rate: number; // Taxa de entrega em %
-}
-
 export function MassMessagingPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -126,7 +115,6 @@ export function MassMessagingPage() {
   const [manualNumbers, setManualNumbers] = useState<Contact[]>([]); // Contatos adicionados manualmente
   const [showManualInput, setShowManualInput] = useState(false); // Modal de entrada manual
   const [manualTextInput, setManualTextInput] = useState(''); // Texto da entrada manual
-  const [showSpreadsheetUpload, setShowSpreadsheetUpload] = useState(false); // Modal de upload de planilha
   const [spreadsheetContacts, setSpreadsheetContacts] = useState<Contact[]>([]); // Contatos da planilha
   
   // Configurações anti-spam avançadas
@@ -141,14 +129,6 @@ export function MassMessagingPage() {
   });
   
   // Estados para validação e monitoramento
-  const [validatingNumbers] = useState(false);
-  const [deliveryStats] = useState<DeliveryStats>({
-    sent: 0,
-    delivered: 0,
-    failed: 0,
-    rate: 0
-  });
-  const [invalidNumbers] = useState<string[]>([]);
   const [blacklistedNumbers, setBlacklistedNumbers] = useState<string[]>([]);
   const [blacklistStats, setBlacklistStats] = useState({ total: 0, byReason: {}, recentlyAdded: 0 });
   
@@ -497,6 +477,11 @@ export function MassMessagingPage() {
         }
       });
 
+      // Deduplicar números de todas as fontes
+      const uniqueNumbers = [...new Set(numbers)];
+      console.log(`🔄 Removidos ${numbers.length - uniqueNumbers.length} duplicados`);
+      numbers = uniqueNumbers;
+
       console.log('📊 Total de números preparados:', numbers.length);
       console.log('📋 Lista completa de números:', numbers);
       
@@ -801,6 +786,19 @@ export function MassMessagingPage() {
                     completedBlocks: prev.completedBlocks + 1,
                     currentStatus: `Bloco ${blockIndex + 1} concluído com sucesso (${block.length} contatos)`
                   }));
+
+                  // Auto-pause: pausar após X mensagens
+                  if (blockConfig.useAutoPause && totalSent > 0 && totalSent % blockConfig.pauseAfterCount < block.length) {
+                    const pauseMs = blockConfig.pauseDurationMinutes * 60 * 1000;
+                    const pauseMinutes = blockConfig.pauseDurationMinutes;
+                    console.log(`⏸️ Auto-pausa ativada após ${totalSent} mensagens. Pausando por ${pauseMinutes} min...`);
+                    setBlockProgress(prev => ({
+                      ...prev,
+                      currentStatus: `⏸️ Pausa automática: ${pauseMinutes}min (após ${totalSent} msgs)`
+                    }));
+                    await new Promise(resolve => setTimeout(resolve, pauseMs));
+                    console.log('▶️ Retomando envio após pausa automática');
+                  }
                 } else {
                   totalFailed += block.length;
                   blockResults.push({
@@ -833,7 +831,7 @@ export function MassMessagingPage() {
                   
                   // Countdown visual no console e atualização de progresso
                   for (let countdown = blockConfig.delayBetweenBlocks; countdown > 0; countdown--) {
-                    if (countdown % 10 === 0 || countdown <= 5) {
+                    if (countdown % 10 === 0 || countdown <= 10) {
                       console.log(`   ${countdown}s restantes...`);
                       setBlockProgress(prev => ({
                         ...prev,
@@ -896,7 +894,7 @@ export function MassMessagingPage() {
             });
             
             // Atualizar status da campanha com os folder_ids dos blocos
-            const finalStatus = totalFailed === 0 ? 'completed' : totalSent > 0 ? 'completed' : 'failed';
+            const finalStatus = totalFailed === 0 ? 'completed' : totalSent > 0 ? 'partial' : 'failed';
             if (savedCampaign?.id) {
               await updateMassCampaign(savedCampaign.id, {
                 status: finalStatus,
@@ -1403,234 +1401,279 @@ export function MassMessagingPage() {
               <div className="p-4 sm:p-6">
                 <h2 className="text-lg sm:text-xl font-semibold text-gray-900 mb-4 sm:mb-6">Selecione os Destinatários</h2>
                 
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 sm:gap-6">
-                  {/* Contatos */}
-                  <div className="bg-gray-50 rounded-lg p-4 sm:p-5 border border-gray-200">
-                    <div className="flex items-start sm:items-center justify-between mb-4 gap-2">
-                      <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-                        <div className="h-8 w-8 sm:h-10 sm:w-10 rounded-full bg-primary-100 flex items-center justify-center flex-shrink-0">
-                          <Send className="h-4 w-4 sm:h-5 sm:w-5 text-primary-600" />
-                        </div>
-                        <div className="min-w-0">
-                          <h3 className="text-base sm:text-lg font-medium truncate">Contatos</h3>
-                          <p className="text-xs sm:text-sm text-gray-500 hidden sm:block">Selecione contatos individuais</p>
-                        </div>
-                      </div>
-                      <span className="bg-primary-100 text-primary-700 text-xs font-medium px-2 sm:px-2.5 py-1 rounded-full whitespace-nowrap">
-                        {selectedContacts.length}
-                      </span>
-                    </div>
-                    
-                    <div className="grid grid-cols-2 gap-2 mb-4">
-                      <button 
-                        onClick={handleClearContacts}
-                        className="p-2 text-center rounded-lg border border-gray-200 hover:border-primary-200 hover:bg-primary-50 text-xs sm:text-sm font-medium"
-                      >
-                        Nenhum
-                      </button>
-                      <button 
-                        onClick={() => setShowContactModal(true)}
-                        className="p-2 text-center rounded-lg border border-gray-200 hover:border-primary-200 hover:bg-primary-50 text-xs sm:text-sm font-medium"
-                      >
-                        Selecionar
-                      </button>
-                    </div>
-                    
-                    {selectedContacts.length > 0 && (
-                      <div className="max-h-32 sm:max-h-40 overflow-y-auto border border-gray-200 rounded-lg p-2 bg-white">
-                        {selectedContacts.map(contact => (
-                          <div key={contact.id} className="py-1 px-2 text-xs sm:text-sm flex items-center justify-between gap-2">
-                            <span className="font-medium truncate">{contact.name}</span>
-                            <span className="text-gray-500 text-xs whitespace-nowrap">{contact.number}</span>
+                {/* Da instância WhatsApp */}
+                <div className="mb-2">
+                  <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Da instância WhatsApp</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {/* Contatos */}
+                    <div className="bg-gray-50 rounded-lg p-4 sm:p-5 border border-gray-200">
+                      <div className="flex items-center justify-between mb-4 gap-2">
+                        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+                          <div className="h-9 w-9 rounded-full bg-primary-100 flex items-center justify-center flex-shrink-0">
+                            <Send className="h-4 w-4 text-primary-600" />
                           </div>
-                        ))}
+                          <div className="min-w-0">
+                            <h3 className="text-sm sm:text-base font-semibold truncate">Contatos</h3>
+                            <p className="text-xs text-gray-500">Contatos individuais</p>
+                          </div>
+                        </div>
+                        <span className="bg-primary-100 text-primary-700 text-xs font-bold px-2.5 py-1 rounded-full">
+                          {selectedContacts.length}
+                        </span>
                       </div>
-                    )}
+                      <div className="grid grid-cols-2 gap-2 mb-3">
+                        <button
+                          onClick={handleClearContacts}
+                          className="p-2 text-center rounded-lg border border-gray-200 hover:border-red-200 hover:bg-red-50 text-xs font-medium text-gray-600"
+                        >
+                          Limpar
+                        </button>
+                        <button
+                          onClick={() => setShowContactModal(true)}
+                          className="p-2 text-center rounded-lg border border-primary-200 bg-primary-50 hover:bg-primary-100 text-xs font-medium text-primary-700"
+                        >
+                          Selecionar
+                        </button>
+                      </div>
+                      {selectedContacts.length > 0 && (
+                        <div className="max-h-32 overflow-y-auto border border-gray-200 rounded-lg p-2 bg-white">
+                          {selectedContacts.map(contact => (
+                            <div key={contact.id} className="py-1 px-2 text-xs flex items-center justify-between gap-2">
+                              <span className="font-medium truncate">{contact.name}</span>
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-gray-400 whitespace-nowrap">{contact.number}</span>
+                                <button
+                                  onClick={() => setSelectedContacts(prev => prev.filter(c => c.id !== contact.id))}
+                                  className="text-gray-400 hover:text-red-500 flex-shrink-0"
+                                >
+                                  <X className="h-3 w-3" />
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Grupos */}
+                    <div className="bg-gray-50 rounded-lg p-4 sm:p-5 border border-gray-200">
+                      <div className="flex items-center justify-between mb-4 gap-2">
+                        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+                          <div className="h-9 w-9 rounded-full bg-primary-100 flex items-center justify-center flex-shrink-0">
+                            <Users className="h-4 w-4 text-primary-600" />
+                          </div>
+                          <div className="min-w-0">
+                            <h3 className="text-sm sm:text-base font-semibold truncate">Grupos</h3>
+                            <p className="text-xs text-gray-500">Grupos de contato</p>
+                          </div>
+                        </div>
+                        <span className="bg-primary-100 text-primary-700 text-xs font-bold px-2.5 py-1 rounded-full">
+                          {selectedGroups.length}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 mb-3">
+                        <button
+                          onClick={handleClearGroups}
+                          className="p-2 text-center rounded-lg border border-gray-200 hover:border-red-200 hover:bg-red-50 text-xs font-medium text-gray-600"
+                        >
+                          Limpar
+                        </button>
+                        <button
+                          onClick={() => setShowGroupModal(true)}
+                          className="p-2 text-center rounded-lg border border-primary-200 bg-primary-50 hover:bg-primary-100 text-xs font-medium text-primary-700"
+                        >
+                          Selecionar
+                        </button>
+                      </div>
+                      {selectedGroups.length > 0 && (
+                        <div className="max-h-32 overflow-y-auto border border-gray-200 rounded-lg p-2 bg-white">
+                          {selectedGroups.map(group => (
+                            <div key={group.id} className="py-1 px-2 text-xs flex items-center justify-between gap-2">
+                              <span className="font-medium truncate">{group.name}</span>
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-gray-400 whitespace-nowrap">{group.participantsCount} part.</span>
+                                <button
+                                  onClick={() => setSelectedGroups(prev => prev.filter(g => g.id !== group.id))}
+                                  className="text-gray-400 hover:text-red-500 flex-shrink-0"
+                                >
+                                  <X className="h-3 w-3" />
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Chats */}
+                    <div className="bg-gray-50 rounded-lg p-4 sm:p-5 border border-gray-200">
+                      <div className="flex items-center justify-between mb-4 gap-2">
+                        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+                          <div className="h-9 w-9 rounded-full bg-primary-100 flex items-center justify-center flex-shrink-0">
+                            <MessageCircle className="h-4 w-4 text-primary-600" />
+                          </div>
+                          <div className="min-w-0">
+                            <h3 className="text-sm sm:text-base font-semibold truncate">Chats</h3>
+                            <p className="text-xs text-gray-500">Conversas recentes</p>
+                          </div>
+                        </div>
+                        <span className="bg-primary-100 text-primary-700 text-xs font-bold px-2.5 py-1 rounded-full">
+                          {selectedChats.length}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 mb-3">
+                        <button
+                          onClick={() => setSelectedChats([])}
+                          className="p-2 text-center rounded-lg border border-gray-200 hover:border-red-200 hover:bg-red-50 text-xs font-medium text-gray-600"
+                        >
+                          Limpar
+                        </button>
+                        <button
+                          onClick={() => setShowChatModal(true)}
+                          className="p-2 text-center rounded-lg border border-primary-200 bg-primary-50 hover:bg-primary-100 text-xs font-medium text-primary-700"
+                        >
+                          Selecionar
+                        </button>
+                      </div>
+                      {selectedChats.length > 0 && (
+                        <div className="max-h-32 overflow-y-auto border border-gray-200 rounded-lg p-2 bg-white">
+                          {selectedChats.map(chat => (
+                            <div key={chat.id} className="py-1 px-2 text-xs flex items-center justify-between gap-2">
+                              <span className="font-medium truncate">{chat.name}</span>
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-gray-400 whitespace-nowrap">
+                                  {chat.unreadCount > 0 ? `${chat.unreadCount} novas` : 'Lida'}
+                                </span>
+                                <button
+                                  onClick={() => setSelectedChats(prev => prev.filter(c => c.id !== chat.id))}
+                                  className="text-gray-400 hover:text-red-500 flex-shrink-0"
+                                >
+                                  <X className="h-3 w-3" />
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </div>
-                  
-                  {/* Grupos */}
-                  <div className="bg-gray-50 rounded-lg p-4 sm:p-5 border border-gray-200">
-                    <div className="flex items-start sm:items-center justify-between mb-4 gap-2">
-                      <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-                        <div className="h-8 w-8 sm:h-10 sm:w-10 rounded-full bg-primary-100 flex items-center justify-center flex-shrink-0">
-                          <Users className="h-4 w-4 sm:h-5 sm:w-5 text-primary-600" />
-                        </div>
-                        <div className="min-w-0">
-                          <h3 className="text-base sm:text-lg font-medium truncate">Grupos</h3>
-                          <p className="text-xs sm:text-sm text-gray-500 hidden sm:block">Selecione grupos de contato</p>
-                        </div>
-                      </div>
-                      <span className="bg-primary-100 text-primary-700 text-xs font-medium px-2 sm:px-2.5 py-1 rounded-full whitespace-nowrap">
-                        {selectedGroups.length}
-                      </span>
-                    </div>
-                    
-                    <div className="grid grid-cols-2 gap-2 mb-4">
-                      <button 
-                        onClick={handleClearGroups}
-                        className="p-2 text-center rounded-lg border border-gray-200 hover:border-primary-200 hover:bg-primary-50 text-xs sm:text-sm font-medium"
-                      >
-                        Nenhum
-                      </button>
-                      <button 
-                        onClick={() => setShowGroupModal(true)}
-                        className="p-2 text-center rounded-lg border border-gray-200 hover:border-primary-200 hover:bg-primary-50 text-xs sm:text-sm font-medium"
-                      >
-                        Selecionar
-                      </button>
-                    </div>
-                    
-                    {selectedGroups.length > 0 && (
-                      <div className="max-h-32 sm:max-h-40 overflow-y-auto border border-gray-200 rounded-lg p-2 bg-white">
-                        {selectedGroups.map(group => (
-                          <div key={group.id} className="py-1 px-2 text-xs sm:text-sm flex items-center justify-between gap-2">
-                            <span className="font-medium truncate">{group.name}</span>
-                            <span className="text-gray-500 text-xs whitespace-nowrap">{group.participantsCount} part.</span>
+                </div>
+
+                {/* Importar manualmente */}
+                <div className="mt-5">
+                  <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Importar manualmente</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Lista Manual */}
+                    <div className="bg-green-50/50 rounded-lg p-4 sm:p-5 border border-green-200/60">
+                      <div className="flex items-center justify-between mb-4 gap-2">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="h-9 w-9 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
+                            <ListPlus className="h-4 w-4 text-green-600" />
                           </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Chats */}
-                  <div className="bg-gray-50 rounded-lg p-4 sm:p-5 border border-gray-200">
-                    <div className="flex items-start sm:items-center justify-between mb-4 gap-2">
-                      <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-                        <div className="h-8 w-8 sm:h-10 sm:w-10 rounded-full bg-primary-100 flex items-center justify-center flex-shrink-0">
-                          <MessageCircle className="h-4 w-4 sm:h-5 sm:w-5 text-primary-600" />
-                        </div>
-                        <div className="min-w-0">
-                          <h3 className="text-base sm:text-lg font-medium truncate">Chats</h3>
-                          <p className="text-xs sm:text-sm text-gray-500 hidden sm:block">Selecione conversas individuais</p>
-                        </div>
-                      </div>
-                      <span className="bg-primary-100 text-primary-700 text-xs font-medium px-2 sm:px-2.5 py-1 rounded-full whitespace-nowrap">
-                        {selectedChats.length}
-                      </span>
-                    </div>
-                    
-                    <div className="grid grid-cols-2 gap-2 mb-4">
-                      <button 
-                        onClick={() => setSelectedChats([])}
-                        className="p-2 text-center rounded-lg border border-gray-200 hover:border-primary-200 hover:bg-primary-50 text-xs sm:text-sm font-medium"
-                      >
-                        Nenhum
-                      </button>
-                      <button 
-                        onClick={() => {
-                          console.log('🔘 Botão "Selecionar Chats" clicado!');
-                          console.log('📊 Estado atual:', { showChatModal, selectedInstance: !!selectedInstance });
-                          setShowChatModal(true);
-                        }}
-                        className="p-2 text-center rounded-lg border border-gray-200 hover:border-primary-200 hover:bg-primary-50 text-xs sm:text-sm font-medium"
-                      >
-                        Selecionar
-                      </button>
-                    </div>
-                    
-                    {selectedChats.length > 0 && (
-                      <div className="max-h-32 sm:max-h-40 overflow-y-auto border border-gray-200 rounded-lg p-2 bg-white">
-                        {selectedChats.map(chat => (
-                          <div key={chat.id} className="py-1 px-2 text-xs sm:text-sm flex items-center justify-between gap-2">
-                            <span className="font-medium truncate">{chat.name}</span>
-                            <span className="text-gray-500 text-xs whitespace-nowrap">
-                              {chat.unreadCount > 0 ? `${chat.unreadCount} não lidas` : 'Lida'}
-                            </span>
+                          <div className="min-w-0">
+                            <h3 className="text-sm sm:text-base font-semibold truncate">Lista Manual</h3>
+                            <p className="text-xs text-gray-500">Digite ou cole uma lista de números</p>
                           </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                  {/* Lista Manual */}
-                  <div className="bg-gray-50 rounded-lg p-4 sm:p-5 border border-gray-200">
-                    <div className="flex items-start sm:items-center justify-between mb-4 gap-2">
-                      <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-                        <div className="h-8 w-8 sm:h-10 sm:w-10 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
-                          <ListPlus className="h-4 w-4 sm:h-5 sm:w-5 text-green-600" />
                         </div>
-                        <div className="min-w-0">
-                          <h3 className="text-base sm:text-lg font-medium truncate">Lista Manual</h3>
-                          <p className="text-xs sm:text-sm text-gray-500 hidden sm:block">Digite ou cole números</p>
-                        </div>
+                        <span className="bg-green-100 text-green-700 text-xs font-bold px-2.5 py-1 rounded-full">
+                          {manualNumbers.length}
+                        </span>
                       </div>
-                      <span className="bg-green-100 text-green-700 text-xs font-medium px-2 sm:px-2.5 py-1 rounded-full whitespace-nowrap">
-                        {manualNumbers.length}
-                      </span>
+                      <div className="grid grid-cols-2 gap-2 mb-3">
+                        <button
+                          onClick={handleClearManual}
+                          className="p-2 text-center rounded-lg border border-gray-200 hover:border-red-200 hover:bg-red-50 text-xs font-medium text-gray-600"
+                        >
+                          Limpar
+                        </button>
+                        <button
+                          onClick={() => setShowManualInput(true)}
+                          className="p-2.5 text-center rounded-lg border border-green-300 bg-green-100 hover:bg-green-200 text-xs font-medium text-green-700 flex items-center justify-center gap-1.5"
+                        >
+                          <ListPlus className="h-3.5 w-3.5" />
+                          Inserir Números
+                        </button>
+                      </div>
+                      {manualNumbers.length > 0 && (
+                        <div className="max-h-32 overflow-y-auto border border-green-200/60 rounded-lg p-2 bg-white">
+                          {manualNumbers.map(contact => (
+                            <div key={contact.id} className="py-1 px-2 text-xs flex items-center justify-between gap-2">
+                              <span className="font-medium truncate">{contact.name}</span>
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-gray-400 whitespace-nowrap">{contact.number}</span>
+                                <button
+                                  onClick={() => setManualNumbers(prev => prev.filter(c => c.id !== contact.id))}
+                                  className="text-gray-400 hover:text-red-500 flex-shrink-0"
+                                >
+                                  <X className="h-3 w-3" />
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
 
-                    <div className="grid grid-cols-2 gap-2 mb-4">
-                      <button
-                        onClick={handleClearManual}
-                        className="p-2 text-center rounded-lg border border-gray-200 hover:border-green-200 hover:bg-green-50 text-xs sm:text-sm font-medium"
-                      >
-                        Nenhum
-                      </button>
-                      <button
-                        onClick={() => setShowManualInput(true)}
-                        className="p-2 text-center rounded-lg border border-gray-200 hover:border-green-200 hover:bg-green-50 text-xs sm:text-sm font-medium"
-                      >
-                        Inserir
-                      </button>
-                    </div>
-
-                    {manualNumbers.length > 0 && (
-                      <div className="max-h-32 sm:max-h-40 overflow-y-auto border border-gray-200 rounded-lg p-2 bg-white">
-                        {manualNumbers.map(contact => (
-                          <div key={contact.id} className="py-1 px-2 text-xs sm:text-sm flex items-center justify-between gap-2">
-                            <span className="font-medium truncate">{contact.name}</span>
-                            <span className="text-gray-500 text-xs whitespace-nowrap">{contact.number}</span>
+                    {/* Upload Planilha */}
+                    <div className="bg-orange-50/50 rounded-lg p-4 sm:p-5 border border-orange-200/60">
+                      <div className="flex items-center justify-between mb-4 gap-2">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="h-9 w-9 rounded-full bg-orange-100 flex items-center justify-center flex-shrink-0">
+                            <FileSpreadsheet className="h-4 w-4 text-orange-600" />
                           </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Upload Planilha */}
-                  <div className="bg-gray-50 rounded-lg p-4 sm:p-5 border border-gray-200">
-                    <div className="flex items-start sm:items-center justify-between mb-4 gap-2">
-                      <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-                        <div className="h-8 w-8 sm:h-10 sm:w-10 rounded-full bg-orange-100 flex items-center justify-center flex-shrink-0">
-                          <FileSpreadsheet className="h-4 w-4 sm:h-5 sm:w-5 text-orange-600" />
-                        </div>
-                        <div className="min-w-0">
-                          <h3 className="text-base sm:text-lg font-medium truncate">Planilha</h3>
-                          <p className="text-xs sm:text-sm text-gray-500 hidden sm:block">Importe CSV ou TXT</p>
-                        </div>
-                      </div>
-                      <span className="bg-orange-100 text-orange-700 text-xs font-medium px-2 sm:px-2.5 py-1 rounded-full whitespace-nowrap">
-                        {spreadsheetContacts.length}
-                      </span>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-2 mb-4">
-                      <button
-                        onClick={handleClearSpreadsheet}
-                        className="p-2 text-center rounded-lg border border-gray-200 hover:border-orange-200 hover:bg-orange-50 text-xs sm:text-sm font-medium"
-                      >
-                        Nenhum
-                      </button>
-                      <label className="p-2 text-center rounded-lg border border-gray-200 hover:border-orange-200 hover:bg-orange-50 text-xs sm:text-sm font-medium cursor-pointer">
-                        <Upload className="h-3 w-3 inline mr-1" />
-                        Upload
-                        <input
-                          type="file"
-                          accept=".csv,.txt"
-                          onChange={handleSpreadsheetUpload}
-                          className="hidden"
-                        />
-                      </label>
-                    </div>
-
-                    {spreadsheetContacts.length > 0 && (
-                      <div className="max-h-32 sm:max-h-40 overflow-y-auto border border-gray-200 rounded-lg p-2 bg-white">
-                        {spreadsheetContacts.map(contact => (
-                          <div key={contact.id} className="py-1 px-2 text-xs sm:text-sm flex items-center justify-between gap-2">
-                            <span className="font-medium truncate">{contact.name}</span>
-                            <span className="text-gray-500 text-xs whitespace-nowrap">{contact.number}</span>
+                          <div className="min-w-0">
+                            <h3 className="text-sm sm:text-base font-semibold truncate">Importar Planilha</h3>
+                            <p className="text-xs text-gray-500">Envie um arquivo CSV ou TXT</p>
                           </div>
-                        ))}
+                        </div>
+                        <span className="bg-orange-100 text-orange-700 text-xs font-bold px-2.5 py-1 rounded-full">
+                          {spreadsheetContacts.length}
+                        </span>
                       </div>
-                    )}
+                      <div className="grid grid-cols-2 gap-2 mb-3">
+                        <button
+                          onClick={handleClearSpreadsheet}
+                          className="p-2 text-center rounded-lg border border-gray-200 hover:border-red-200 hover:bg-red-50 text-xs font-medium text-gray-600"
+                        >
+                          Limpar
+                        </button>
+                        <label className="p-2.5 text-center rounded-lg border border-orange-300 bg-orange-100 hover:bg-orange-200 text-xs font-medium text-orange-700 cursor-pointer flex items-center justify-center gap-1.5">
+                          <Upload className="h-3.5 w-3.5" />
+                          Enviar Arquivo
+                          <input
+                            type="file"
+                            accept=".csv,.txt"
+                            onChange={handleSpreadsheetUpload}
+                            className="hidden"
+                          />
+                        </label>
+                      </div>
+                      {spreadsheetContacts.length === 0 && (
+                        <div className="text-xs text-gray-400 bg-white border border-dashed border-orange-200 rounded-lg p-3 text-center">
+                          <FileUp className="h-5 w-5 mx-auto mb-1 text-orange-300" />
+                          Formatos: CSV, TXT<br />
+                          Colunas: Nome, Telefone
+                        </div>
+                      )}
+                      {spreadsheetContacts.length > 0 && (
+                        <div className="max-h-32 overflow-y-auto border border-orange-200/60 rounded-lg p-2 bg-white">
+                          {spreadsheetContacts.map(contact => (
+                            <div key={contact.id} className="py-1 px-2 text-xs flex items-center justify-between gap-2">
+                              <span className="font-medium truncate">{contact.name}</span>
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-gray-400 whitespace-nowrap">{contact.number}</span>
+                                <button
+                                  onClick={() => setSpreadsheetContacts(prev => prev.filter(c => c.id !== contact.id))}
+                                  className="text-gray-400 hover:text-red-500 flex-shrink-0"
+                                >
+                                  <X className="h-3 w-3" />
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
 
@@ -1744,12 +1787,6 @@ export function MassMessagingPage() {
                         onChange={(e) => updateMessageData({ text: e.target.value })}
                         className="w-full px-3 sm:px-4 py-3 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none text-sm sm:text-base"
                       />
-                      <button
-                        className="absolute right-2 sm:right-3 bottom-2 sm:bottom-3 p-1 sm:p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
-                        title="Adicionar emoji"
-                      >
-                        <Smile className="h-4 w-4 sm:h-5 sm:w-5" />
-                      </button>
                     </div>
                     <div className="flex justify-between text-xs text-gray-500 mt-1">
                       <span>Use variáveis como {'{nome}'} para personalizar</span>
@@ -1967,7 +2004,7 @@ export function MassMessagingPage() {
                 <h2 className="text-lg sm:text-xl font-semibold text-gray-900 mb-4 sm:mb-6">Configure o Envio</h2>
                 
                 {/* Intervalo entre mensagens */}
-                <div className="mb-4 sm:mb-6">
+                <div className="bg-white rounded-lg border border-gray-200 p-4 mb-4">
                   <h3 className="text-sm sm:text-base font-medium text-gray-800 mb-3 sm:mb-4">Intervalo entre mensagens</h3>
                   
                   {/* Aviso quando delay inteligente está ativo */}
@@ -2042,16 +2079,21 @@ export function MassMessagingPage() {
                   
                   <div className={`p-3 ${antiSpamConfig.smartDelays ? 'bg-green-50 border-green-200' : 'bg-blue-50 border-blue-200'} border rounded-lg`}>
                     <p className={`text-xs ${antiSpamConfig.smartDelays ? 'text-green-700' : 'text-blue-700'}`}>
-                      {antiSpamConfig.smartDelays 
+                      {antiSpamConfig.smartDelays
                         ? '🤖 Os delays inteligentes ajustam automaticamente os intervalos baseados em padrões naturais de conversação.'
                         : '💡 O delay aleatório entre mensagens ajuda a evitar detecção de spam pelo WhatsApp.'
                       }
                     </p>
                   </div>
+                  {getTotalRecipients() > 0 && (
+                    <p className="text-xs text-gray-500 mt-3 bg-gray-50 p-2 rounded">
+                      ⏱️ Tempo estimado: {Math.round(getTotalRecipients() * ((minDelay + maxDelay) / 2) / 60)} a {Math.round(getTotalRecipients() * maxDelay / 60)} minutos para {getTotalRecipients()} destinatários
+                    </p>
+                  )}
                 </div>
                 
                 {/* Configuração de Blocos */}
-                <div className="mb-4 sm:mb-6">
+                <div className="bg-white rounded-lg border border-gray-200 p-4 mb-4">
                   <div className="flex flex-col xs:flex-row xs:items-center justify-between gap-2 mb-3 sm:mb-4">
                     <div>
                       <h3 className="text-sm sm:text-base font-medium text-gray-800">Envio em Blocos</h3>
@@ -2147,7 +2189,7 @@ export function MassMessagingPage() {
                  </div>
                  
                  {/* Configuração de Pausa Automática */}
-                 <div className="mb-4 sm:mb-6">
+                 <div className="bg-white rounded-lg border border-gray-200 p-4 mb-4">
                    <div className="flex flex-col xs:flex-row xs:items-center justify-between gap-2 mb-3 sm:mb-4">
                      <div>
                        <h3 className="text-sm sm:text-base font-medium text-gray-800">Pausa Automática</h3>
@@ -2243,7 +2285,7 @@ export function MassMessagingPage() {
                   </div>
                  
                  {/* Configurações Anti-Spam */}
-                <div className="mb-4 sm:mb-6">
+                <div className="bg-white rounded-lg border border-gray-200 p-4 mb-4">
                   <h3 className="text-sm sm:text-base font-medium text-gray-800 mb-3 sm:mb-4">Proteção Anti-Spam</h3>
                   
                   <div className="space-y-4 p-4 bg-green-50 rounded-lg border border-green-200">
@@ -2338,7 +2380,7 @@ export function MassMessagingPage() {
                 </div>
 
                 {/* Modo de envio */}
-                <div className="mb-4 sm:mb-6">
+                <div className="bg-white rounded-lg border border-gray-200 p-4 mb-4">
                   <label className="block text-sm font-medium text-gray-700 mb-3">
                     Modo de Envio *
                   </label>
@@ -2368,44 +2410,44 @@ export function MassMessagingPage() {
                       <span className="font-medium text-sm sm:text-base">Agendar Envio</span>
                     </button>
                   </div>
-                </div>
-                
-                {/* Opções de agendamento */}
-                {sendMode === 'schedule' && (
-                  <div className="space-y-4 pt-4 border-t border-gray-200">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Data de Envio *
-                        </label>
-                        <div className="relative">
-                          <input
-                            type="date"
-                            value={scheduleDate}
-                            onChange={(e) => setScheduleDate(e.target.value)}
-                            min={new Date().toISOString().split('T')[0]}
-                            className="w-full pl-10 pr-3 sm:pr-4 py-2 sm:py-3 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm sm:text-base"
-                          />
-                          <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 sm:h-5 sm:w-5 text-gray-400" />
+
+                  {/* Opções de agendamento */}
+                  {sendMode === 'schedule' && (
+                    <div className="space-y-4 pt-4 mt-4 border-t border-gray-200">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Data de Envio *
+                          </label>
+                          <div className="relative">
+                            <input
+                              type="date"
+                              value={scheduleDate}
+                              onChange={(e) => setScheduleDate(e.target.value)}
+                              min={new Date().toISOString().split('T')[0]}
+                              className="w-full pl-10 pr-3 sm:pr-4 py-2 sm:py-3 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm sm:text-base"
+                            />
+                            <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 sm:h-5 sm:w-5 text-gray-400" />
+                          </div>
                         </div>
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Hora de Envio *
-                        </label>
-                        <div className="relative">
-                          <input
-                            type="time"
-                            value={scheduleTime}
-                            onChange={(e) => setScheduleTime(e.target.value)}
-                            className="w-full pl-10 pr-3 sm:pr-4 py-2 sm:py-3 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm sm:text-base"
-                          />
-                          <Clock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 sm:h-5 sm:w-5 text-gray-400" />
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Hora de Envio *
+                          </label>
+                          <div className="relative">
+                            <input
+                              type="time"
+                              value={scheduleTime}
+                              onChange={(e) => setScheduleTime(e.target.value)}
+                              className="w-full pl-10 pr-3 sm:pr-4 py-2 sm:py-3 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm sm:text-base"
+                            />
+                            <Clock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 sm:h-5 sm:w-5 text-gray-400" />
+                          </div>
                         </div>
                       </div>
                     </div>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
               
               <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3 p-3 sm:p-4 border-t border-gray-200">
@@ -2492,13 +2534,6 @@ export function MassMessagingPage() {
                         </div>
                       )}
 
-                      {invalidNumbers.length > 0 && (
-                        <div className="flex flex-col xs:flex-row xs:justify-between gap-1">
-                          <span className="text-gray-600 text-sm sm:text-base">Números Inválidos:</span>
-                          <span className="font-medium text-red-600 text-sm sm:text-base">{invalidNumbers.length} removidos</span>
-                        </div>
-                      )}
-
                       {blacklistedNumbers.length > 0 && (
                         <div className="flex flex-col xs:flex-row xs:justify-between gap-1">
                           <span className="text-gray-600 text-sm sm:text-base">Números Blacklisted:</span>
@@ -2524,7 +2559,7 @@ export function MassMessagingPage() {
                         <div className="flex flex-col xs:flex-row xs:justify-between gap-1">
                           <span className="text-gray-600 text-sm sm:text-base">Data e Hora Agendada:</span>
                           <span className="font-medium text-sm sm:text-base">
-                            {new Date(`${scheduleDate}T${scheduleTime}`).toLocaleString('pt-BR')}
+                            {scheduleDate && scheduleTime ? new Date(`${scheduleDate}T${scheduleTime}`).toLocaleString('pt-BR') : 'Data/hora não definida'}
                           </span>
                         </div>
                       )}
@@ -2655,72 +2690,27 @@ export function MassMessagingPage() {
                   </div>
                   
                   {/* Estatísticas de validação */}
-                  {(validatingNumbers || invalidNumbers.length > 0 || blacklistedNumbers.length > 0) && (
+                  {(blacklistedNumbers.length > 0 || blacklistStats.total > 0) && (
                     <div className="bg-blue-50 rounded-lg p-3 sm:p-4 border border-blue-200">
                       <h4 className="font-medium text-blue-800 mb-2 text-sm sm:text-base">Status de Validação</h4>
-                      {validatingNumbers ? (
-                        <div className="flex items-center gap-2">
-                          <div className="animate-spin h-4 w-4 border-2 border-blue-600 border-t-transparent rounded-full"></div>
-                          <span className="text-sm text-blue-700">Validando números no WhatsApp...</span>
+                      <div className="space-y-1 text-sm">
+                        <div className="flex justify-between">
+                          <span className="text-blue-700">Números válidos:</span>
+                          <span className="font-medium text-blue-800">{getTotalRecipients() - blacklistedNumbers.length}</span>
                         </div>
-                      ) : (
-                        <div className="space-y-1 text-sm">
+                        {blacklistedNumbers.length > 0 && (
                           <div className="flex justify-between">
-                            <span className="text-blue-700">Números válidos:</span>
-                            <span className="font-medium text-blue-800">{getTotalRecipients() - invalidNumbers.length - blacklistedNumbers.length}</span>
+                            <span className="text-orange-600">Números blacklisted:</span>
+                            <span className="font-medium text-orange-700">{blacklistedNumbers.length}</span>
                           </div>
-                          {invalidNumbers.length > 0 && (
-                            <div className="flex justify-between">
-                              <span className="text-red-600">Números inválidos:</span>
-                              <span className="font-medium text-red-700">{invalidNumbers.length}</span>
-                            </div>
-                          )}
-                          {blacklistedNumbers.length > 0 && (
-                            <div className="flex justify-between">
-                              <span className="text-orange-600">Números blacklisted:</span>
-                              <span className="font-medium text-orange-700">{blacklistedNumbers.length}</span>
-                            </div>
-                          )}
-                          {blacklistStats.total > 0 && (
-                            <div className="flex justify-between">
-                              <span className="text-gray-600">Total na blacklist:</span>
-                              <span className="font-medium text-gray-700">{blacklistStats.total}</span>
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Estatísticas de entrega (se monitoramento ativo) */}
-                  {antiSpamConfig.monitorDelivery && deliveryStats.sent > 0 && (
-                    <div className="bg-gray-50 rounded-lg p-3 sm:p-4 border border-gray-200">
-                      <h4 className="font-medium text-gray-800 mb-2 text-sm sm:text-base">Taxa de Entrega</h4>
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
-                        <div className="text-center">
-                          <div className="font-bold text-blue-600">{deliveryStats.sent}</div>
-                          <div className="text-gray-600">Enviadas</div>
-                        </div>
-                        <div className="text-center">
-                          <div className="font-bold text-green-600">{deliveryStats.delivered}</div>
-                          <div className="text-gray-600">Entregues</div>
-                        </div>
-                        <div className="text-center">
-                          <div className="font-bold text-red-600">{deliveryStats.failed}</div>
-                          <div className="text-gray-600">Falharam</div>
-                        </div>
-                        <div className="text-center">
-                          <div className={`font-bold ${deliveryStats.rate >= 80 ? 'text-green-600' : deliveryStats.rate >= 60 ? 'text-yellow-600' : 'text-red-600'}`}>
-                            {deliveryStats.rate.toFixed(1)}%
+                        )}
+                        {blacklistStats.total > 0 && (
+                          <div className="flex justify-between">
+                            <span className="text-gray-600">Total na blacklist:</span>
+                            <span className="font-medium text-gray-700">{blacklistStats.total}</span>
                           </div>
-                          <div className="text-gray-600">Taxa</div>
-                        </div>
+                        )}
                       </div>
-                      {deliveryStats.rate < 80 && deliveryStats.delivered + deliveryStats.failed > 10 && (
-                        <div className="mt-2 p-2 bg-yellow-100 border border-yellow-300 rounded text-xs text-yellow-700">
-                          ⚠️ Taxa de entrega baixa. Considere revisar as configurações ou pausar o envio.
-                        </div>
-                      )}
                     </div>
                   )}
 
