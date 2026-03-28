@@ -12,11 +12,15 @@ import {
   ChevronRight, 
   ChevronLeft,
   Info, 
-  FileUp, 
-  X, 
+  FileUp,
+  X,
   Loader2,
   BarChart2,
-  MessageCircle
+  MessageCircle,
+  ListPlus,
+  FileSpreadsheet,
+  Upload,
+  Trash2
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { InstanceModal } from '../components/InstanceModal';
@@ -117,6 +121,13 @@ export function MassMessagingPage() {
   const [selectedContacts, setSelectedContacts] = useState<Contact[]>([]); // Lista de contatos individuais selecionados
   const [selectedGroups, setSelectedGroups] = useState<Group[]>([]); // Lista de grupos selecionados
   const [selectedChats, setSelectedChats] = useState<Chat[]>([]); // Lista de chats selecionados
+
+  // Estado para lista manual e upload de planilha
+  const [manualNumbers, setManualNumbers] = useState<Contact[]>([]); // Contatos adicionados manualmente
+  const [showManualInput, setShowManualInput] = useState(false); // Modal de entrada manual
+  const [manualTextInput, setManualTextInput] = useState(''); // Texto da entrada manual
+  const [showSpreadsheetUpload, setShowSpreadsheetUpload] = useState(false); // Modal de upload de planilha
+  const [spreadsheetContacts, setSpreadsheetContacts] = useState<Contact[]>([]); // Contatos da planilha
   
   // Configurações anti-spam avançadas
   const [antiSpamConfig, setAntiSpamConfig] = useState<AntiSpamConfig>({
@@ -321,7 +332,7 @@ export function MassMessagingPage() {
   
   // Função para calcular o total de destinatários selecionados
   const getTotalRecipients = (): number => {
-    return selectedContacts.length + selectedGroups.length + selectedChats.length;
+    return selectedContacts.length + selectedGroups.length + selectedChats.length + manualNumbers.length + spreadsheetContacts.length;
   };
 
 
@@ -453,7 +464,7 @@ export function MassMessagingPage() {
       console.log('💬 Processando chats:', selectedChats.length);
       selectedChats.forEach(chat => {
         console.log('🔍 Analisando chat:', chat);
-        
+
         if (chat.id) {
           // Limpar o ID do chat removendo sufixos
           const cleanId = cleanWhatsAppNumber(chat.id);
@@ -465,7 +476,27 @@ export function MassMessagingPage() {
           console.warn('⚠️ Chat sem ID válido:', chat);
         }
       });
-      
+
+      // Adicionar números da lista manual
+      console.log('📝 Processando lista manual:', manualNumbers.length);
+      manualNumbers.forEach(contact => {
+        const cleanNumber = cleanWhatsAppNumber(contact.number);
+        if (cleanNumber && cleanNumber.length >= 10) {
+          numbers.push(cleanNumber);
+          console.log('✅ Manual adicionado:', cleanNumber);
+        }
+      });
+
+      // Adicionar números da planilha
+      console.log('📊 Processando planilha:', spreadsheetContacts.length);
+      spreadsheetContacts.forEach(contact => {
+        const cleanNumber = cleanWhatsAppNumber(contact.number);
+        if (cleanNumber && cleanNumber.length >= 10) {
+          numbers.push(cleanNumber);
+          console.log('✅ Planilha adicionado:', cleanNumber);
+        }
+      });
+
       console.log('📊 Total de números preparados:', numbers.length);
       console.log('📋 Lista completa de números:', numbers);
       
@@ -474,7 +505,9 @@ export function MassMessagingPage() {
         console.log('🔍 Debug - Contatos selecionados:', selectedContacts);
         console.log('🔍 Debug - Grupos selecionados:', selectedGroups);
         console.log('🔍 Debug - Chats selecionados:', selectedChats);
-        toast.error('Nenhum número válido encontrado nos destinatários selecionados. Verifique se você selecionou contatos, grupos ou chats válidos.');
+        console.log('🔍 Debug - Lista manual:', manualNumbers);
+        console.log('🔍 Debug - Planilha:', spreadsheetContacts);
+        toast.error('Nenhum número válido encontrado. Verifique os destinatários selecionados.');
         return;
       }
 
@@ -974,6 +1007,178 @@ export function MassMessagingPage() {
     setSelectedGroups([]);
   };
 
+  // Função para limpar contatos manuais
+  const handleClearManual = () => {
+    setManualNumbers([]);
+    setManualTextInput('');
+  };
+
+  // Função para limpar contatos de planilha
+  const handleClearSpreadsheet = () => {
+    setSpreadsheetContacts([]);
+  };
+
+  // Função para processar números digitados manualmente
+  const handleParseManualNumbers = () => {
+    const lines = manualTextInput
+      .split(/[\n,;]+/)
+      .map(l => l.trim())
+      .filter(l => l.length > 0);
+
+    const contacts: Contact[] = [];
+    const seen = new Set<string>();
+
+    for (const line of lines) {
+      // Extrair nome e número se estiver no formato "Nome - Número" ou "Nome:Número"
+      const match = line.match(/^(.+?)[\s]*[-:]\s*(.+)$/) ;
+      let name = '';
+      let number = '';
+
+      if (match) {
+        name = match[1].trim();
+        number = match[2].trim();
+      } else {
+        number = line;
+      }
+
+      // Limpar número: remover tudo que não é dígito
+      number = number.replace(/\D/g, '');
+
+      // Ignorar números muito curtos
+      if (number.length < 8) continue;
+
+      // Adicionar código do país se não tiver
+      if (number.length <= 11 && !number.startsWith('55')) {
+        number = '55' + number;
+      }
+
+      // Evitar duplicados
+      if (seen.has(number)) continue;
+      seen.add(number);
+
+      contacts.push({
+        id: `manual_${number}`,
+        name: name || number,
+        number
+      });
+    }
+
+    if (contacts.length === 0) {
+      toast.error('Nenhum número válido encontrado');
+      return;
+    }
+
+    setManualNumbers(contacts);
+    setShowManualInput(false);
+    toast.success(`${contacts.length} número(s) adicionado(s)`);
+  };
+
+  // Função para processar upload de planilha (CSV/TXT)
+  const handleSpreadsheetUpload = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const validTypes = [
+      'text/csv',
+      'text/plain',
+      'application/vnd.ms-excel',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    ];
+    const isValidExtension = /\.(csv|txt|xls|xlsx)$/i.test(file.name);
+
+    if (!validTypes.includes(file.type) && !isValidExtension) {
+      toast.error('Formato não suportado. Use CSV, TXT, XLS ou XLSX');
+      return;
+    }
+
+    // Para XLS/XLSX avisamos que só suportamos CSV
+    if (/\.(xls|xlsx)$/i.test(file.name)) {
+      toast.error('Para arquivos Excel, exporte como CSV primeiro');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const text = event.target?.result as string;
+      if (!text) {
+        toast.error('Arquivo vazio');
+        return;
+      }
+
+      const lines = text.split(/\r?\n/).filter(l => l.trim().length > 0);
+      const contacts: Contact[] = [];
+      const seen = new Set<string>();
+
+      // Detectar se a primeira linha é cabeçalho
+      const firstLine = lines[0].toLowerCase();
+      const hasHeader = firstLine.includes('nome') || firstLine.includes('name') ||
+                        firstLine.includes('telefone') || firstLine.includes('phone') ||
+                        firstLine.includes('numero') || firstLine.includes('number');
+      const startIndex = hasHeader ? 1 : 0;
+
+      for (let i = startIndex; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line) continue;
+
+        // Tentar separar por delimitadores comuns
+        const parts = line.split(/[,;\t|]+/).map(p => p.trim().replace(/^["']|["']$/g, ''));
+
+        let name = '';
+        let number = '';
+
+        if (parts.length >= 2) {
+          // Detectar qual coluna é o número
+          const firstIsNumber = /^\+?\d[\d\s()-]{7,}$/.test(parts[0].replace(/\D/g, ''));
+          if (firstIsNumber) {
+            number = parts[0];
+            name = parts[1];
+          } else {
+            name = parts[0];
+            number = parts[1];
+          }
+        } else {
+          number = parts[0];
+        }
+
+        // Limpar número
+        number = number.replace(/\D/g, '');
+
+        if (number.length < 8) continue;
+
+        // Adicionar código do país
+        if (number.length <= 11 && !number.startsWith('55')) {
+          number = '55' + number;
+        }
+
+        if (seen.has(number)) continue;
+        seen.add(number);
+
+        contacts.push({
+          id: `sheet_${number}`,
+          name: name || number,
+          number
+        });
+      }
+
+      if (contacts.length === 0) {
+        toast.error('Nenhum número válido encontrado na planilha');
+        return;
+      }
+
+      setSpreadsheetContacts(contacts);
+      setShowSpreadsheetUpload(false);
+      toast.success(`${contacts.length} contato(s) importado(s) da planilha`);
+    };
+
+    reader.onerror = () => {
+      toast.error('Erro ao ler o arquivo');
+    };
+
+    reader.readAsText(file);
+    // Limpar input para permitir re-upload do mesmo arquivo
+    e.target.value = '';
+  };
+
   // Função para navegar para a página de relatórios de campanhas
   const goToHistory = () => {
     navigate('/messages/reports');
@@ -1000,14 +1205,87 @@ export function MassMessagingPage() {
         selectedGroups={selectedGroups}
       />
       
-      <ChatSelectionModal 
+      <ChatSelectionModal
         isOpen={showChatModal}
         onClose={() => setShowChatModal(false)}
         onSelect={setSelectedChats}
         instanceToken={selectedInstance?.token || ''}
         selectedChats={selectedChats}
       />
-      
+
+      {/* Modal de entrada manual de números */}
+      {showManualInput && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between p-4 border-b border-gray-200">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-full bg-green-100 flex items-center justify-center">
+                  <ListPlus className="h-5 w-5 text-green-600" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900">Lista Manual</h3>
+                  <p className="text-sm text-gray-500">Digite ou cole os números</p>
+                </div>
+              </div>
+              <button onClick={() => setShowManualInput(false)} className="p-2 hover:bg-gray-100 rounded-lg">
+                <X className="h-5 w-5 text-gray-500" />
+              </button>
+            </div>
+
+            <div className="p-4 flex-1 overflow-y-auto">
+              <div className="mb-3">
+                <p className="text-sm text-gray-600 mb-2">
+                  Insira um número por linha. Aceita os formatos:
+                </p>
+                <div className="grid grid-cols-1 gap-1 text-xs text-gray-500 bg-gray-50 p-3 rounded-lg">
+                  <span><strong>Só número:</strong> 11999998888</span>
+                  <span><strong>Com DDI:</strong> 5511999998888</span>
+                  <span><strong>Nome - Número:</strong> João - 11999998888</span>
+                  <span><strong>Nome;Número:</strong> Maria;21988887777</span>
+                  <span><strong>Separados por vírgula:</strong> 11999998888, 21988887777</span>
+                </div>
+              </div>
+
+              <textarea
+                value={manualTextInput}
+                onChange={(e) => setManualTextInput(e.target.value)}
+                placeholder={"11999998888\nJoão - 21988887777\nMaria - 31977776666"}
+                className="w-full h-48 p-3 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-green-500 focus:border-green-500 resize-none font-mono"
+              />
+
+              <div className="flex items-center justify-between mt-2">
+                <span className="text-xs text-gray-500">
+                  {manualTextInput.split(/[\n,;]+/).filter(l => l.trim().length > 0).length} linha(s) detectada(s)
+                </span>
+                <button
+                  onClick={() => setManualTextInput('')}
+                  className="text-xs text-red-500 hover:text-red-700 flex items-center gap-1"
+                >
+                  <Trash2 className="h-3 w-3" /> Limpar
+                </button>
+              </div>
+            </div>
+
+            <div className="flex gap-3 p-4 border-t border-gray-200">
+              <button
+                onClick={() => setShowManualInput(false)}
+                className="flex-1 px-4 py-2.5 border border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-50 text-sm"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleParseManualNumbers}
+                disabled={!manualTextInput.trim()}
+                className="flex-1 px-4 py-2.5 bg-green-600 text-white font-medium rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm flex items-center justify-center gap-2"
+              >
+                <ListPlus className="h-4 w-4" />
+                Adicionar Números
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Cabeçalho e botão para visualizar histórico */}
       {selectedInstance && (
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
@@ -1125,7 +1403,7 @@ export function MassMessagingPage() {
               <div className="p-4 sm:p-6">
                 <h2 className="text-lg sm:text-xl font-semibold text-gray-900 mb-4 sm:mb-6">Selecione os Destinatários</h2>
                 
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 sm:gap-6">
                   {/* Contatos */}
                   <div className="bg-gray-50 rounded-lg p-4 sm:p-5 border border-gray-200">
                     <div className="flex items-start sm:items-center justify-between mb-4 gap-2">
@@ -1263,8 +1541,99 @@ export function MassMessagingPage() {
                       </div>
                     )}
                   </div>
+                  {/* Lista Manual */}
+                  <div className="bg-gray-50 rounded-lg p-4 sm:p-5 border border-gray-200">
+                    <div className="flex items-start sm:items-center justify-between mb-4 gap-2">
+                      <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+                        <div className="h-8 w-8 sm:h-10 sm:w-10 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
+                          <ListPlus className="h-4 w-4 sm:h-5 sm:w-5 text-green-600" />
+                        </div>
+                        <div className="min-w-0">
+                          <h3 className="text-base sm:text-lg font-medium truncate">Lista Manual</h3>
+                          <p className="text-xs sm:text-sm text-gray-500 hidden sm:block">Digite ou cole números</p>
+                        </div>
+                      </div>
+                      <span className="bg-green-100 text-green-700 text-xs font-medium px-2 sm:px-2.5 py-1 rounded-full whitespace-nowrap">
+                        {manualNumbers.length}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 mb-4">
+                      <button
+                        onClick={handleClearManual}
+                        className="p-2 text-center rounded-lg border border-gray-200 hover:border-green-200 hover:bg-green-50 text-xs sm:text-sm font-medium"
+                      >
+                        Nenhum
+                      </button>
+                      <button
+                        onClick={() => setShowManualInput(true)}
+                        className="p-2 text-center rounded-lg border border-gray-200 hover:border-green-200 hover:bg-green-50 text-xs sm:text-sm font-medium"
+                      >
+                        Inserir
+                      </button>
+                    </div>
+
+                    {manualNumbers.length > 0 && (
+                      <div className="max-h-32 sm:max-h-40 overflow-y-auto border border-gray-200 rounded-lg p-2 bg-white">
+                        {manualNumbers.map(contact => (
+                          <div key={contact.id} className="py-1 px-2 text-xs sm:text-sm flex items-center justify-between gap-2">
+                            <span className="font-medium truncate">{contact.name}</span>
+                            <span className="text-gray-500 text-xs whitespace-nowrap">{contact.number}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Upload Planilha */}
+                  <div className="bg-gray-50 rounded-lg p-4 sm:p-5 border border-gray-200">
+                    <div className="flex items-start sm:items-center justify-between mb-4 gap-2">
+                      <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+                        <div className="h-8 w-8 sm:h-10 sm:w-10 rounded-full bg-orange-100 flex items-center justify-center flex-shrink-0">
+                          <FileSpreadsheet className="h-4 w-4 sm:h-5 sm:w-5 text-orange-600" />
+                        </div>
+                        <div className="min-w-0">
+                          <h3 className="text-base sm:text-lg font-medium truncate">Planilha</h3>
+                          <p className="text-xs sm:text-sm text-gray-500 hidden sm:block">Importe CSV ou TXT</p>
+                        </div>
+                      </div>
+                      <span className="bg-orange-100 text-orange-700 text-xs font-medium px-2 sm:px-2.5 py-1 rounded-full whitespace-nowrap">
+                        {spreadsheetContacts.length}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 mb-4">
+                      <button
+                        onClick={handleClearSpreadsheet}
+                        className="p-2 text-center rounded-lg border border-gray-200 hover:border-orange-200 hover:bg-orange-50 text-xs sm:text-sm font-medium"
+                      >
+                        Nenhum
+                      </button>
+                      <label className="p-2 text-center rounded-lg border border-gray-200 hover:border-orange-200 hover:bg-orange-50 text-xs sm:text-sm font-medium cursor-pointer">
+                        <Upload className="h-3 w-3 inline mr-1" />
+                        Upload
+                        <input
+                          type="file"
+                          accept=".csv,.txt"
+                          onChange={handleSpreadsheetUpload}
+                          className="hidden"
+                        />
+                      </label>
+                    </div>
+
+                    {spreadsheetContacts.length > 0 && (
+                      <div className="max-h-32 sm:max-h-40 overflow-y-auto border border-gray-200 rounded-lg p-2 bg-white">
+                        {spreadsheetContacts.map(contact => (
+                          <div key={contact.id} className="py-1 px-2 text-xs sm:text-sm flex items-center justify-between gap-2">
+                            <span className="font-medium truncate">{contact.name}</span>
+                            <span className="text-gray-500 text-xs whitespace-nowrap">{contact.number}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
-                
+
                 {/* Total de destinatários */}
                 <div className="mt-4 sm:mt-6 p-3 sm:p-4 bg-primary-50 border border-primary-100 rounded-lg">
                   <div className="flex flex-col xs:flex-row xs:items-center justify-between gap-2">
