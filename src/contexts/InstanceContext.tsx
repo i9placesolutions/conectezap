@@ -35,12 +35,35 @@ const InstanceContext = createContext<InstanceContextType | undefined>(undefined
 
 export function InstanceProvider({ children }: { children: React.ReactNode }) {
   const [instances, setInstances] = useState<Instance[]>([]);
-  const [selectedInstance, setSelectedInstance] = useState<Instance | null>(null);
+  const [selectedInstance, setSelectedInstanceState] = useState<Instance | null>(null);
   const [showInstanceModal, setShowInstanceModal] = useState(false);
   const [defaultInstance, setDefaultInstance] = useState<Instance | null>(null);
   const [loading, setLoading] = useState(true);
   const location = useLocation();
   const { user } = useAuth();
+
+  // Wrapper para persistir instância selecionada no localStorage
+  const setSelectedInstance = (instance: Instance | null) => {
+    setSelectedInstanceState(instance);
+    if (instance) {
+      localStorage.setItem('conectezap_selected_instance', JSON.stringify(instance));
+    } else {
+      localStorage.removeItem('conectezap_selected_instance');
+    }
+  };
+
+  // Restaurar instância salva do localStorage na montagem
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('conectezap_selected_instance');
+      if (saved) {
+        const parsed = JSON.parse(saved) as Instance;
+        setSelectedInstanceState(parsed);
+      }
+    } catch {
+      localStorage.removeItem('conectezap_selected_instance');
+    }
+  }, []);
 
   useEffect(() => {
     if (user) {
@@ -132,8 +155,21 @@ export function InstanceProvider({ children }: { children: React.ReactNode }) {
       const defaultInst = formattedInstances.find((i: Instance) => i.isDefault) || formattedInstances[0];
       setDefaultInstance(defaultInst);
 
-      // Para multi-chat page, automaticamente selecionar a instância padrão
-      if (location.pathname === '/messages/multi' && defaultInst) {
+      // Restaurar instância salva com dados atualizados
+      const saved = localStorage.getItem('conectezap_selected_instance');
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved) as Instance;
+          const updated = formattedInstances.find(i => i.id === parsed.id);
+          if (updated) {
+            setSelectedInstanceState(updated);
+            localStorage.setItem('conectezap_selected_instance', JSON.stringify(updated));
+          }
+        } catch {
+          // Se falhar, não faz nada - o useEffect de rota vai cuidar
+        }
+      } else if (location.pathname === '/messages/multi' && defaultInst) {
+        // Se não há instância salva, selecionar padrão na página multi
         setSelectedInstance(defaultInst);
       }
       
