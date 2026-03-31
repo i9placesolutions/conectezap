@@ -85,6 +85,9 @@ export interface Chat {
   muteEndTime?: number;
   labels?: Label[];
   profilePicUrl?: string;
+  lead_assignedAgent_id?: string;
+  lead_isTicketOpen?: boolean;
+  lead_status?: string;
 }
 
 export interface Label {
@@ -1429,7 +1432,10 @@ export const uazapiService = {
           isPinned: chat.wa_isPinned || chat.isPinned || false,
           isMuted: (chat.wa_muteEndTime || 0) > Date.now(),
         muteEndTime: chat.wa_muteEndTime || 0,
-          profilePicUrl: chat.image || chat.imagePreview || chat.profilePicUrl || ''
+          profilePicUrl: chat.image || chat.imagePreview || chat.profilePicUrl || '',
+          lead_assignedAgent_id: chat.lead_assignedAgent_id || '',
+          lead_isTicketOpen: chat.lead_isTicketOpen || false,
+          lead_status: chat.lead_status || '',
         };
         
         // Log detalhado apenas para os primeiros 3 chats
@@ -3009,6 +3015,114 @@ export const uazapiService = {
         totalChats: 0,
         unreadChats: 0
       };
+    }
+  },
+
+  // === MULTI-ATENDIMENTO ===
+
+  async getAttendants(instanceToken: string): Promise<any[]> {
+    try {
+      const api = createApiClient();
+      const response = await api.get('/attendant/all', {
+        headers: { 'Accept': 'application/json', 'token': instanceToken }
+      });
+      return Array.isArray(response.data) ? response.data : response.data?.attendants || [];
+    } catch (error) {
+      console.error('Erro ao buscar atendentes:', error);
+      return [];
+    }
+  },
+
+  async createOrEditAttendant(instanceToken: string, attendantData: {
+    id?: string;
+    name: string;
+    email?: string;
+    phone?: string;
+    department?: string;
+    customField01?: string;
+    customField02?: string;
+    delete?: boolean;
+  }): Promise<Record<string, unknown> | null> {
+    try {
+      const api = createApiClient();
+      const response = await api.post('/attendant/edit', attendantData, {
+        headers: { 'Accept': 'application/json', 'Content-Type': 'application/json', 'token': instanceToken }
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Erro ao criar/editar atendente:', error);
+      return null;
+    }
+  },
+
+  async assignChatToAgent(instanceToken: string, chatId: string, agentId: string, isTicketOpen: boolean = true): Promise<boolean> {
+    try {
+      const api = createApiClient();
+      await api.post('/chat/editLead', {
+        id: chatId,
+        lead_assignedAgent_id: agentId,
+        lead_isTicketOpen: isTicketOpen,
+        lead_status: agentId ? 'assigned' : 'unassigned'
+      }, {
+        headers: { 'Accept': 'application/json', 'Content-Type': 'application/json', 'token': instanceToken }
+      });
+      return true;
+    } catch (error) {
+      console.error('Erro ao atribuir chat:', error);
+      return false;
+    }
+  },
+
+  async unassignChat(instanceToken: string, chatId: string): Promise<boolean> {
+    try {
+      const api = createApiClient();
+      await api.post('/chat/editLead', {
+        id: chatId,
+        lead_assignedAgent_id: '',
+        lead_isTicketOpen: false,
+        lead_status: 'unassigned'
+      }, {
+        headers: { 'Accept': 'application/json', 'Content-Type': 'application/json', 'token': instanceToken }
+      });
+      return true;
+    } catch (error) {
+      console.error('Erro ao desatribuir chat:', error);
+      return false;
+    }
+  },
+
+  async closeTicket(instanceToken: string, chatId: string): Promise<boolean> {
+    try {
+      const api = createApiClient();
+      await api.post('/chat/editLead', {
+        id: chatId,
+        lead_isTicketOpen: false,
+        lead_status: 'closed'
+      }, {
+        headers: { 'Accept': 'application/json', 'Content-Type': 'application/json', 'token': instanceToken }
+      });
+      return true;
+    } catch (error) {
+      console.error('Erro ao fechar ticket:', error);
+      return false;
+    }
+  },
+
+  async reopenTicket(instanceToken: string, chatId: string): Promise<boolean> {
+    try {
+      const api = createApiClient();
+      await api.post('/chat/editLead', {
+        id: chatId,
+        lead_isTicketOpen: true,
+        lead_status: 'unassigned',
+        lead_assignedAgent_id: ''
+      }, {
+        headers: { 'Accept': 'application/json', 'Content-Type': 'application/json', 'token': instanceToken }
+      });
+      return true;
+    } catch (error) {
+      console.error('Erro ao reabrir ticket:', error);
+      return false;
     }
   },
 

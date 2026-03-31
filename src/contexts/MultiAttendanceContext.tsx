@@ -2,6 +2,8 @@ import { createContext, useContext, useEffect, useState, ReactNode, useCallback,
 import { useAuth } from './AuthContext';
 import { supabase } from '../lib/supabase';
 import { toast } from 'react-hot-toast';
+import { uazapiService } from '../services/uazapiService';
+import { useInstance } from './InstanceContext';
 
 // Tipos para o sistema de multiatendimento
 export type UserRole = 'administrator' | 'agent' | 'viewer';
@@ -88,6 +90,7 @@ const MultiAttendanceContext = createContext<MultiAttendanceContextType | undefi
 
 export function MultiAttendanceProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
+  const { selectedInstance } = useInstance();
   const [currentUserRole, setCurrentUserRole] = useState<UserRole>('agent');
   const [agents, setAgents] = useState<Agent[]>([]);
   const [assignments, setAssignments] = useState<ChatAssignment[]>([]);
@@ -108,6 +111,14 @@ export function MultiAttendanceProvider({ children }: { children: ReactNode }) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
+
+  // Recarregar atendentes quando a instância mudar
+  useEffect(() => {
+    if (selectedInstance?.token) {
+      loadAgents();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedInstance?.token]);
 
   const loadUserRole = async () => {
     try {
@@ -150,53 +161,37 @@ export function MultiAttendanceProvider({ children }: { children: ReactNode }) {
     setAgentsLoading(true);
 
     try {
-      console.log('👥 Carregando agentes do Supabase...');
-      const MAX_RETRIES = 3;
-      let attempt = 0;
-      while (attempt < MAX_RETRIES) {
-        try {
-          const { data: profiles, error } = await supabase
-            .from('profiles')
-            .select('id, email, full_name, is_active')
-            .eq('is_active', true)
-            .limit(100);
-
-          if (error) throw error;
-
-          const agentsData: Agent[] = (profiles || []).map((profile: Record<string, unknown>) => ({
-            id: profile.id as string,
-            name: (profile.full_name as string) || (profile.email as string),
-            email: profile.email as string,
-            status: 'online' as AgentStatus,
-            role: 'agent' as UserRole,
-            activeChats: Math.floor(Math.random() * 5),
-            lastActivity: Date.now() - Math.floor(Math.random() * 3600000),
-            skills: ['Atendimento', 'Vendas'],
-            isAvailable: true,
-            maxConcurrentChats: 10
-          }));
-
-          console.log(`✅ ${agentsData.length} agentes carregados:`, agentsData.map(a => ({ id: a.id, name: a.name, email: a.email })));
-          setAgents(agentsData);
-          break; // sucesso
-        } catch (err: unknown) {
-          attempt++;
-          const errObj = err as Record<string, unknown>;
-          const isNetworkError = typeof errObj?.message === 'string' && /Failed to fetch|NetworkError|TypeError/i.test(errObj.message as string);
-          if (attempt >= MAX_RETRIES || !isNetworkError) {
-            throw err;
-          }
-          await new Promise((res) => setTimeout(res, attempt * 400));
-        }
+      if (!selectedInstance?.token) {
+        console.warn('⚠️ Nenhuma instância selecionada para carregar atendentes');
+        return;
       }
+
+      console.log('👥 Carregando atendentes da API UAZAPI...');
+      const apiAttendants = await uazapiService.getAttendants(selectedInstance.token);
+
+      const formattedAgents: Agent[] = apiAttendants.map((att: Record<string, unknown>) => ({
+        id: (att.id as string) || '',
+        name: (att.name as string) || 'Sem nome',
+        email: (att.email as string) || '',
+        status: 'online' as AgentStatus,
+        role: 'agent' as UserRole,
+        activeChats: 0,
+        lastActivity: Date.now(),
+        skills: [(att.department as string) || 'Atendimento'].filter(Boolean),
+        isAvailable: true,
+        maxConcurrentChats: 10,
+      }));
+
+      setAgents(formattedAgents);
+      console.log(`✅ ${formattedAgents.length} atendentes carregados da API UAZAPI`);
     } catch (error) {
-      console.error('❌ Erro ao carregar agentes:', error);
-      toast.error('Erro ao carregar agentes');
+      console.error('❌ Erro ao carregar atendentes:', error);
+      toast.error('Erro ao carregar atendentes');
     } finally {
       setAgentsLoading(false);
       agentsFetchInFlight.current = false;
     }
-  }, []);
+  }, [selectedInstance?.token]);
 
   const updateAgentStatus = async (agentId: string, status: AgentStatus) => {
     try {
@@ -261,6 +256,11 @@ export function MultiAttendanceProvider({ children }: { children: ReactNode }) {
           : agent
       ));
 
+      // Persistir na API UAZAPI
+      if (selectedInstance?.token) {
+        await uazapiService.assignChatToAgent(selectedInstance.token, chatId, agentId, true);
+      }
+
       const agentName = agents.find(a => a.id === agentId)?.name || 'Agente';
       toast.success(existingAssignment ? `Chat transferido para ${agentName}` : `Chat atribuído para ${agentName}`);
     } catch (error) {
@@ -282,11 +282,16 @@ export function MultiAttendanceProvider({ children }: { children: ReactNode }) {
       ));
 
       // Atualizar contador de chats ativos do agente
-      setAgents(prev => prev.map(agent => 
-        agent.id === assignment.agentId 
+      setAgents(prev => prev.map(agent =>
+        agent.id === assignment.agentId
           ? { ...agent, activeChats: Math.max(0, agent.activeChats - 1) }
           : agent
       ));
+
+      // Persistir na API UAZAPI
+      if (selectedInstance?.token) {
+        await uazapiService.unassignChat(selectedInstance.token, chatId);
+      }
 
       toast.success('Chat desatribuído com sucesso');
     } catch (error) {
@@ -313,11 +318,16 @@ export function MultiAttendanceProvider({ children }: { children: ReactNode }) {
 
       // Atualizar contador de chats ativos do agente
       if (assignment) {
-        setAgents(prev => prev.map(agent => 
-          agent.id === assignment.agentId 
+        setAgents(prev => prev.map(agent =>
+          agent.id === assignment.agentId
             ? { ...agent, activeChats: Math.max(0, agent.activeChats - 1) }
             : agent
         ));
+      }
+
+      // Persistir na API UAZAPI
+      if (selectedInstance?.token) {
+        await uazapiService.closeTicket(selectedInstance.token, chatId);
       }
 
       toast.success('Atendimento finalizado com sucesso');
@@ -329,11 +339,16 @@ export function MultiAttendanceProvider({ children }: { children: ReactNode }) {
 
   const reopenChat = async (chatId: string) => {
     try {
-      setAssignments(prev => prev.map(a => 
+      setAssignments(prev => prev.map(a =>
         a.chatId === chatId && a.status === 'closed'
           ? { ...a, status: 'unassigned' as ChatStatus, closedAt: undefined, closedBy: undefined }
           : a
       ));
+
+      // Persistir na API UAZAPI
+      if (selectedInstance?.token) {
+        await uazapiService.reopenTicket(selectedInstance.token, chatId);
+      }
 
       toast.success('Atendimento reaberto com sucesso');
     } catch (error) {

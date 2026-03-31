@@ -340,25 +340,29 @@ export function ChatPage() {
         toast.success('Nova mensagem recebida!');
       }
       
-      // Atualizar lista de chats com a nova mensagem
-      setChats(prev => prev.map(chat => {
-        if (chat.id === message.chatId) {
-          return {
-            ...chat,
-            lastMessage: {
-              id: message.id || Date.now().toString(),
-              chatId: message.chatId,
-              content: message.body || message.content || '',
-              timestamp: message.timestamp || Date.now(),
-              fromMe: message.fromMe || false,
-              type: 'text'
-            },
-            unreadCount: selectedChat?.id === chat.id ? 0 : (chat.unreadCount || 0) + 1,
-            lastMessageTimestamp: message.timestamp || Date.now()
-          };
-        }
-        return chat;
-      }));
+      // Atualizar lista de chats com a nova mensagem e reordenar
+      setChats(prev => {
+        const updated = prev.map(chat => {
+          if (chat.id === message.chatId) {
+            return {
+              ...chat,
+              lastMessage: {
+                id: message.id || Date.now().toString(),
+                chatId: message.chatId,
+                content: message.body || message.content || '',
+                timestamp: message.timestamp || Date.now(),
+                fromMe: message.fromMe || false,
+                type: 'text'
+              },
+              unreadCount: selectedChat?.id === chat.id ? 0 : (chat.unreadCount || 0) + 1,
+              lastMessageTimestamp: message.timestamp || Date.now()
+            };
+          }
+          return chat;
+        });
+        // Reordenar: chat com nova mensagem vai para o topo
+        return updated.sort((a, b) => (b.lastMessageTimestamp || 0) - (a.lastMessageTimestamp || 0));
+      });
     },
     onChatUpdate: (chatUpdate) => {
       console.log('💬 Atualização de chat:', chatUpdate);
@@ -558,15 +562,18 @@ export function ChatPage() {
     try {
       await assignChat(selectedChat.id, agentId);
       
-      // Atualizar o chat local
-      setChats(prev => prev.map(chat => 
-        chat.id === selectedChat.id 
-          ? { ...chat, agent: agentName, status: 'assigned' as const }
+      // Atualizar o chat local com agentId para filtros
+      setChats(prev => prev.map(chat =>
+        chat.id === selectedChat.id
+          ? { ...chat, agent: agentName, agentId, status: 'assigned' as const }
           : chat
       ));
-      
-      setSelectedChat(prev => prev ? { ...prev, agent: agentName, status: 'assigned' } : null);
+
+      setSelectedChat(prev => prev ? { ...prev, agent: agentName, agentId, status: 'assigned' } : null);
       setShowAssignModal(false);
+
+      // Recarregar chats para sincronizar com dados da API (via setTimeout para garantir que a API processou)
+      setTimeout(() => { loadChats(); }, 1000);
     } catch (error) {
       console.error('Erro ao atribuir agente:', error);
     }
@@ -578,15 +585,18 @@ export function ChatPage() {
     try {
       await unassignChat(selectedChat.id);
       
-      // Atualizar o chat local
-      setChats(prev => prev.map(chat => 
-        chat.id === selectedChat.id 
-          ? { ...chat, agent: undefined, status: 'unassigned' as const }
+      // Atualizar o chat local com agentId limpo
+      setChats(prev => prev.map(chat =>
+        chat.id === selectedChat.id
+          ? { ...chat, agent: undefined, agentId: undefined, status: 'unassigned' as const }
           : chat
       ));
-      
-      setSelectedChat(prev => prev ? { ...prev, agent: undefined, status: 'unassigned' } : null);
+
+      setSelectedChat(prev => prev ? { ...prev, agent: undefined, agentId: undefined, status: 'unassigned' } : null);
       toast.success('Chat desatribuído com sucesso');
+
+      // Recarregar chats para sincronizar com dados da API
+      setTimeout(() => { loadChats(); }, 1000);
     } catch (error) {
       console.error('Erro ao desatribuir chat:', error);
     }
@@ -801,24 +811,24 @@ export function ChatPage() {
 
       // Usar dados REAIS da API, não fictícios
       const extendedChats: ExtendedChat[] = apiChats.map(chat => {
-        // Verificar se existe atribuição para este chat
-        const assignment = assignments.find(a => a.chatId === chat.id && a.status !== 'closed');
-        const agent = assignment ? agents.find(a => a.id === assignment.agentId) : undefined;
-        
-        // Determinar status baseado nas atribuições
-        let status: 'unassigned' | 'assigned' | 'closed' = 'unassigned';
-        if (assignment) {
-          status = assignment.status;
-        } else if (chat.unreadCount === 0) {
-          // Se não tem mensagens não lidas e não está atribuído, pode estar fechado
-          status = 'unassigned';
-        }
+        // Prioridade 1: Dados da API UAZAPI (lead fields)
+        const apiAgentId = chat.lead_assignedAgent_id || '';
+        const apiStatus = chat.lead_status || (chat.lead_isTicketOpen ? 'assigned' : 'unassigned');
+
+        // Prioridade 2: Assignments locais (fallback)
+        const localAssignment = assignments.find(a => a.chatId === chat.id && a.status !== 'closed');
+
+        const effectiveAgentId = apiAgentId || localAssignment?.agentId || '';
+        const effectiveStatus: 'unassigned' | 'assigned' | 'closed' = apiAgentId
+          ? (apiStatus as 'unassigned' | 'assigned' | 'closed')
+          : (localAssignment?.status || 'unassigned');
+        const effectiveAgent = effectiveAgentId ? agents.find(a => a.id === effectiveAgentId) : undefined;
 
         return {
           ...chat,
-          status,
-          agent: agent?.name, // Nome do agente atribuído
-          agentId: agent?.id, // ✅ ID do agente para filtros
+          status: effectiveStatus,
+          agent: effectiveAgent?.name, // Nome do agente atribuído
+          agentId: effectiveAgentId || undefined, // ✅ ID do agente para filtros (API ou local)
           // Se a API não retornou lastMessage, criar uma baseada no timestamp
           lastMessage: chat.lastMessage ? {
             id: chat.lastMessage.id,
