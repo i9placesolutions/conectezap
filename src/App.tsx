@@ -14,14 +14,14 @@ function App() {
       <NotificationProvider>
         <AuthProvider>
           <ServerProvider>
-            <MultiAttendanceProvider>
-              <InstanceProvider>
+            <InstanceProvider>
+              <MultiAttendanceProvider>
                 <SSEProvider autoStart={true}>
                   <AppRoutes />
                   <Toaster position="top-right" />
                 </SSEProvider>
-              </InstanceProvider>
-            </MultiAttendanceProvider>
+              </MultiAttendanceProvider>
+            </InstanceProvider>
           </ServerProvider>
         </AuthProvider>
       </NotificationProvider>
